@@ -1,0 +1,132 @@
+{
+  "repo": "EH3D-VISION-STUDIO",
+  "ecosystem": "eh3d",
+  "tagline": "Fiducials found, pixels turned into millimetres, a board put right.",
+  "description": "EH3D-VISION-STUDIO is a Rust library and command line that find round fiducial marks in a picture and work out the turn and the shift that put a board where its design says. It has no live camera yet.",
+  "columns": [
+    "WHO USES IT",
+    "THIS REPOSITORY",
+    "WHAT IT DEPENDS ON"
+  ],
+  "nodes": [
+    {
+      "id": "person",
+      "column": 0,
+      "level": "external",
+      "title": "A person",
+      "lines": [
+        "has a photo of a board and",
+        "the points of its design"
+      ]
+    },
+    {
+      "id": "users",
+      "column": 0,
+      "level": "config",
+      "title": "CAM and assembly",
+      "lines": [
+        "planned: PNP-MANAGER, ISOCAM",
+        "and MOTIONCNC will take the",
+        "correction"
+      ]
+    },
+    {
+      "id": "fiducial",
+      "column": 1,
+      "level": "tested",
+      "title": "fiducial",
+      "lines": [
+        "threshold, spots and the",
+        "tests of a round mark"
+      ],
+      "code": [
+        "src/fiducial.rs::pub fn find",
+        "src/fiducial.rs::pub fn otsu"
+      ]
+    },
+    {
+      "id": "scale",
+      "column": 1,
+      "level": "tested",
+      "title": "scale",
+      "lines": [
+        "pixels to millimetres and the",
+        "distortion of the lens"
+      ],
+      "code": [
+        "src/scale.rs::pub fn fit_k1"
+      ]
+    },
+    {
+      "id": "align",
+      "column": 1,
+      "level": "tested",
+      "title": "align",
+      "lines": [
+        "turn, shift and size of a",
+        "board with its residual"
+      ],
+      "code": [
+        "src/align.rs::pub fn fit"
+      ]
+    },
+    {
+      "id": "png",
+      "column": 2,
+      "level": "external",
+      "title": "png",
+      "lines": [
+        "the PNG decoder, the only",
+        "dependency"
+      ],
+      "code": [
+        "Cargo.toml::png"
+      ]
+    },
+    {
+      "id": "camera",
+      "column": 2,
+      "level": "external",
+      "title": "A camera",
+      "lines": [
+        "a picture file today, a",
+        "live camera later"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "person",
+      "to": "fiducial",
+      "label": "find",
+      "level": "tested"
+    },
+    {
+      "from": "person",
+      "to": "align",
+      "level": "tested"
+    },
+    {
+      "from": "users",
+      "to": "align",
+      "label": "planned",
+      "level": "config"
+    },
+    {
+      "from": "fiducial",
+      "to": "png",
+      "level": "tested"
+    },
+    {
+      "from": "scale",
+      "to": "camera",
+      "level": "tested"
+    }
+  ],
+  "legend": {
+    "tested": "covered by tests on a computer (13 tests)",
+    "config": "planned, not used today",
+    "external": "a person, a file or another repository"
+  },
+  "footer": "Tried on pictures drawn by the tests, not on real boards."
+}

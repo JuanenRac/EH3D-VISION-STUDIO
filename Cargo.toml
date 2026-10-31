@@ -1,0 +1,24 @@
+[package]
+name = "eh3d-vision-studio"
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.75"
+description = "Fiducials in a camera image: detection, the scale of the camera, and the correction in X, Y and angle that puts a board where its design says"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/JuanenRac/EH3D-VISION-STUDIO"
+readme = "README.md"
+
+[lib]
+name = "eh3d_vision_studio"
+path = "src/lib.rs"
+
+[[bin]]
+name = "eh3d-vision"
+path = "src/main.rs"
+
+[dependencies]
+png = "0.17"
+
+[profile.release]
+opt-level = 3
+lto = true
