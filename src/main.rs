@@ -59,6 +59,18 @@ fn points(path: &str) -> Result<Vec<(f64, f64)>, String> {
         .collect()
 }
 
+/// What is left of the arguments once the options and the wanted words are taken must be nothing more than `max` words: an option that is written wrong or an extra word is an
+/// error, not something to ignore (the program would then make its output with the default values).
+fn finish(args: &[String], max: usize) -> Result<(), String> {
+    if let Some(o) = args.iter().find(|a| a.starts_with("--")) {
+        return Err(format!("{o}: unknown option (see help)"));
+    }
+    if args.len() > max {
+        return Err(format!("{}: unexpected argument (see help)", args[max]));
+    }
+    Ok(())
+}
+
 fn run(mut args: Vec<String>) -> Result<(), String> {
     if args.is_empty() || matches!(args[0].as_str(), "help" | "--help" | "-h") {
         println!("{HELP}");
@@ -80,6 +92,7 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
             let known = flag(&mut args, "--known-mm")?
                 .map(|v| num(&v, "--known-mm"))
                 .transpose()?;
+            finish(&args, 1)?;
             let path = args.first().ok_or("find needs an image")?;
             let img = from_bytes(&fs::read(path).map_err(|e| format!("{path}: {e}"))?)?;
             let found = find(&img, &s)?;
@@ -122,6 +135,7 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
             if args.len() < 2 {
                 return Err("align needs the design points and the measured points".into());
             }
+            finish(&args, 2)?;
             let t = fit(&points(&args[0])?, &points(&args[1])?, allow)?;
             println!(
                 "shift ({:+.4}, {:+.4}) mm, turn {:+.4} degrees, size {:.5}, residual {:.4} mm",

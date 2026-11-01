@@ -4,6 +4,7 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **Strict command line:** an option that is written wrong (`--powr`) or a word too many is an error that names it; before, it was ignored and the output was made with the default values.
 ## [0.0.1] - Fiducial marks in a camera image: detection, scale and the correction of a board
 
 - **The marks:** Otsu threshold, connected spots, size, fill and elongation checks, marks cut by the edge left out, dark on light or light on dark.

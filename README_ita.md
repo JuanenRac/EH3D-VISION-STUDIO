@@ -18,7 +18,7 @@
 
 ---
 
-**Verifica di onestà - cosa funziona oggi:** una libreria Rust e un programma a riga di comando (`eh3d-vision`) con 13 test eseguiti su un computer: trova segni fiduciali rotondi in un'immagine, converte i pixel in millimetri e calcola la rotazione e lo spostamento che portano una scheda dove dice il suo progetto. Non ha ancora una finestra, non è stato provato su una macchina e non è stato verificato su una raccolta di file reali.
+**Verifica di onestà - cosa funziona oggi:** una libreria Rust e un programma a riga di comando (`eh3d-vision`) con 16 test eseguiti su un computer: trova segni fiduciali rotondi in un'immagine, converte i pixel in millimetri e calcola la rotazione e lo spostamento che portano una scheda dove dice il suo progetto. Non ha ancora una finestra, non è stato provato su una macchina e non è stato verificato su una raccolta di file reali.
 
 ---
 
@@ -31,7 +31,7 @@
 |---|---|
 | Versione | `0.0.1` |
 | Maturità | Impalcatura |
-| Test | 13 |
+| Test | 16 |
 | Stack tecnologico | Rust |
 | Su hardware reale | Non provato: nulla di questo ha girato su una macchina |
 
@@ -47,7 +47,7 @@ Ogni riga è una parte di questo repository e il semaforo dice a che punto è og
 |---|---|---|
 | Nucleo | 🟡 | trova segni fiduciali rotondi in un'immagine, converte i pixel in millimetri e calcola la rotazione e lo spostamento che portano una scheda dove dice il suo progetto; provato su un computer con input normali e danneggiati, non con una raccolta di file reali. |
 | Riga di comando | 🟡 | `eh3d-vision` esegue le stesse funzioni della libreria e stampa il risultato; ogni errore torna come messaggio e codice di uscita diverso da zero. |
-| Test | 🟡 | 13 test passano (`cargo test`), con casi normali, casi limite e input danneggiati. |
+| Test | 🟡 | 16 test passano (`cargo test`), con casi normali, casi limite e input danneggiati. |
 | Sicurezza | 🟡 | Rust sicuro e semplice (`forbid(unsafe_code)`): nulla va in panico con i file ricevuti e un valore errato è un errore con il suo motivo; nessuna revisione indipendente. |
 | Finestra | 🔴 | Previsto: la finestra egui comune alla suite; oggi esiste solo la riga di comando. |
 | Hardware reale | 🔴 | Non provato: nulla di questo è stato eseguito su una macchina. |
@@ -75,6 +75,7 @@ Come si incastrano le parti di questo repository: chi lo usa, cosa contiene e da
 ## ✨ Funzionalità
 
 * **Libreria e riga di comando:** ogni comando di `eh3d-vision` è una funzione della libreria, così un altro programma della suite può chiamarla senza avviare un processo.
+* **Riga di comando rigorosa:** un'opzione scritta male (`--powr`) o una parola in più è un errore che la nomina, non qualcosa da ignorare; altrimenti il programma farebbe la sua uscita con i valori predefiniti.
 * **Test con input danneggiati:** i test forniscono anche file vuoti, spazzatura, numeri enormi e file tagliati, e nessuno può andare in panico.
 * **Nessuna ipotesi:** un valore privo di senso è un errore che dice quale e perché, mai un risultato che sembra solo giusto.
 * **Nessun codice unsafe:** `#![forbid(unsafe_code)]` nella libreria e nel programma.
@@ -103,7 +104,8 @@ EH3D-VISION-STUDIO/
 │   ├── main.rs                                  la riga di comando
 │   └── scale.rs                                 una parte della logica
 ├── tests/
-│   └── vision.rs                                test della libreria e della riga di comando
+│   ├── vision.rs                                test della libreria e della riga di comando
+│   └── strict.rs                                test della riga di comando: opzioni e parole che non conosce
 ├── examples/
 │   ├── design.csv                               un esempio per provare il programma
 │   ├── marks.pgm                                un esempio per provare il programma
@@ -137,7 +139,7 @@ cargo run --release -- align examples/design.csv examples/measured.csv
 
 ## 🧪 Test
 
-La suite ha 13 test (`cargo test`, eseguiti su Windows e Linux nella CI). Verificano i casi normali, i casi limite e gli input danneggiati: file vuoti, spazzatura e file tagliati non causano mai un panico. La CI esegue anche `cargo fmt --check`, `cargo clippy` con gli avvisi come errori e `python -I tools/ci_validate.py`.
+La suite ha 16 test (`cargo test`, eseguiti su Windows e Linux nella CI). Verificano i casi normali, i casi limite e gli input danneggiati: file vuoti, spazzatura e file tagliati non causano mai un panico. La CI esegue anche `cargo fmt --check`, `cargo clippy` con gli avvisi come errori e `python -I tools/ci_validate.py`.
 
 ## 🏗️ Compilazione e rilascio
 
@@ -154,11 +156,23 @@ La versione sta in `Cargo.toml` e in `eh3d.project.json`; ogni versione ha la su
 
 ```text
 EH3D-VISION-STUDIO/
-├── crates/
-│   ├── eh3d-parser-gerber/                      lettore Gerber RS-274X
-│   ├── eh3d-parser-excellon/                    lettore di file di foratura Excellon
-│   └── eh3d-parser-gcode/                       lettore e interprete modale di G-code
-├── docs/                                        READERS.md, cosa promette ogni lettore e cosa non fa, e i dati delle due immagini
+├── src/
+│   ├── align.rs                                 una parte della logica
+│   ├── fiducial.rs                              una parte della logica
+│   ├── image.rs                                 una parte della logica
+│   ├── lib.rs                                   la libreria: ciò che usa ogni comando
+│   ├── main.rs                                  la riga di comando
+│   └── scale.rs                                 una parte della logica
+├── tests/
+│   ├── vision.rs                                test della libreria e della riga di comando
+│   └── strict.rs                                test della riga di comando: opzioni e parole che non conosce
+├── examples/
+│   ├── design.csv                               un esempio per provare il programma
+│   ├── marks.pgm                                un esempio per provare il programma
+│   └── measured.csv                             un esempio per provare il programma
+├── docs/
+│   ├── architecture.json                        dati dell'immagine di Architettura
+│   └── structure.json                           dati dell'immagine di Struttura
 ├── tools/                                       controllo della CI e del README e strumenti per le immagini
 ├── images/                                      banner e le immagini di Architettura e Struttura del repository
 ├── .github/                                     workflow di CI e di rilascio, modelli di issue e pull request
