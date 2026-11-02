@@ -1,6 +1,6 @@
 [package]
 name = "eh3d-vision-studio"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 rust-version = "1.75"
 description = "Fiducials in a camera image: detection, the scale of the camera, and the correction in X, Y and angle that puts a board where its design says"

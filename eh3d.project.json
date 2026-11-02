@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "ecosystem": "EH3D",
   "name": "EH3D-VISION-STUDIO",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "role": "tool",
   "stack": "rust",
   "technologies": [
@@ -17,7 +17,7 @@
   "family": "CNC Workflow Tools",
   "parent": null,
   "build": "cargo build --release; cargo test",
-  "notes": "Scaffolding v0.0.1: a library and a command line that find round fiducial marks in a PNG or PGM image (Otsu threshold, connected spots, size, fill and elongation checks, marks cut by the edge refused), turn pixels into millimetres with the scale of a mark of known size, fit and correct the radial distortion of a lens from a grid of marks, and work out the turn, the shift and (if allowed) the size that take a board from its design to where the camera found it. No live camera, no neural network and no Hailo acceleration yet; nothing has looked at a real board.",
+  "notes": "Scaffolding v0.0.2: a library and a command line that find round fiducial marks in a PNG or PGM image (Otsu threshold, connected spots, size, fill and elongation checks, marks cut by the edge refused), turn pixels into millimetres with the scale of a mark of known size, fit and correct the radial distortion of a lens from a grid of marks, and work out the turn, the shift and (if allowed) the size that take a board from its design to where the camera found it. No live camera, no neural network and no Hailo acceleration yet; nothing has looked at a real board.",
   "native_version": {
     "file": "Cargo.toml",
     "pattern": "^version\\s*=\\s*\"(\\d+\\.\\d+\\.\\d+)\""
