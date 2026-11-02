@@ -7,6 +7,7 @@ All notable changes to this project are documented here.
 - **Strict command line:** an option that is written wrong (`--powr`) or a word too many is an error that names it; before, it was ignored and the output was made with the default values.
 - **One shared helper for the command-line arguments** (`src/cli_args.rs`: flag, switch, num and a strict finish), the same file in every small utility of the suite; the copies this program had behaved the same, so nothing changes for a person.
 - **Tests that run what the README and the scripts promise:** the sample of `run.sh`, `run.bat` and the README is the same command, and it is run on the files of `examples/`.
+- **The banner of the README** shows the role and the technologies of this program (it showed the text of the shared library).
 
 ## [0.0.1] - Fiducial marks in a camera image: detection, scale and the correction of a board
 
