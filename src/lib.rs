@@ -3,7 +3,8 @@
 #![forbid(unsafe_code)]
 //! Finds round fiducial marks in an image, turns pixels into millimetres and works out how far a board is from where its design puts it.
 
+/// The reader of PGM and PNG pictures, kept in EH3D-COMMON because the other programs that work from a picture read them the same way.
+pub use eh3d_image as image;
 pub mod align;
 pub mod fiducial;
-pub mod image;
 pub mod scale;

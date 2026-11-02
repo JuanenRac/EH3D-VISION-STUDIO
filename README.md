@@ -102,7 +102,6 @@ EH3D-VISION-STUDIO/
 │   ├── align.rs                                 a part of the logic
 │   ├── cli_args.rs                              the arguments of the command line, the same file in every small utility
 │   ├── fiducial.rs                              a part of the logic
-│   ├── image.rs                                 a part of the logic
 │   └── scale.rs                                 a part of the logic
 ├── tests/
 │   ├── readme.rs                                tests that run what the README and the run scripts promise
@@ -131,7 +130,7 @@ There is no configuration file yet: what a person chooses is given as arguments 
 
 ## 🚀 Quick start
 
-You need a stable Rust toolchain (1.75 or newer).
+You need a stable Rust toolchain (1.75 or newer). The repository EH3D-COMMON must be cloned beside this one: the reader of pictures is taken from it by path.
 
 ```bash
 cargo build --release
@@ -209,6 +208,7 @@ README and texts exist in English, Spanish, French, Italian, German, Chinese, Ja
 
 ## 🔗 Related Projects
 
+* [EH3D-COMMON](https://github.com/JuanenRac/EH3D-COMMON): the shared crates, among them the reader of pictures
 * [EH3D-PNP-MANAGER](https://github.com/JuanenRac/EH3D-PNP-MANAGER): pick and place assembly
 * [EH3D-ISOCAM](https://github.com/JuanenRac/EH3D-ISOCAM): isolation milling of copper
 * [EH3D-MOTIONCNC](https://github.com/JuanenRac/EH3D-MOTIONCNC): the machine control program

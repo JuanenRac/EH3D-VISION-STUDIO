@@ -102,7 +102,6 @@ EH3D-VISION-STUDIO/
 │   ├── align.rs                                 逻辑的一部分
 │   ├── cli_args.rs                              命令行参数：每个小工具中的同一个文件
 │   ├── fiducial.rs                              逻辑的一部分
-│   ├── image.rs                                 逻辑的一部分
 │   └── scale.rs                                 逻辑的一部分
 ├── tests/
 │   ├── readme.rs                                运行 README 和 run 脚本所承诺内容的测试
@@ -131,7 +130,7 @@ EH3D-VISION-STUDIO/
 
 ## 🚀 快速开始
 
-需要稳定版 Rust 工具链（1.75 或更新）。
+需要稳定版 Rust 工具链（1.75 或更新）。需要把 EH3D-COMMON 仓库克隆到本仓库旁边：图像读取器通过路径从中引入。
 
 ```bash
 cargo build --release
@@ -209,6 +208,7 @@ README 和文本提供英语、西班牙语、法语、意大利语、德语、�
 
 ## 🔗 相关项目
 
+* [EH3D-COMMON](https://github.com/JuanenRac/EH3D-COMMON)：共享 crate，其中包括图像读取器
 * [EH3D-PNP-MANAGER](https://github.com/JuanenRac/EH3D-PNP-MANAGER): 贴片装配
 * [EH3D-ISOCAM](https://github.com/JuanenRac/EH3D-ISOCAM): 铜箔隔离铣削
 * [EH3D-MOTIONCNC](https://github.com/JuanenRac/EH3D-MOTIONCNC): 机器控制程序

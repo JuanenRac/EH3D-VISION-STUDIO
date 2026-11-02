@@ -71,16 +71,16 @@
       ]
     },
     {
-      "id": "png",
+      "id": "common",
       "column": 2,
       "level": "external",
-      "title": "png",
+      "title": "eh3d-image",
       "lines": [
-        "the PNG decoder, the only",
-        "dependency"
+        "the PNG and PGM reader of",
+        "EH3D-COMMON (a sibling)"
       ],
       "code": [
-        "Cargo.toml::png"
+        "Cargo.toml::eh3d-image"
       ]
     },
     {
@@ -114,7 +114,7 @@
     },
     {
       "from": "fiducial",
-      "to": "png",
+      "to": "common",
       "level": "tested"
     },
     {

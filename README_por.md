@@ -102,7 +102,6 @@ EH3D-VISION-STUDIO/
 │   ├── align.rs                                 uma parte da lógica
 │   ├── cli_args.rs                              os argumentos da linha de comandos, o mesmo ficheiro em cada utilitário pequeno
 │   ├── fiducial.rs                              uma parte da lógica
-│   ├── image.rs                                 uma parte da lógica
 │   └── scale.rs                                 uma parte da lógica
 ├── tests/
 │   ├── readme.rs                                testes que executam o que o README e os scripts run prometem
@@ -131,7 +130,7 @@ Ainda não há ficheiro de configuração: o que a pessoa escolhe é dado como a
 
 ## 🚀 Início rápido
 
-Precisa de uma cadeia de ferramentas Rust estável (1.75 ou mais recente).
+Precisa de uma cadeia de ferramentas Rust estável (1.75 ou mais recente). O repositório EH3D-COMMON tem de estar clonado ao lado deste: o leitor de imagens é tomado dele por caminho.
 
 ```bash
 cargo build --release
@@ -209,6 +208,7 @@ O README e os textos existem em inglês, espanhol, francês, italiano, alemão, 
 
 ## 🔗 Projetos relacionados
 
+* [EH3D-COMMON](https://github.com/JuanenRac/EH3D-COMMON): os crates partilhados, entre eles o leitor de imagens
 * [EH3D-PNP-MANAGER](https://github.com/JuanenRac/EH3D-PNP-MANAGER): a montagem pick and place
 * [EH3D-ISOCAM](https://github.com/JuanenRac/EH3D-ISOCAM): a fresagem de isolamento do cobre
 * [EH3D-MOTIONCNC](https://github.com/JuanenRac/EH3D-MOTIONCNC): o programa de controlo de máquina

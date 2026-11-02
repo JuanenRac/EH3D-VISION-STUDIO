@@ -102,7 +102,6 @@ EH3D-VISION-STUDIO/
 │   ├── align.rs                                 ロジックの一部
 │   ├── cli_args.rs                              コマンドライン引数：小さなツールすべてで同じファイル
 │   ├── fiducial.rs                              ロジックの一部
-│   ├── image.rs                                 ロジックの一部
 │   └── scale.rs                                 ロジックの一部
 ├── tests/
 │   ├── readme.rs                                READMEとrunスクリプトが約束する内容を実行するテスト
@@ -131,7 +130,7 @@ EH3D-VISION-STUDIO/
 
 ## 🚀 クイックスタート
 
-安定版の Rust ツールチェーン（1.75 以降）が必要です。
+安定版の Rust ツールチェーン（1.75 以降）が必要です。EH3D-COMMON リポジトリをこのリポジトリの隣にクローンしておく必要があります。画像リーダーはそこからパスで取り込みます。
 
 ```bash
 cargo build --release
@@ -209,6 +208,7 @@ README とテキストは、英語、スペイン語、フランス語、イタ�
 
 ## 🔗 関連プロジェクト
 
+* [EH3D-COMMON](https://github.com/JuanenRac/EH3D-COMMON)：共有クレート（画像リーダーを含む）
 * [EH3D-PNP-MANAGER](https://github.com/JuanenRac/EH3D-PNP-MANAGER): ピック＆プレース実装
 * [EH3D-ISOCAM](https://github.com/JuanenRac/EH3D-ISOCAM): 銅箔の絶縁ミリング
 * [EH3D-MOTIONCNC](https://github.com/JuanenRac/EH3D-MOTIONCNC): 機械制御プログラム
