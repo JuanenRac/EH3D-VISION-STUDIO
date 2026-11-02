@@ -27,6 +27,32 @@
       "accent": "a",
       "rows": [
         {
+          "name": "lib.rs",
+          "desc": {
+            "en": "the library: what every command uses",
+            "es": "la biblioteca: lo que usa cada orden",
+            "de": "die Bibliothek: was jeder Befehl nutzt",
+            "fr": "la bibliothèque : ce que chaque commande utilise",
+            "it": "la libreria: ciò che usa ogni comando",
+            "ja": "ライブラリ：各コマンドが使うもの",
+            "zh": "库：每个命令所使用的部分",
+            "pt": "a biblioteca: o que cada comando usa"
+          }
+        },
+        {
+          "name": "main.rs",
+          "desc": {
+            "en": "the command line",
+            "es": "la línea de comandos",
+            "de": "die Kommandozeile",
+            "fr": "la ligne de commande",
+            "it": "la riga di comando",
+            "ja": "コマンドライン",
+            "zh": "命令行",
+            "pt": "a linha de comandos"
+          }
+        },
+        {
           "name": "align.rs",
           "desc": {
             "en": "a part of the logic",
@@ -37,6 +63,19 @@
             "ja": "ロジックの一部",
             "zh": "逻辑的一部分",
             "pt": "uma parte da lógica"
+          }
+        },
+        {
+          "name": "cli_args.rs",
+          "desc": {
+            "en": "the arguments of the command line, the same file in every small utility",
+            "es": "los argumentos de la línea de comandos, el mismo fichero en cada utilidad pequeña",
+            "de": "die Argumente der Kommandozeile, dieselbe Datei in jedem kleinen Werkzeug",
+            "fr": "les arguments de la ligne de commande, le même fichier dans chaque petit utilitaire",
+            "it": "gli argomenti della riga di comando, lo stesso file in ogni piccola utilità",
+            "ja": "コマンドライン引数：小さなツールすべてで同じファイル",
+            "zh": "命令行参数：每个小工具中的同一个文件",
+            "pt": "os argumentos da linha de comandos, o mesmo ficheiro em cada utilitário pequeno"
           }
         },
         {
@@ -66,32 +105,6 @@
           }
         },
         {
-          "name": "lib.rs",
-          "desc": {
-            "en": "the library: what every command uses",
-            "es": "la biblioteca: lo que usa cada orden",
-            "de": "die Bibliothek: was jeder Befehl nutzt",
-            "fr": "la bibliothèque : ce que chaque commande utilise",
-            "it": "la libreria: ciò che usa ogni comando",
-            "ja": "ライブラリ：各コマンドが使うもの",
-            "zh": "库：每个命令所使用的部分",
-            "pt": "a biblioteca: o que cada comando usa"
-          }
-        },
-        {
-          "name": "main.rs",
-          "desc": {
-            "en": "the command line",
-            "es": "la línea de comandos",
-            "de": "die Kommandozeile",
-            "fr": "la ligne de commande",
-            "it": "la riga di comando",
-            "ja": "コマンドライン",
-            "zh": "命令行",
-            "pt": "a linha de comandos"
-          }
-        },
-        {
           "name": "scale.rs",
           "desc": {
             "en": "a part of the logic",
@@ -112,16 +125,16 @@
       "accent": "d",
       "rows": [
         {
-          "name": "vision.rs",
+          "name": "readme.rs",
           "desc": {
-            "en": "tests of the library and the command line",
-            "es": "pruebas de la biblioteca y la línea de comandos",
-            "de": "Tests von Bibliothek und Kommandozeile",
-            "fr": "tests de la bibliothèque et de la ligne de commande",
-            "it": "test della libreria e della riga di comando",
-            "ja": "ライブラリとコマンドラインのテスト",
-            "zh": "库和命令行的测试",
-            "pt": "testes da biblioteca e da linha de comandos"
+            "en": "tests that run what the README and the run scripts promise",
+            "es": "pruebas que ejecutan lo que prometen el README y los scripts run",
+            "de": "Tests, die ausführen, was README und run-Skripte versprechen",
+            "fr": "tests qui exécutent ce que promettent le README et les scripts run",
+            "it": "test che eseguono ciò che promettono il README e gli script run",
+            "ja": "READMEとrunスクリプトが約束する内容を実行するテスト",
+            "zh": "运行 README 和 run 脚本所承诺内容的测试",
+            "pt": "testes que executam o que o README e os scripts run prometem"
           }
         },
         {
@@ -135,6 +148,19 @@
             "ja": "コマンドラインのテスト：知らないオプションと語",
             "zh": "命令行测试：它不认识的选项和词",
             "pt": "testes da linha de comandos: opções e palavras que não conhece"
+          }
+        },
+        {
+          "name": "vision.rs",
+          "desc": {
+            "en": "tests of the library and the command line",
+            "es": "pruebas de la biblioteca y la línea de comandos",
+            "de": "Tests von Bibliothek und Kommandozeile",
+            "fr": "tests de la bibliothèque et de la ligne de commande",
+            "it": "test della libreria e della riga di comando",
+            "ja": "ライブラリとコマンドラインのテスト",
+            "zh": "库和命令行的测试",
+            "pt": "testes da biblioteca e da linha de comandos"
           }
         }
       ]

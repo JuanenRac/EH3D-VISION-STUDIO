@@ -18,7 +18,7 @@
 
 ---
 
-**Comprobación de honestidad - lo que funciona hoy:** una biblioteca Rust y un programa de línea de comandos (`eh3d-vision`) con 16 pruebas que se ejecutan en un ordenador: encuentra marcas fiduciales redondas en una imagen, convierte píxeles en milímetros y calcula el giro y el desplazamiento que colocan una placa donde dice su diseño. Todavía no tiene ventana, no se ha probado en una máquina y no se ha comprobado con una colección de ficheros reales.
+**Comprobación de honestidad - lo que funciona hoy:** una biblioteca Rust y un programa de línea de comandos (`eh3d-vision`) con 25 pruebas que se ejecutan en un ordenador: encuentra marcas fiduciales redondas en una imagen, convierte píxeles en milímetros y calcula el giro y el desplazamiento que colocan una placa donde dice su diseño. Todavía no tiene ventana, no se ha probado en una máquina y no se ha comprobado con una colección de ficheros reales.
 
 ---
 
@@ -31,7 +31,7 @@
 |---|---|
 | Versión | `0.0.1` |
 | Madurez | Andamiaje |
-| Pruebas | 16 |
+| Pruebas | 25 |
 | Pila tecnológica | Rust |
 | En hardware real | No probado: nada de esto se ha ejecutado en una máquina |
 
@@ -47,7 +47,7 @@ Cada línea es una parte de este repositorio y la luz dice hasta dónde llega ho
 |---|---|---|
 | Núcleo | 🟡 | encuentra marcas fiduciales redondas en una imagen, convierte píxeles en milímetros y calcula el giro y el desplazamiento que colocan una placa donde dice su diseño; probado en un ordenador con entradas normales y dañadas, no con una colección de ficheros reales. |
 | Línea de comandos | 🟡 | `eh3d-vision` ejecuta las mismas funciones que la biblioteca e imprime el resultado; cada error vuelve como mensaje y un código de salida distinto de cero. |
-| Pruebas | 🟡 | 16 pruebas pasan (`cargo test`), con casos normales, casos límite y entradas dañadas. |
+| Pruebas | 🟡 | 25 pruebas pasan (`cargo test`), con casos normales, casos límite y entradas dañadas. |
 | Seguridad | 🟡 | Rust seguro y simple (`forbid(unsafe_code)`): nada entra en pánico con los ficheros recibidos y un valor malo es un error con su motivo; sin revisión independiente. |
 | Ventana | 🔴 | Previsto: la ventana egui común a la suite; hoy solo existe la línea de comandos. |
 | Hardware real | 🔴 | No probado: nada de esto se ha ejecutado en una máquina. |
@@ -97,15 +97,17 @@ La biblioteca es `eh3d_vision_studio` (`use eh3d_vision_studio::...`); la línea
 ```text
 EH3D-VISION-STUDIO/
 ├── src/
-│   ├── align.rs                                 una parte de la lógica
-│   ├── fiducial.rs                              una parte de la lógica
-│   ├── image.rs                                 una parte de la lógica
 │   ├── lib.rs                                   la biblioteca: lo que usa cada orden
 │   ├── main.rs                                  la línea de comandos
+│   ├── align.rs                                 una parte de la lógica
+│   ├── cli_args.rs                              los argumentos de la línea de comandos, el mismo fichero en cada utilidad pequeña
+│   ├── fiducial.rs                              una parte de la lógica
+│   ├── image.rs                                 una parte de la lógica
 │   └── scale.rs                                 una parte de la lógica
 ├── tests/
-│   ├── vision.rs                                pruebas de la biblioteca y la línea de comandos
-│   └── strict.rs                                pruebas de la línea de comandos: opciones y palabras que no conoce
+│   ├── readme.rs                                pruebas que ejecutan lo que prometen el README y los scripts run
+│   ├── strict.rs                                pruebas de la línea de comandos: opciones y palabras que no conoce
+│   └── vision.rs                                pruebas de la biblioteca y la línea de comandos
 ├── examples/
 │   ├── design.csv                               una muestra para probar el programa
 │   ├── marks.pgm                                una muestra para probar el programa
@@ -139,7 +141,7 @@ cargo run --release -- align examples/design.csv examples/measured.csv
 
 ## 🧪 Pruebas
 
-El conjunto tiene 16 pruebas (`cargo test`, ejecutadas en Windows y Linux en el CI). Comprueban los casos normales, los casos límite y las entradas dañadas: ficheros vacíos, basura y ficheros cortados nunca provocan un pánico. El CI ejecuta además `cargo fmt --check`, `cargo clippy` con las advertencias como errores y `python -I tools/ci_validate.py`.
+El conjunto tiene 25 pruebas (`cargo test`, ejecutadas en Windows y Linux en el CI). Comprueban los casos normales, los casos límite y las entradas dañadas: ficheros vacíos, basura y ficheros cortados nunca provocan un pánico. El CI ejecuta además `cargo fmt --check`, `cargo clippy` con las advertencias como errores y `python -I tools/ci_validate.py`.
 
 ## 🏗️ Compilación y publicación
 
@@ -157,15 +159,17 @@ La versión está en `Cargo.toml` y en `eh3d.project.json`; cada versión tiene 
 ```text
 EH3D-VISION-STUDIO/
 ├── src/
-│   ├── align.rs                                 una parte de la lógica
-│   ├── fiducial.rs                              una parte de la lógica
-│   ├── image.rs                                 una parte de la lógica
 │   ├── lib.rs                                   la biblioteca: lo que usa cada orden
 │   ├── main.rs                                  la línea de comandos
+│   ├── align.rs                                 una parte de la lógica
+│   ├── cli_args.rs                              los argumentos de la línea de comandos, el mismo fichero en cada utilidad pequeña
+│   ├── fiducial.rs                              una parte de la lógica
+│   ├── image.rs                                 una parte de la lógica
 │   └── scale.rs                                 una parte de la lógica
 ├── tests/
-│   ├── vision.rs                                pruebas de la biblioteca y la línea de comandos
-│   └── strict.rs                                pruebas de la línea de comandos: opciones y palabras que no conoce
+│   ├── readme.rs                                pruebas que ejecutan lo que prometen el README y los scripts run
+│   ├── strict.rs                                pruebas de la línea de comandos: opciones y palabras que no conoce
+│   └── vision.rs                                pruebas de la biblioteca y la línea de comandos
 ├── examples/
 │   ├── design.csv                               una muestra para probar el programa
 │   ├── marks.pgm                                una muestra para probar el programa

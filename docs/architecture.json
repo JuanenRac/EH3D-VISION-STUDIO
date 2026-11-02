@@ -124,7 +124,7 @@
     }
   ],
   "legend": {
-    "tested": "covered by tests on a computer (13 tests)",
+    "tested": "covered by tests on a computer (25 tests)",
     "config": "planned, not used today",
     "external": "a person, a file or another repository"
   },

@@ -18,7 +18,7 @@
 
 ---
 
-**诚实检查 - 当前真正能运行的内容：** 一个 Rust 库和一个命令行程序（`eh3d-vision`），有 16 个在电脑上运行的测试：在图像中找到圆形基准点，把像素转换为毫米，并计算使电路板回到设计位置所需的旋转和平移。目前还没有窗口，没有在机器上试过，也没有用大量真实文件验证过。
+**诚实检查 - 当前真正能运行的内容：** 一个 Rust 库和一个命令行程序（`eh3d-vision`），有 25 个在电脑上运行的测试：在图像中找到圆形基准点，把像素转换为毫米，并计算使电路板回到设计位置所需的旋转和平移。目前还没有窗口，没有在机器上试过，也没有用大量真实文件验证过。
 
 ---
 
@@ -31,7 +31,7 @@
 |---|---|
 | 版本 | `0.0.1` |
 | 成熟度 | 脚手架 |
-| 测试 | 16 |
+| 测试 | 25 |
 | 技术栈 | Rust |
 | 真实硬件 | 未试过：这里的任何内容都没有在机器上运行过 |
 
@@ -47,7 +47,7 @@
 |---|---|---|
 | 核心 | 🟡 | 在图像中找到圆形基准点，把像素转换为毫米，并计算使电路板回到设计位置所需的旋转和平移；已在电脑上用正常和损坏的输入测试，未用大量真实文件验证。 |
 | 命令行 | 🟡 | `eh3d-vision` 运行与库相同的函数并打印结果；每个错误都以消息和非零退出码返回。 |
-| 测试 | 🟡 | 16 个测试通过（`cargo test`），包含正常情况、边界情况和损坏的输入。 |
+| 测试 | 🟡 | 25 个测试通过（`cargo test`），包含正常情况、边界情况和损坏的输入。 |
 | 安全 | 🟡 | 纯安全 Rust（`forbid(unsafe_code)`）：处理收到的文件时不会 panic，错误的值会返回带原因的错误；没有独立审查。 |
 | 窗口 | 🔴 | 计划中：套件通用的 egui 窗口；目前只有命令行。 |
 | 真实硬件 | 🔴 | 未试过：这里的任何内容都没有在机器上运行过。 |
@@ -97,15 +97,17 @@ EH3D-VISION-STUDIO 是 EH3D Fabrication Suite 的一个程序。目前它以库�
 ```text
 EH3D-VISION-STUDIO/
 ├── src/
-│   ├── align.rs                                 逻辑的一部分
-│   ├── fiducial.rs                              逻辑的一部分
-│   ├── image.rs                                 逻辑的一部分
 │   ├── lib.rs                                   库：每个命令所使用的部分
 │   ├── main.rs                                  命令行
+│   ├── align.rs                                 逻辑的一部分
+│   ├── cli_args.rs                              命令行参数：每个小工具中的同一个文件
+│   ├── fiducial.rs                              逻辑的一部分
+│   ├── image.rs                                 逻辑的一部分
 │   └── scale.rs                                 逻辑的一部分
 ├── tests/
-│   ├── vision.rs                                库和命令行的测试
-│   └── strict.rs                                命令行测试：它不认识的选项和词
+│   ├── readme.rs                                运行 README 和 run 脚本所承诺内容的测试
+│   ├── strict.rs                                命令行测试：它不认识的选项和词
+│   └── vision.rs                                库和命令行的测试
 ├── examples/
 │   ├── design.csv                               试用的示例
 │   ├── marks.pgm                                试用的示例
@@ -139,7 +141,7 @@ cargo run --release -- align examples/design.csv examples/measured.csv
 
 ## 🧪 测试
 
-测试套件有 16 个测试（`cargo test`，CI 在 Windows 和 Linux 上运行）。它们检查正常情况、边界情况和损坏的输入：空文件、乱码和被截断的文件绝不会 panic。CI 还运行 `cargo fmt --check`、把警告当作错误的 `cargo clippy` 以及 `python -I tools/ci_validate.py`。
+测试套件有 25 个测试（`cargo test`，CI 在 Windows 和 Linux 上运行）。它们检查正常情况、边界情况和损坏的输入：空文件、乱码和被截断的文件绝不会 panic。CI 还运行 `cargo fmt --check`、把警告当作错误的 `cargo clippy` 以及 `python -I tools/ci_validate.py`。
 
 ## 🏗️ 构建与发布
 
@@ -157,15 +159,17 @@ cargo run --release -- align examples/design.csv examples/measured.csv
 ```text
 EH3D-VISION-STUDIO/
 ├── src/
-│   ├── align.rs                                 逻辑的一部分
-│   ├── fiducial.rs                              逻辑的一部分
-│   ├── image.rs                                 逻辑的一部分
 │   ├── lib.rs                                   库：每个命令所使用的部分
 │   ├── main.rs                                  命令行
+│   ├── align.rs                                 逻辑的一部分
+│   ├── cli_args.rs                              命令行参数：每个小工具中的同一个文件
+│   ├── fiducial.rs                              逻辑的一部分
+│   ├── image.rs                                 逻辑的一部分
 │   └── scale.rs                                 逻辑的一部分
 ├── tests/
-│   ├── vision.rs                                库和命令行的测试
-│   └── strict.rs                                命令行测试：它不认识的选项和词
+│   ├── readme.rs                                运行 README 和 run 脚本所承诺内容的测试
+│   ├── strict.rs                                命令行测试：它不认识的选项和词
+│   └── vision.rs                                库和命令行的测试
 ├── examples/
 │   ├── design.csv                               试用的示例
 │   ├── marks.pgm                                试用的示例
