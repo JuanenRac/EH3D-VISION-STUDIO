@@ -2,6 +2,9 @@
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 #![forbid(unsafe_code)]
 
+mod cli_args;
+
+use cli_args::{finish, flag, num, switch};
 use eh3d_vision_studio::align::{accept, fit};
 use eh3d_vision_studio::fiducial::{find, Polarity, Settings};
 use eh3d_vision_studio::image::from_bytes;
@@ -17,33 +20,6 @@ const HELP: &str = "eh3d-vision: fiducials in a camera image
 
 IMAGE is a PNG or a PGM file. The CSV files have one point per line: x,y in millimetres, in the same order in both files.";
 
-fn flag(args: &mut Vec<String>, name: &str) -> Result<Option<String>, String> {
-    if let Some(i) = args.iter().position(|a| a == name) {
-        let v = args
-            .get(i + 1)
-            .ok_or_else(|| format!("{name} needs a value"))?
-            .clone();
-        args.drain(i..=i + 1);
-        return Ok(Some(v));
-    }
-    Ok(None)
-}
-
-fn switch(args: &mut Vec<String>, name: &str) -> bool {
-    args.iter()
-        .position(|a| a == name)
-        .map(|i| args.remove(i))
-        .is_some()
-}
-
-fn num(text: &str, what: &str) -> Result<f64, String> {
-    text.trim()
-        .parse::<f64>()
-        .ok()
-        .filter(|v| v.is_finite())
-        .ok_or_else(|| format!("{what} '{text}' is not a number"))
-}
-
 fn points(path: &str) -> Result<Vec<(f64, f64)>, String> {
     let text = fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
     text.lines()
@@ -57,18 +33,6 @@ fn points(path: &str) -> Result<Vec<(f64, f64)>, String> {
             Ok((num(x, "x")?, num(y, "y")?))
         })
         .collect()
-}
-
-/// What is left of the arguments once the options and the wanted words are taken must be nothing more than `max` words: an option that is written wrong or an extra word is an
-/// error, not something to ignore (the program would then make its output with the default values).
-fn finish(args: &[String], max: usize) -> Result<(), String> {
-    if let Some(o) = args.iter().find(|a| a.starts_with("--")) {
-        return Err(format!("{o}: unknown option (see help)"));
-    }
-    if args.len() > max {
-        return Err(format!("{}: unexpected argument (see help)", args[max]));
-    }
-    Ok(())
 }
 
 fn run(mut args: Vec<String>) -> Result<(), String> {
