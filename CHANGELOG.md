@@ -6,6 +6,7 @@ All notable changes to this project are documented here.
 - **The reader of pictures comes from EH3D-COMMON (`eh3d-image`):** the program no longer keeps its own copy of the PGM and PNG reader; it takes it by path from the sibling repository, which must be cloned beside this one. `eh3d_*::image` keeps working as before. The manifest names EH3D-COMMON in `depends_on` and the CI checks it out.
 - **More tests:** transforms that undo each other, a mirrored or mixed-up board refused, marks found in a noisy picture to a fraction of a pixel, and files of points with comments, Windows line ends and bad lines.
 - **The workflows are hardened:** every action is pinned by its commit with its version in a comment, and the checkouts keep no credentials.
+- **More tests of the limits:** the fit of the board with two points, points in a line and a half turn, the messages of the acceptance, the scale and the lens.
 
 ## [0.0.2] - Shared argument helper and README tests
 
