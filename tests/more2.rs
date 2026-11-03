@@ -60,7 +60,12 @@ fn a_very_small_turn_is_found_and_does_not_become_noise() {
 
 #[test]
 fn the_number_of_points_must_match_and_the_message_says_both_numbers() {
-    let e = fit(&[(0.0, 0.0), (1.0, 0.0), (2.0, 0.0)], &[(0.0, 0.0), (1.0, 0.0)], false).unwrap_err();
+    let e = fit(
+        &[(0.0, 0.0), (1.0, 0.0), (2.0, 0.0)],
+        &[(0.0, 0.0), (1.0, 0.0)],
+        false,
+    )
+    .unwrap_err();
     assert!(e.contains('3') && e.contains('2'), "{e}");
     assert!(fit(&[], &[], false).is_err());
     assert!(fit(&[(0.0, 0.0)], &[(0.0, 0.0)], false).is_err());
@@ -70,8 +75,12 @@ fn the_number_of_points_must_match_and_the_message_says_both_numbers() {
 fn a_point_that_is_not_a_number_in_the_design_or_in_the_measure_is_refused() {
     let ok = [(0.0, 0.0), (10.0, 0.0)];
     for bad in [f64::NAN, f64::INFINITY] {
-        assert!(fit(&[(bad, 0.0), (10.0, 0.0)], &ok, false).unwrap_err().contains("not a number"));
-        assert!(fit(&ok, &[(0.0, bad), (10.0, 0.0)], true).unwrap_err().contains("not a number"));
+        assert!(fit(&[(bad, 0.0), (10.0, 0.0)], &ok, false)
+            .unwrap_err()
+            .contains("not a number"));
+        assert!(fit(&ok, &[(0.0, bad), (10.0, 0.0)], true)
+            .unwrap_err()
+            .contains("not a number"));
     }
 }
 
@@ -113,14 +122,25 @@ fn the_transform_is_not_accepted_for_a_residual_or_a_stretch_and_the_message_say
     assert!(e.contains("2.00 %") && e.contains("1.00 %"), "{e}");
     assert!(accept(&t, 0.5, 0.02 + 1e-12).is_ok());
     // a board that is smaller is stretched in the same way
-    let small = Transform { scale: 0.98, rms_mm: 0.0, ..t };
+    let small = Transform {
+        scale: 0.98,
+        rms_mm: 0.0,
+        ..t
+    };
     assert!(accept(&small, 1.0, 0.01).is_err());
     assert!(accept(&small, 1.0, 0.03).is_ok());
 }
 
 #[test]
 fn the_scale_needs_a_mark_of_a_size_and_a_real_size_that_are_more_than_zero_and_finite() {
-    for (px, mm) in [(0.0, 1.0), (-1.0, 1.0), (1.0, 0.0), (1.0, -2.0), (f64::NAN, 1.0), (1.0, f64::INFINITY)] {
+    for (px, mm) in [
+        (0.0, 1.0),
+        (-1.0, 1.0),
+        (1.0, 0.0),
+        (1.0, -2.0),
+        (f64::NAN, 1.0),
+        (1.0, f64::INFINITY),
+    ] {
         assert!(Scale::from_known_diameter(px, mm).is_err(), "{px} {mm}");
     }
     let s = Scale::from_known_diameter(40.0, 2.0).unwrap();
@@ -153,7 +173,8 @@ fn the_correction_of_the_lens_grows_towards_the_edge_and_a_negative_k1_pulls_the
 }
 
 #[test]
-fn the_distortion_fit_needs_three_points_of_the_same_number_a_norm_and_points_away_from_the_centre() {
+fn the_distortion_fit_needs_three_points_of_the_same_number_a_norm_and_points_away_from_the_centre()
+{
     let c = (0.0, 0.0);
     let pts = [(10.0, 0.0), (0.0, 10.0), (-10.0, 0.0)];
     assert!(fit_k1(&pts, &pts[..2], c, 10.0).unwrap_err().contains('3'));
@@ -162,6 +183,8 @@ fn the_distortion_fit_needs_three_points_of_the_same_number_a_norm_and_points_aw
         assert!(fit_k1(&pts, &pts, c, norm).unwrap_err().contains("norm"));
     }
     let centre_only = [(0.0, 0.0), (0.0, 0.0), (0.0, 0.0)];
-    assert!(fit_k1(&centre_only, &centre_only, c, 10.0).unwrap_err().contains("centre"));
+    assert!(fit_k1(&centre_only, &centre_only, c, 10.0)
+        .unwrap_err()
+        .contains("centre"));
     assert!(near(fit_k1(&pts, &pts, c, 10.0).unwrap(), 0.0, 1e-12));
 }
