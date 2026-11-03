@@ -25,8 +25,8 @@
       "level": "config",
       "title": "CAM and assembly",
       "lines": [
-        "planned: PNP-MANAGER, ISOCAM",
-        "and MOTIONCNC will take the",
+        "planned: PHOENIX-PNP, ISOCAM",
+        "and PHOENIX-CNC will take the",
         "correction"
       ]
     },
