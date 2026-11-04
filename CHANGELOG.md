@@ -3,6 +3,7 @@
 All notable changes to this project are documented here.
 
 ## [Unreleased]
+- **The marks for ISOCAM:** `align --isocam-args` prints each pair of marks as the option `--fiducial` of `eh3d-isocam`.
 - **The application icon and the logos of the program:** `images/brand/` holds the icon (SVG, PNG sizes, `.ico` and `.icns`), the horizontal and vertical logos in a light and a dark version and the social preview image.
 - **Shared checks updated:** the validator also compares the badge and the Version row of the README with the manifest, fails when one of its checks cannot run, and the CHANGELOG step of the workflow reads the base branch from the environment.
 - **The reader of pictures comes from EH3D-COMMON (`eh3d-image`):** the program no longer keeps its own copy of the PGM and PNG reader; it takes it by path from the sibling repository, which must be cloned beside this one. `eh3d_*::image` keeps working as before. The manifest names EH3D-COMMON in `depends_on` and the CI checks it out.

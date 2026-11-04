@@ -78,6 +78,7 @@ Cómo encajan las partes de este repositorio: quién lo usa, qué contiene y de 
 * **Pruebas con entradas dañadas:** las pruebas también dan ficheros vacíos, basura, números enormes y ficheros cortados, y ninguna puede provocar un pánico.
 * **Sin adivinar:** un valor que no tiene sentido es un error que dice cuál y por qué, nunca un resultado que solo lo parece.
 * **Sin código unsafe:** `#![forbid(unsafe_code)]` en la biblioteca y el programa.
+* **Las marcas para ISOCAM:** `align --isocam-args` escribe cada par de marcas como la opción `--fiducial X_DISEÑO,Y_DISEÑO,X_MEDIDA,Y_MEDIDA` de `eh3d-isocam`.
 
 ## 🔒 Seguridad y protección
 

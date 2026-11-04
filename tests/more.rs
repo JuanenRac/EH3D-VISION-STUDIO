@@ -619,3 +619,37 @@ fn write_bytes(name: &str, b: &[u8]) -> String {
     std::fs::write(&p, b).unwrap();
     p
 }
+
+#[test]
+fn align_can_print_the_marks_as_the_options_of_isocam() {
+    let dir = std::env::temp_dir().join(format!("eh3d_vision_isocam_args_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let design = dir.join("design.csv");
+    let measured = dir.join("measured.csv");
+    std::fs::write(&design, "0,0\n50,0\n0,40\n").unwrap();
+    std::fs::write(&measured, "0.1,0.2\n50.1,0.2\n0.1,40.2\n").unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_eh3d-vision"))
+        .args([
+            "align",
+            design.to_str().unwrap(),
+            measured.to_str().unwrap(),
+            "--isocam-args",
+        ])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    let lines: Vec<&str> = text
+        .lines()
+        .filter(|l| l.starts_with("--fiducial "))
+        .collect();
+    assert_eq!(
+        lines,
+        vec![
+            "--fiducial 0,0,0.1,0.2",
+            "--fiducial 50,0,50.1,0.2",
+            "--fiducial 0,40,0.1,40.2"
+        ],
+        "{text}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

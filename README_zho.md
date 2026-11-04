@@ -78,6 +78,7 @@ EH3D-VISION-STUDIO 是 EH3D Fabrication Suite 的一个程序。目前它以库�
 * **损坏输入的测试：** 测试还会输入空文件、乱码、巨大数字和被截断的文件，任何情况都不允许 panic。
 * **不猜测：** 没有意义的值是一个说明哪个值、为什么的错误，绝不是只是看起来正确的结果。
 * **没有 unsafe 代码：** 库和程序中都有 `#![forbid(unsafe_code)]`。
+* **给 ISOCAM 用的标记：** `align --isocam-args` 把每一对标记打印成 `eh3d-isocam` 的选项 `--fiducial 设计X,设计Y,测量X,测量Y`。
 
 ## 🔒 安全与防护
 

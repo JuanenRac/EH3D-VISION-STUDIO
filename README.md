@@ -78,6 +78,7 @@ How the parts of this repository fit together: who uses it, what it holds and wh
 * **Tests with damaged input:** the tests also feed empty files, garbage, huge numbers and cut files, and none of them may panic.
 * **No guessing:** a value that does not make sense is an error that says which value and why, never a result that only looks right.
 * **No unsafe code:** `#![forbid(unsafe_code)]` in the library and the program.
+* **The marks for ISOCAM:** `align --isocam-args` prints each pair of marks as the option `--fiducial DESIGN_X,DESIGN_Y,MEASURED_X,MEASURED_Y` of `eh3d-isocam`.
 
 ## 🔒 Security & Safety
 

@@ -16,7 +16,7 @@ use std::process::ExitCode;
 const HELP: &str = "eh3d-vision: fiducials in a camera image
 
   eh3d-vision find IMAGE [--light] [--min-diam PX] [--max-diam PX] [--known-mm D]   the round marks found (--known-mm gives millimetres)
-  eh3d-vision align DESIGN.csv MEASURED.csv [--scale] [--max-rms 0.1] [--max-stretch 0.01]   the turn and the shift that put the board where it is
+  eh3d-vision align DESIGN.csv MEASURED.csv [--scale] [--isocam-args] [--max-rms 0.1] [--max-stretch 0.01]   the turn and the shift that put the board where it is
 
 IMAGE is a PNG or a PGM file. The CSV files have one point per line: x,y in millimetres, in the same order in both files.";
 
@@ -88,6 +88,7 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
         }
         "align" => {
             let allow = switch(&mut args, "--scale");
+            let isocam_args = switch(&mut args, "--isocam-args");
             let max_rms = flag(&mut args, "--max-rms")?
                 .map(|v| num(&v, "--max-rms"))
                 .transpose()?
@@ -105,6 +106,13 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 "shift ({:+.4}, {:+.4}) mm, turn {:+.4} degrees, size {:.5}, residual {:.4} mm",
                 t.dx, t.dy, t.theta_deg, t.scale, t.rms_mm
             );
+            if isocam_args {
+                // the marks as the options of eh3d-isocam, one pair for each row: design x, design y, measured x, measured y
+                let (design, measured) = (points(&args[0])?, points(&args[1])?);
+                for (d, m) in design.iter().zip(&measured) {
+                    println!("--fiducial {},{},{},{}", d.0, d.1, m.0, m.1);
+                }
+            }
             accept(&t, max_rms, max_stretch)
         }
         other => Err(format!("{other}: unknown command (see help)")),

@@ -78,6 +78,7 @@ Come si incastrano le parti di questo repository: chi lo usa, cosa contiene e da
 * **Test con input danneggiati:** i test forniscono anche file vuoti, spazzatura, numeri enormi e file tagliati, e nessuno può andare in panico.
 * **Nessuna ipotesi:** un valore privo di senso è un errore che dice quale e perché, mai un risultato che sembra solo giusto.
 * **Nessun codice unsafe:** `#![forbid(unsafe_code)]` nella libreria e nel programma.
+* **I segni per ISOCAM:** `align --isocam-args` stampa ogni coppia di segni come l'opzione `--fiducial X_PROGETTO,Y_PROGETTO,X_MISURATA,Y_MISURATA` di `eh3d-isocam`.
 
 ## 🔒 Sicurezza e protezione
 
