@@ -2,7 +2,7 @@
   "repo": "EH3D-VISION-STUDIO",
   "ecosystem": "eh3d",
   "tagline": "Fiducials found, pixels turned into millimetres, a board put right.",
-  "description": "EH3D-VISION-STUDIO is a Rust library and command line that find round fiducial marks in a picture and work out the turn and the shift that put a board where its design says. It has no live camera yet.",
+  "description": "EH3D-VISION-STUDIO is a Rust library and command line that find round fiducial marks in a picture and work out the turn and the shift that put a board where its design says. Built with the gui feature it also has a window (egui) that opens a picture, shows the marks, sets the scale, fits the distortion of the lens and aligns with the design. It has no live camera yet.",
   "columns": [
     "WHO USES IT",
     "THIS REPOSITORY",
@@ -51,7 +51,7 @@
       "title": "scale",
       "lines": [
         "pixels to millimetres and the",
-        "distortion of the lens"
+        "radial distortion of the lens"
       ],
       "code": [
         "src/scale.rs::pub fn fit_k1"
@@ -92,6 +92,49 @@
         "a picture file today, a",
         "live camera later"
       ]
+    },
+    {
+      "id": "grid",
+      "column": 1,
+      "level": "tested",
+      "title": "grid",
+      "lines": [
+        "the distortion of the lens",
+        "from a grid of marks"
+      ],
+      "code": [
+        "src/grid.rs::pub fn fit_distortion"
+      ]
+    },
+    {
+      "id": "config",
+      "column": 1,
+      "level": "tested",
+      "title": "config",
+      "lines": [
+        "vision.cfg: every tuned",
+        "value, read strictly"
+      ],
+      "code": [
+        "src/config.rs::pub struct Config"
+      ]
+    },
+    {
+      "id": "window",
+      "column": 1,
+      "level": "untested",
+      "title": "window (gui feature)",
+      "lines": [
+        "state, zoom and words are tested;",
+        "the drawing is not seen yet"
+      ],
+      "code": [
+        "src/window.rs::pub struct Window",
+        "src/viewport.rs::pub struct Viewport",
+        "src/lang.rs::pub enum Lang",
+        "src/browse.rs::pub struct Browser",
+        "src/gui.rs::pub fn run"
+      ]
     }
   ],
   "edges": [
@@ -121,12 +164,28 @@
       "from": "scale",
       "to": "camera",
       "level": "tested"
+    },
+    {
+      "from": "person",
+      "to": "window",
+      "level": "untested"
+    },
+    {
+      "from": "window",
+      "to": "grid",
+      "level": "tested"
+    },
+    {
+      "from": "window",
+      "to": "config",
+      "level": "tested"
     }
   ],
   "legend": {
-    "tested": "covered by tests on a computer (67 tests)",
+    "tested": "covered by tests on a computer (128 tests)",
     "config": "planned, not used today",
-    "external": "a person, a file or another repository"
+    "external": "a person, a file or another repository",
+    "untested": "written, not built or looked at on a screen yet"
   },
   "footer": "Tried on pictures drawn by the tests, not on real boards."
 }

@@ -3,6 +3,7 @@
   "ecosystem": "eh3d",
   "svg": "en",
   "exempt": [
+    "build.rs",
     "build.bat",
     "build.sh",
     "run.bat",
@@ -53,16 +54,16 @@
           }
         },
         {
-          "name": "align.rs",
+          "name": "gui_main.rs",
           "desc": {
-            "en": "a part of the logic",
-            "es": "una parte de la lógica",
-            "de": "ein Teil der Logik",
-            "fr": "une partie de la logique",
-            "it": "una parte della logica",
-            "ja": "ロジックの一部",
-            "zh": "逻辑的一部分",
-            "pt": "uma parte da lógica"
+            "en": "the window as a program of its own (gui feature)",
+            "es": "la ventana como programa propio (característica gui)",
+            "de": "das Fenster als eigenes Programm (Feature gui)",
+            "fr": "la fenêtre comme programme à part (fonctionnalité gui)",
+            "it": "la finestra come programma a sé (funzione gui)",
+            "ja": "独立したプログラムとしてのウィンドウ（gui 機能）",
+            "zh": "作为独立程序的窗口（gui 特性）",
+            "pt": "a janela como programa à parte (funcionalidade gui)"
           }
         },
         {
@@ -79,29 +80,146 @@
           }
         },
         {
+          "name": "align.rs",
+          "desc": {
+            "en": "the turn, shift and size of a board and its pairing with the design",
+            "es": "el giro, desplazamiento y tamaño de una placa y su emparejado con el diseño",
+            "de": "Drehung, Verschiebung und Größe einer Platine und ihre Zuordnung zum Entwurf",
+            "fr": "la rotation, le décalage et la taille d'une carte et son appariement avec le dessin",
+            "it": "la rotazione, lo spostamento e la dimensione di una scheda e il suo abbinamento al disegno",
+            "ja": "基板の回転・シフト・サイズと設計との対応付け",
+            "zh": "电路板的旋转、平移和尺寸及其与设计的配对",
+            "pt": "a rotação, o deslocamento e o tamanho de uma placa e o seu emparelhamento com o desenho"
+          }
+        },
+        {
+          "name": "config.rs",
+          "desc": {
+            "en": "the configuration file: every tuned value",
+            "es": "el fichero de configuración: cada valor afinado",
+            "de": "die Konfigurationsdatei: jeder abgestimmte Wert",
+            "fr": "le fichier de configuration : chaque valeur réglée",
+            "it": "il file di configurazione: ogni valore regolato",
+            "ja": "設定ファイル：調整されたすべての値",
+            "zh": "配置文件：每个调校过的数值",
+            "pt": "o ficheiro de configuração: cada valor afinado"
+          }
+        },
+        {
           "name": "fiducial.rs",
           "desc": {
-            "en": "a part of the logic",
-            "es": "una parte de la lógica",
-            "de": "ein Teil der Logik",
-            "fr": "une partie de la logique",
-            "it": "una parte della logica",
-            "ja": "ロジックの一部",
-            "zh": "逻辑的一部分",
-            "pt": "uma parte da lógica"
+            "en": "the round marks of a picture: threshold, spots and checks",
+            "es": "las marcas redondas de una imagen: umbral, manchas y comprobaciones",
+            "de": "die runden Marken eines Bildes: Schwellwert, Flecken und Prüfungen",
+            "fr": "les repères ronds d'une image : seuil, taches et contrôles",
+            "it": "i riferimenti rotondi di un'immagine: soglia, macchie e controlli",
+            "ja": "画像の円形マーク：しきい値・領域・検査",
+            "zh": "图像中的圆形标记：阈值、斑点和检查",
+            "pt": "as marcas redondas de uma imagem: limiar, manchas e verificações"
+          }
+        },
+        {
+          "name": "grid.rs",
+          "desc": {
+            "en": "the distortion of the lens from a grid of marks",
+            "es": "la distorsión del objetivo a partir de una rejilla de marcas",
+            "de": "die Verzeichnung des Objektivs aus einem Raster von Marken",
+            "fr": "la distorsion de l'objectif à partir d'une grille de repères",
+            "it": "la distorsione dell'obiettivo da una griglia di riferimenti",
+            "ja": "マークのグリッドから求めるレンズの歪み",
+            "zh": "由标记网格得出的镜头畸变",
+            "pt": "a distorção da objetiva a partir de uma grelha de marcas"
+          }
+        },
+        {
+          "name": "points.rs",
+          "desc": {
+            "en": "the files of points of a design",
+            "es": "los ficheros de puntos de un diseño",
+            "de": "die Punktdateien eines Entwurfs",
+            "fr": "les fichiers de points d'un dessin",
+            "it": "i file di punti di un disegno",
+            "ja": "設計の点のファイル",
+            "zh": "设计的点文件",
+            "pt": "os ficheiros de pontos de um desenho"
           }
         },
         {
           "name": "scale.rs",
           "desc": {
-            "en": "a part of the logic",
-            "es": "una parte de la lógica",
-            "de": "ein Teil der Logik",
-            "fr": "une partie de la logique",
-            "it": "una parte della logica",
-            "ja": "ロジックの一部",
-            "zh": "逻辑的一部分",
-            "pt": "uma parte da lógica"
+            "en": "pixels to millimetres and the radial distortion of the lens",
+            "es": "de píxeles a milímetros y la distorsión radial del objetivo",
+            "de": "von Pixeln zu Millimetern und die radiale Verzeichnung des Objektivs",
+            "fr": "des pixels aux millimètres et la distorsion radiale de l'objectif",
+            "it": "dai pixel ai millimetri e la distorsione radiale dell'obiettivo",
+            "ja": "ピクセルからミリメートルへ、レンズの放射歪み",
+            "zh": "像素到毫米，以及镜头的径向畸变",
+            "pt": "de píxeis para milímetros e a distorção radial da objetiva"
+          }
+        },
+        {
+          "name": "browse.rs",
+          "desc": {
+            "en": "the list of files of the window that opens a file",
+            "es": "la lista de ficheros de la ventana que abre un fichero",
+            "de": "die Dateiliste des Fensters zum Öffnen einer Datei",
+            "fr": "la liste des fichiers de la fenêtre d'ouverture d'un fichier",
+            "it": "l'elenco dei file della finestra che apre un file",
+            "ja": "ファイルを開くウィンドウのファイル一覧",
+            "zh": "打开文件窗口的文件列表",
+            "pt": "a lista de ficheiros da janela que abre um ficheiro"
+          }
+        },
+        {
+          "name": "gui.rs",
+          "desc": {
+            "en": "the window (egui, with the gui feature): draws the state and passes on what the person does",
+            "es": "la ventana (egui, con la característica gui): dibuja el estado y transmite lo que hace la persona",
+            "de": "das Fenster (egui, mit dem Feature gui): zeichnet den Zustand und gibt weiter, was die Person tut",
+            "fr": "la fenêtre (egui, avec la fonctionnalité gui) : dessine l'état et transmet ce que fait la personne",
+            "it": "la finestra (egui, con la funzione gui): disegna lo stato e inoltra ciò che fa la persona",
+            "ja": "ウィンドウ（egui、gui 機能）：状態を描き、操作を伝える",
+            "zh": "窗口（egui，gui 特性）：绘制状态并传递用户的操作",
+            "pt": "a janela (egui, com a funcionalidade gui): desenha o estado e transmite o que a pessoa faz"
+          }
+        },
+        {
+          "name": "lang.rs",
+          "desc": {
+            "en": "the words of the window in the eight languages",
+            "es": "las palabras de la ventana en los ocho idiomas",
+            "de": "die Wörter des Fensters in den acht Sprachen",
+            "fr": "les mots de la fenêtre dans les huit langues",
+            "it": "le parole della finestra nelle otto lingue",
+            "ja": "ウィンドウの文言（8言語）",
+            "zh": "窗口的文字（八种语言）",
+            "pt": "as palavras da janela nos oito idiomas"
+          }
+        },
+        {
+          "name": "viewport.rs",
+          "desc": {
+            "en": "zoom and pan of the picture, in plain numbers",
+            "es": "zoom y desplazamiento de la imagen, en números simples",
+            "de": "Zoom und Verschiebung des Bildes, in einfachen Zahlen",
+            "fr": "zoom et déplacement de l'image, en simples nombres",
+            "it": "zoom e spostamento dell'immagine, in semplici numeri",
+            "ja": "画像の拡大縮小と移動（単純な数値）",
+            "zh": "图像的缩放和平移（纯数值）",
+            "pt": "zoom e deslocamento da imagem, em números simples"
+          }
+        },
+        {
+          "name": "window.rs",
+          "desc": {
+            "en": "the state of the window without a screen: picture, marks, scale, lens and alignment",
+            "es": "el estado de la ventana sin pantalla: imagen, marcas, escala, objetivo y alineación",
+            "de": "der Zustand des Fensters ohne Bildschirm: Bild, Marken, Maßstab, Objektiv und Ausrichtung",
+            "fr": "l'état de la fenêtre sans écran : image, repères, échelle, objectif et alignement",
+            "it": "lo stato della finestra senza schermo: immagine, riferimenti, scala, obiettivo e allineamento",
+            "ja": "画面なしのウィンドウの状態：画像・マーク・スケール・レンズ・位置合わせ",
+            "zh": "无需屏幕的窗口状态：图像、标记、比例、镜头和对齐",
+            "pt": "o estado da janela sem ecrã: imagem, marcas, escala, objetiva e alinhamento"
           }
         }
       ]
@@ -194,6 +312,19 @@
             "ja": "試すためのサンプル",
             "zh": "试用的示例",
             "pt": "um exemplo para experimentar o programa"
+          }
+        },
+        {
+          "name": "vision.cfg",
+          "desc": {
+            "en": "the configuration file with every value and its meaning",
+            "es": "el fichero de configuración con cada valor y su significado",
+            "de": "die Konfigurationsdatei mit jedem Wert und seiner Bedeutung",
+            "fr": "le fichier de configuration avec chaque valeur et sa signification",
+            "it": "il file di configurazione con ogni valore e il suo significato",
+            "ja": "すべての値とその意味を記した設定ファイル",
+            "zh": "列出每个数值及其含义的配置文件",
+            "pt": "o ficheiro de configuração com cada valor e o seu significado"
           }
         }
       ]
@@ -311,6 +442,19 @@
           },
           "name": "Cargo.toml  Cargo.lock",
           "tree_name": "Cargo.toml Cargo.lock"
+        },
+        {
+          "name": "rust-toolchain.toml",
+          "desc": {
+            "en": "the pinned Rust toolchain",
+            "es": "la toolchain de Rust fijada",
+            "de": "die festgelegte Rust-Toolchain",
+            "fr": "la toolchain Rust épinglée",
+            "it": "la toolchain Rust fissata",
+            "ja": "固定されたRustツールチェーン",
+            "zh": "固定的 Rust 工具链",
+            "pt": "a toolchain de Rust fixada"
+          }
         },
         {
           "name": "CHANGELOG.md",

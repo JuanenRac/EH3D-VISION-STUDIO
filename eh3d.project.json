@@ -19,8 +19,8 @@
   "depends_on": [
     "EH3D-COMMON"
   ],
-  "build": "cargo build --release; cargo test",
-  "notes": "Scaffolding v0.0.2: a library and a command line that find round fiducial marks in a PNG or PGM image (Otsu threshold, connected spots, size, fill and elongation checks, marks cut by the edge refused), turn pixels into millimetres with the scale of a mark of known size, fit and correct the radial distortion of a lens from a grid of marks, and work out the turn, the shift and (if allowed) the size that take a board from its design to where the camera found it. No live camera, no neural network and no Hailo acceleration yet; nothing has looked at a real board.",
+  "build": "cargo build --release; cargo build --release --features gui; cargo test",
+  "notes": "Scaffolding v0.0.2: a library and a command line that find round fiducial marks in a PNG or PGM image (Otsu threshold, connected spots, size, fill and elongation checks, marks cut by the edge refused), turn pixels into millimetres with the scale of a mark of known size, fit and correct the radial distortion of a lens from a grid of marks, and work out the turn, the shift and (if allowed) the size that take a board from its design to where the camera found it. With the gui feature there is also a window (eh3d-vision-gui, egui) that opens a picture, shows the marks, sets the scale, fits the lens from a grid, aligns with a design and exports the options of ISOCAM; it has not been looked at on a screen. No live camera, no neural network and no Hailo acceleration yet; nothing has looked at a real board.",
   "native_version": {
     "file": "Cargo.toml",
     "pattern": "^version\\s*=\\s*\"(\\d+\\.\\d+\\.\\d+)\""

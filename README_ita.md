@@ -17,7 +17,7 @@
 
 ---
 
-**Verifica di onestà - cosa funziona oggi:** una libreria Rust e un programma a riga di comando (`eh3d-vision`) con 67 test eseguiti su un computer: trova segni fiduciali rotondi in un'immagine, converte i pixel in millimetri e calcola la rotazione e lo spostamento che portano una scheda dove dice il suo progetto. Non ha ancora una finestra, non è stato provato su una macchina e non è stato verificato su una raccolta di file reali.
+**Verifica di onestà - cosa funziona oggi:** una libreria Rust e un programma a riga di comando (`eh3d-vision`) con 128 test eseguiti su un computer: trova segni fiduciali rotondi in un'immagine, converte i pixel in millimetri e calcola la rotazione e lo spostamento che portano una scheda dove dice il suo progetto. Ha una finestra (si compila con `--features gui`, il programma `eh3d-vision-gui`) che apre un'immagine, mostra i segni con le loro coordinate, imposta la scala, calcola la distorsione dell'obiettivo da una griglia, allinea al progetto ed esporta le opzioni di ISOCAM, ma la finestra non è ancora stata vista su uno schermo; non è stato provato su una macchina e non è stato verificato su una raccolta di file reali.
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | Versione | `0.0.2` |
 | Maturità | Impalcatura |
-| Test | 67 |
+| Test | 128 |
 | Stack tecnologico | Rust |
 | Su hardware reale | Non provato: nulla di questo ha girato su una macchina |
 
@@ -46,9 +46,9 @@ Ogni riga è una parte di questo repository e il semaforo dice a che punto è og
 |---|---|---|
 | Nucleo | 🟡 | trova segni fiduciali rotondi in un'immagine, converte i pixel in millimetri e calcola la rotazione e lo spostamento che portano una scheda dove dice il suo progetto; provato su un computer con input normali e danneggiati, non con una raccolta di file reali. |
 | Riga di comando | 🟡 | `eh3d-vision` esegue le stesse funzioni della libreria e stampa il risultato; ogni errore torna come messaggio e codice di uscita diverso da zero. |
-| Test | 🟡 | 67 test passano (`cargo test`), con casi normali, casi limite e input danneggiati. |
+| Test | 🟡 | 128 test passano (`cargo test`), con casi normali, casi limite e input danneggiati. |
 | Sicurezza | 🟡 | Rust sicuro e semplice (`forbid(unsafe_code)`): nulla va in panico con i file ricevuti e un valore errato è un errore con il suo motivo; nessuna revisione indipendente. |
-| Finestra | 🔴 | Previsto: la finestra egui comune alla suite; oggi esiste solo la riga di comando. |
+| Finestra | 🟠 | Scritta (egui, `--features gui`, il programma `eh3d-vision-gui`): aprire o trascinare un'immagine, vedere i segni con le loro coordinate, impostare la scala con un segno di dimensione nota, calcolare la distorsione dell'obiettivo da una griglia, allineare a un disegno CSV ed esportare le opzioni di ISOCAM; la sua logica è testata, ma non è ancora stata compilata né vista su uno schermo. |
 | Hardware reale | 🔴 | Non provato: nulla di questo è stato eseguito su una macchina. |
 | Documentazione | 🟡 | README in otto lingue, il changelog e le due immagini disegnate da `docs/`. |
 
@@ -60,7 +60,7 @@ Ogni riga è una parte di questo repository e il semaforo dice a che punto è og
 
 ## 🧩 Ruolo in EH3D
 
-EH3D-VISION-STUDIO è un programma della EH3D Fabrication Suite. Oggi funziona come libreria e riga di comando; la sua finestra, con l'aspetto comune agli altri programmi della suite, è prevista. Legge e scrive file semplici, quindi può essere usato da solo o tra gli altri programmi.
+EH3D-VISION-STUDIO è un programma della EH3D Fabrication Suite. Funziona come libreria e riga di comando e, compilato con `--features gui`, come finestra con l'aspetto comune agli altri programmi della suite. Legge e scrive file semplici, quindi può essere usato da solo o tra gli altri programmi.
 
 ## 🏛️ Architettura
 
@@ -79,6 +79,8 @@ Come si incastrano le parti di questo repository: chi lo usa, cosa contiene e da
 * **Nessuna ipotesi:** un valore privo di senso è un errore che dice quale e perché, mai un risultato che sembra solo giusto.
 * **Nessun codice unsafe:** `#![forbid(unsafe_code)]` nella libreria e nel programma.
 * **I segni per ISOCAM:** `align --isocam-args` stampa ogni coppia di segni come l'opzione `--fiducial X_PROGETTO,Y_PROGETTO,X_MISURATA,Y_MISURATA` di `eh3d-isocam`.
+* **Una finestra:** si compila con `--features gui` come programma `eh3d-vision-gui` (su Windows si apre senza console): apre un'immagine PNG o PGM con zoom e spostamento, trova i segni con valori modificabili, li disegna con le loro coordinate, imposta la scala con un segno di dimensione nota, calcola la distorsione dell'obiettivo da una griglia di segni, allinea a un disegno da un file CSV (i segni vengono abbinati per posizione, quindi l'ordine non conta) ed esporta le opzioni `--fiducial` di ISOCAM solo quando l'allineamento è accettato. Parla le otto lingue e non richiede la rete.
+* **Un file di configurazione:** `vision.cfg` contiene ogni valore regolato (com'è fatto un segno, la griglia del target, i limiti di un allineamento accettato, il file più grande che si legge); un errore al suo interno viene rifiutato con la sua riga e `examples/vision.cfg` li elenca tutti.
 
 ## 🔒 Sicurezza e protezione
 
@@ -95,56 +97,37 @@ Come si incastrano le parti di questo repository: chi lo usa, cosa contiene e da
 La libreria è `eh3d_vision_studio` (`use eh3d_vision_studio::...`); la riga di comando è `eh3d-vision`. I comandi sono questi; ciascuno stampa il risultato sull'output standard e segnala un errore sull'output di errore con un codice di uscita diverso da zero. Non c'è accesso alla rete.
 
 ```text
-EH3D-VISION-STUDIO/
-├── src/
-│   ├── lib.rs                                   la libreria: ciò che usa ogni comando
-│   ├── main.rs                                  la riga di comando
-│   ├── align.rs                                 una parte della logica
-│   ├── cli_args.rs                              gli argomenti della riga di comando, lo stesso file in ogni piccola utilità
-│   ├── fiducial.rs                              una parte della logica
-│   └── scale.rs                                 una parte della logica
-├── tests/
-│   ├── readme.rs                                test che eseguono ciò che promettono il README e gli script run
-│   ├── strict.rs                                test della riga di comando: opzioni e parole che non conosce
-│   └── vision.rs                                test della libreria e della riga di comando
-├── examples/
-│   ├── design.csv                               un esempio per provare il programma
-│   ├── marks.pgm                                un esempio per provare il programma
-│   └── measured.csv                             un esempio per provare il programma
-├── docs/
-│   ├── architecture.json                        dati dell'immagine di Architettura
-│   └── structure.json                           dati dell'immagine di Struttura
-├── tools/                                       controllo della CI e del README e strumenti per le immagini
-├── images/                                      banner e le immagini di Architettura e Struttura del repository
-├── .github/                                     workflow di CI e di rilascio, modelli di issue e pull request
-├── eh3d.project.json                            manifesto: versione, ruolo, maturità e comando di compilazione
-├── Cargo.toml Cargo.lock                        il workspace e le sue dipendenze bloccate
-├── CHANGELOG.md                                 cosa è cambiato in ogni versione
-├── SECURITY.md SUPPORT.md                       come segnalare una vulnerabilità e dove chiedere
-└── CONTRIBUTING.md CODE_OF_CONDUCT.md LICENSE   come contribuire, codice di condotta e licenza
+eh3d-vision find IMAGE [--light] [--min-diam PX] [--max-diam PX] [--known-mm D]   the round marks found (--known-mm gives millimetres)
+eh3d-vision align DESIGN.csv MEASURED.csv [--scale] [--isocam-args] [--max-rms 0.1] [--max-stretch 0.01]
+eh3d-vision-gui [IMAGE] [DESIGN.csv]   the window (a build with --features gui); on Windows it opens with no console
 ```
 
 ## ⚙️ Configurazione
 
-Non c'è ancora un file di configurazione: ciò che la persona sceglie si passa come argomenti della riga di comando (vedi Interfacce) e ogni valore predefinito è scritto nella guida del comando (`eh3d-vision help`). I limiti fissi sono costanti con nome nel codice, coperte da test.
+I valori regolati stanno in un semplice file `chiave = valore`, non nel codice: `vision.cfg` nella cartella da cui parte il programma o accanto ad esso (la variabile `EH3D_VISION_CONFIG` indica un altro file). Fissa la lingua della finestra, se i segni sono scuri o chiari, la soglia, l'intervallo del diametro, il riempimento e l'allungamento di un segno, la dimensione del segno che imposta la scala, le colonne e le righe della griglia, se l'allineamento può cambiare la dimensione, i limiti che un allineamento deve rispettare e il file più grande che si legge. `examples/vision.cfg` elenca ogni chiave con il suo significato e il valore con cui parte il programma; se il file manca valgono quei valori e un file con un errore viene rifiutato con la sua riga. Sulla riga di comando le stesse cose si danno come opzioni (vedi Interfacce).
 
 ## 🚀 Avvio rapido
 
-Serve una toolchain Rust stabile (1.75 o più recente). Il repository EH3D-COMMON deve essere clonato accanto a questo: il lettore di immagini viene preso da lì tramite percorso.
+Serve una toolchain Rust stabile (1.88 o più recente). Il repository EH3D-COMMON deve essere clonato accanto a questo: il lettore di immagini viene preso da lì tramite percorso.
 
 ```bash
 cargo build --release
 cargo test
 cargo run --release -- align examples/design.csv examples/measured.csv
+cargo run --release --features gui --bin eh3d-vision-gui   # the window
 ```
 
 ## 🧪 Test
 
-La suite ha 67 test (`cargo test`, eseguiti su Windows e Linux nella CI). Verificano i casi normali, i casi limite e gli input danneggiati: file vuoti, spazzatura e file tagliati non causano mai un panico. La CI esegue anche `cargo fmt --check`, `cargo clippy` con gli avvisi come errori e `python -I tools/ci_validate.py`.
+La suite ha 128 test (`cargo test`, eseguiti su Windows e Linux nella CI). Verificano i casi normali, i casi limite e gli input danneggiati: file vuoti, spazzatura e file tagliati non causano mai un panico. La CI esegue anche `cargo fmt --check`, `cargo clippy` con gli avvisi come errori e `python -I tools/ci_validate.py`.
 
 ## 🏗️ Compilazione e rilascio
 
 La versione sta in `Cargo.toml` e in `eh3d.project.json`; ogni versione ha la sua voce in [CHANGELOG.md](CHANGELOG.md). `build.bat` / `build.sh` compilano il programma, `test.bat` / `test.sh` eseguono i test e `run.bat` / `run.sh` lo eseguono con un esempio. Le versioni sono pubblicate su GitHub.
+
+### Download
+
+Ogni versione contiene il programma con la sua finestra per Windows (64 e 32 bit), Linux (64 bit) e macOS (Apple silicon e Intel), come `<nome>-<versione>-<sistema>.zip` (Windows) o `.tar.gz` con il programma, la licenza, il leggimi, l'icona e gli esempi. I file sono costruiti da GitHub Actions, elencati in `SHA256SUMS` e firmati con la chiave di EH3D. Per controllare un download, confronta il suo hash con il file `.sha256` accanto ad esso (`sha256sum -c`) e verifica la firma con il file `.sig` accanto ad esso (`ssh-keygen -Y verify`).
 
 ## 📂 Struttura del repository
 
@@ -160,11 +143,19 @@ EH3D-VISION-STUDIO/
 ├── src/
 │   ├── lib.rs                                   la libreria: ciò che usa ogni comando
 │   ├── main.rs                                  la riga di comando
-│   ├── align.rs                                 una parte della logica
+│   ├── gui_main.rs                              la finestra come programma a sé (funzione gui)
 │   ├── cli_args.rs                              gli argomenti della riga di comando, lo stesso file in ogni piccola utilità
-│   ├── fiducial.rs                              una parte della logica
-│   ├── image.rs                                 una parte della logica
-│   └── scale.rs                                 una parte della logica
+│   ├── align.rs                                 la rotazione, lo spostamento e la dimensione di una scheda e il suo abbinamento al disegno
+│   ├── config.rs                                il file di configurazione: ogni valore regolato
+│   ├── fiducial.rs                              i riferimenti rotondi di un'immagine: soglia, macchie e controlli
+│   ├── grid.rs                                  la distorsione dell'obiettivo da una griglia di riferimenti
+│   ├── points.rs                                i file di punti di un disegno
+│   ├── scale.rs                                 dai pixel ai millimetri e la distorsione radiale dell'obiettivo
+│   ├── browse.rs                                l'elenco dei file della finestra che apre un file
+│   ├── gui.rs                                   la finestra (egui, con la funzione gui): disegna lo stato e inoltra ciò che fa la persona
+│   ├── lang.rs                                  le parole della finestra nelle otto lingue
+│   ├── viewport.rs                              zoom e spostamento dell'immagine, in semplici numeri
+│   └── window.rs                                lo stato della finestra senza schermo: immagine, riferimenti, scala, obiettivo e allineamento
 ├── tests/
 │   ├── readme.rs                                test che eseguono ciò che promettono il README e gli script run
 │   ├── strict.rs                                test della riga di comando: opzioni e parole che non conosce
@@ -172,7 +163,8 @@ EH3D-VISION-STUDIO/
 ├── examples/
 │   ├── design.csv                               un esempio per provare il programma
 │   ├── marks.pgm                                un esempio per provare il programma
-│   └── measured.csv                             un esempio per provare il programma
+│   ├── measured.csv                             un esempio per provare il programma
+│   └── vision.cfg                               il file di configurazione con ogni valore e il suo significato
 ├── docs/
 │   ├── architecture.json                        dati dell'immagine di Architettura
 │   └── structure.json                           dati dell'immagine di Struttura
@@ -181,6 +173,7 @@ EH3D-VISION-STUDIO/
 ├── .github/                                     workflow di CI e di rilascio, modelli di issue e pull request
 ├── eh3d.project.json                            manifesto: versione, ruolo, maturità e comando di compilazione
 ├── Cargo.toml Cargo.lock                        il workspace e le sue dipendenze bloccate
+├── rust-toolchain.toml                          la toolchain Rust fissata
 ├── CHANGELOG.md                                 cosa è cambiato in ogni versione
 ├── SECURITY.md SUPPORT.md                       come segnalare una vulnerabilità e dove chiedere
 └── CONTRIBUTING.md CODE_OF_CONDUCT.md LICENSE   come contribuire, codice di condotta e licenza
@@ -192,14 +185,14 @@ EH3D-VISION-STUDIO/
 
 **Limiti noti oggi**
 
-* Non ha ancora una finestra: esistono solo la libreria e la riga di comando.
+* La finestra non è ancora stata vista su uno schermo; i segni vengono abbinati al disegno per posizione, quindi una scheda molto ruotata o un segno mancante viene rifiutato invece di essere indovinato.
 * Non è stato provato su una macchina né con una raccolta di file reali e non ha avuto revisione indipendente.
 * Legge un file immagine, non una telecamera dal vivo, trova solo segni rotondi (né croci né quadrati) ed è stato provato su immagini disegnate dai test, non su fotografie di schede reali.
 
 **Prossimi passi**
 
-* Leggere la telecamera dal vivo della macchina (EH3D-NODE-BUNGARD-AUX), trovare croci e quadrati, provare fotografie di schede reali e aggiungere la finestra con l'addestramento di nuovi segni.
-* Aggiungere la finestra con l'aspetto comune ai programmi della suite, negli otto idiomi.
+* Leggere la telecamera dal vivo della macchina (EH3D-NODE-BUNGARD-AUX), trovare croci e quadrati, provare fotografie di schede reali e aggiungere alla finestra l'addestramento di nuovi segni.
+* Vedere la finestra su uno schermo e finirla.
 * Provarlo con file reali e con gli altri programmi della suite.
 
 ## 🌍 Lingue
