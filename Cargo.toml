@@ -2,11 +2,12 @@
 name = "eh3d-vision-studio"
 version = "0.0.2"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.88"
 description = "Fiducials in a camera image: detection, the scale of the camera, and the correction in X, Y and angle that puts a board where its design says"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/JuanenRac/EH3D-VISION-STUDIO"
 readme = "README.md"
+default-run = "eh3d-vision"
 
 [lib]
 name = "eh3d_vision_studio"
@@ -16,9 +17,29 @@ path = "src/lib.rs"
 name = "eh3d-vision"
 path = "src/main.rs"
 
+# the window as a program of its own: on Windows it opens without the black console window that the command line keeps
+[[bin]]
+name = "eh3d-vision-gui"
+path = "src/gui_main.rs"
+required-features = ["gui"]
+
+[features]
+default = []
+# the window (egui, with the icon of the program): `cargo run --release --features gui --bin eh3d-vision-gui`
+gui = ["dep:eframe", "dep:png"]
+
 [dependencies]
 # the reader of PGM and PNG pictures, shared with the other programs that work from a picture
 eh3d-image = { version = ">=0.0.1", path = "../EH3D-COMMON/crates/image" }
+
+# the window
+eframe = { version = "0.37.0", default-features = false, features = ["glow", "default_fonts"], optional = true }
+# only to read the icon of the window
+png = { version = "0.17", optional = true }
+
+# the window of Linux needs a windowing system chosen at build time (X11 and Wayland); Windows and macOS have their own
+[target.'cfg(target_os = "linux")'.dependencies]
+eframe = { version = "0.37.0", default-features = false, features = ["glow", "default_fonts", "x11", "wayland"], optional = true }
 
 [dev-dependencies]
 # the tests make their own PNG files
@@ -27,3 +48,7 @@ png = "0.17"
 [profile.release]
 opt-level = 3
 lto = true
+
+# the icon and the version information of the Windows executable (build.rs; nothing on other systems)
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1.34"
