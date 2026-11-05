@@ -79,6 +79,11 @@ pub fn otsu(img: &Gray) -> u8 {
 
 /// The marks of the image, the best ones first. An image with a single grey level has none.
 pub fn find(img: &Gray, s: &Settings) -> Result<Vec<Fiducial>, String> {
+    find_with(img, s, None)
+}
+
+/// Like `find`, with the threshold between dark and light given (0 to 255) instead of the one of Otsu; `None` is the threshold of Otsu.
+pub fn find_with(img: &Gray, s: &Settings, threshold: Option<u8>) -> Result<Vec<Fiducial>, String> {
     if !(s.min_diameter.is_finite()
         && s.max_diameter.is_finite()
         && s.min_diameter > 1.0
@@ -90,7 +95,7 @@ pub fn find(img: &Gray, s: &Settings) -> Result<Vec<Fiducial>, String> {
     {
         return Err("the settings of the search make no sense (diameters from 2 up, a fill from 0 to 1, an elongation of 1 or more)".into());
     }
-    let t = otsu(img);
+    let t = threshold.unwrap_or_else(|| otsu(img));
     let on = |v: u8| match s.polarity {
         Polarity::Dark => v <= t,
         Polarity::Light => v > t,

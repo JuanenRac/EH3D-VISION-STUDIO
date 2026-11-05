@@ -5,9 +5,10 @@
 mod cli_args;
 
 use cli_args::{finish, flag, num, switch};
-use eh3d_vision_studio::align::{accept, fit};
+use eh3d_vision_studio::align::{accept, fit, isocam_args as isocam_lines};
 use eh3d_vision_studio::fiducial::{find, Polarity, Settings};
 use eh3d_vision_studio::image::from_bytes;
+use eh3d_vision_studio::points::parse as parse_points;
 use eh3d_vision_studio::scale::Scale;
 use std::env;
 use std::fs;
@@ -22,17 +23,7 @@ IMAGE is a PNG or a PGM file. The CSV files have one point per line: x,y in mill
 
 fn points(path: &str) -> Result<Vec<(f64, f64)>, String> {
     let text = fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
-    text.lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .enumerate()
-        .map(|(i, l)| {
-            let (x, y) = l
-                .split_once(',')
-                .ok_or_else(|| format!("{path} line {}: it must be x,y", i + 1))?;
-            Ok((num(x, "x")?, num(y, "y")?))
-        })
-        .collect()
+    parse_points(&text, path)
 }
 
 fn run(mut args: Vec<String>) -> Result<(), String> {
@@ -109,8 +100,8 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
             if isocam_args {
                 // the marks as the options of eh3d-isocam, one pair for each row: design x, design y, measured x, measured y
                 let (design, measured) = (points(&args[0])?, points(&args[1])?);
-                for (d, m) in design.iter().zip(&measured) {
-                    println!("--fiducial {},{},{},{}", d.0, d.1, m.0, m.1);
+                for line in isocam_lines(&design, &measured) {
+                    println!("{line}");
                 }
             }
             accept(&t, max_rms, max_stretch)
