@@ -7,6 +7,7 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 use eh3d_vision_studio::config::Config;
+use eh3d_vision_studio::shot;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -18,7 +19,37 @@ fn report_error(text: &str) {
     );
 }
 
+/// The picture mode: `--shot FILE.png` opens the window with the default values, saves what it draws as a PNG file and closes. The exit code is 0 when the file was written, 1 when it
+/// was not and 2 when the arguments are wrong; the reason is written on the error output, which a script that redirects it can read.
+fn take_picture(args: &[String]) -> ExitCode {
+    let parsed = match shot::parse_window_args(args, 8) {
+        Ok(parsed) => parsed,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let Some(request) = parsed.shot else {
+        eprintln!("error: --shot needs a file to write");
+        return ExitCode::from(2);
+    };
+    let lang = parsed
+        .lang
+        .unwrap_or_else(eh3d_vision_studio::lang::Lang::from_env);
+    match eh3d_vision_studio::gui::run_shot(parsed.files, lang, request) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("error: the picture could not be taken: {e}");
+            ExitCode::from(1)
+        }
+    }
+}
+
 fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if shot::wants_picture(&args) {
+        return take_picture(&args);
+    }
     let files: Vec<PathBuf> = std::env::args_os().skip(1).map(PathBuf::from).collect();
     let (cfg, problem) = Config::load();
     match eh3d_vision_studio::gui::run(files, cfg, problem) {

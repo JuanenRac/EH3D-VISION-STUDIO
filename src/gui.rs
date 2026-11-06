@@ -5,12 +5,13 @@ use crate::browse::{self, Browser};
 use crate::config::Config;
 use crate::image::Gray;
 use crate::lang::{Lang, Msg};
+use crate::shot::{ShotRequest, ShotTheme, PATIENCE_FRAMES};
 use crate::window::{Section, Window, DESIGN_EXTENSIONS, IMAGE_EXTENSIONS, OUTPUT_EXTENSIONS};
 use eframe::egui::{
     self, Color32, FontData, FontDefinitions, FontFamily, Pos2, Rect, Stroke, TextureOptions,
 };
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 // the colours of the theme Forge, the one the other programs of the suite start with: amber on charcoal
 const BACKGROUND: Color32 = Color32::from_rgb(0x0f, 0x0d, 0x0b);
@@ -48,6 +49,8 @@ struct Dialog {
 
 struct App {
     win: Window,
+    /// The picture mode, while the window is there only to be photographed.
+    shot: Option<ShotState>,
     dialog: Option<Dialog>,
     fit_pending: bool,
     texture: Option<(u64, egui::TextureHandle)>,
@@ -64,6 +67,7 @@ impl App {
         let lang = Lang::from_setting(&cfg.language);
         let mut app = App {
             win: Window::new(lang, cfg, problem),
+            shot: None,
             dialog: None,
             fit_pending: false,
             texture: None,
@@ -650,6 +654,7 @@ impl eframe::App for App {
         self.side_panel(ui);
         self.canvas(ui);
         self.dialog_window(&ctx);
+        self.shot_tick(&ctx);
     }
 }
 
@@ -700,7 +705,18 @@ fn install_fonts(ctx: &egui::Context) {
 }
 
 /// The colours of the theme Forge for the controls of egui.
-fn apply_theme(ctx: &egui::Context) {
+fn apply_theme(ctx: &egui::Context, theme: ShotTheme) {
+    match theme {
+        ShotTheme::Forge => {}
+        ShotTheme::Dark => {
+            ctx.set_visuals(egui::Visuals::dark());
+            return;
+        }
+        ShotTheme::Light => {
+            ctx.set_visuals(egui::Visuals::light());
+            return;
+        }
+    }
     let mut v = egui::Visuals::dark();
     v.panel_fill = PANEL;
     v.window_fill = RAISED;
@@ -738,8 +754,145 @@ pub fn run(files: Vec<PathBuf>, cfg: Config, problem: Option<String>) -> eframe:
         options,
         Box::new(move |cc| {
             install_fonts(&cc.egui_ctx);
-            apply_theme(&cc.egui_ctx);
+            apply_theme(&cc.egui_ctx, ShotTheme::Forge);
             Ok(Box::new(App::new(cfg, problem, &files)))
         }),
     )
+}
+
+/// How the picture mode ended: nothing yet, the file was written, or the reason it was not.
+type ShotOutcome = Arc<Mutex<Option<Result<(), String>>>>;
+
+/// The picture being taken.
+struct ShotState {
+    request: ShotRequest,
+    frame: u32,
+    outcome: ShotOutcome,
+}
+
+impl App {
+    /// Counts the frames, asks for the picture after the frames waited, writes it and closes the window when it is written or when it does not come.
+    fn shot_tick(&mut self, ctx: &egui::Context) {
+        let Some(shot) = self.shot.as_mut() else {
+            return;
+        };
+        shot.frame += 1;
+        ctx.request_repaint();
+        let due = 3 + shot.request.wait;
+        let finished = match shot.outcome.lock() {
+            Ok(slot) => slot.is_some(),
+            Err(_) => true,
+        };
+        if finished {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        } else if shot.frame == due {
+            let (output, replace) = (shot.request.output.clone(), shot.request.replace);
+            let (outcome, repaint) = (shot.outcome.clone(), ctx.clone());
+            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(
+                egui::ScreenshotCallback::new(move |image| {
+                    let result = save_shot_png(&image, &output, replace);
+                    if let Ok(mut slot) = outcome.lock() {
+                        *slot = Some(result);
+                    }
+                    repaint.request_repaint();
+                }),
+            ));
+        } else if shot.frame > due + PATIENCE_FRAMES {
+            if let Ok(mut slot) = shot.outcome.lock() {
+                *slot = Some(Err(
+                    "the picture did not come back from the window".to_owned()
+                ));
+            }
+        }
+    }
+}
+
+/// Writes the picture the window gave back as a PNG file, a new file unless `replace` is true.
+fn save_shot_png(image: &egui::ColorImage, path: &Path, replace: bool) -> Result<(), String> {
+    let mut open = std::fs::OpenOptions::new();
+    open.write(true);
+    if replace {
+        open.create(true).truncate(true);
+    } else {
+        open.create_new(true);
+    }
+    let file = open
+        .open(path)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut encoder = png::Encoder::new(
+        std::io::BufWriter::new(file),
+        image.size[0] as u32,
+        image.size[1] as u32,
+    );
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
+    let data: Vec<u8> = image.pixels.iter().flat_map(|c| c.to_array()).collect();
+    writer.write_image_data(&data).map_err(|e| e.to_string())?;
+    // the end of the file is written here, so that a failure is reported and not lost in a drop
+    writer.finish().map_err(|e| e.to_string())
+}
+
+/// Opens the window at the size asked, shows the files, saves the picture as the request says and closes by itself. The window keeps no settings. The answer is the reason when the
+/// picture could not be written.
+pub fn run_shot(files: Vec<PathBuf>, lang: Lang, request: ShotRequest) -> Result<(), String> {
+    if !request.replace && request.output.exists() {
+        return Err(format!(
+            "{} exists; give --replace to write over it",
+            request.output.display()
+        ));
+    }
+    let folder = request
+        .output
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .map(Path::to_path_buf);
+    if folder.is_some_and(|dir| !dir.is_dir()) {
+        return Err(format!(
+            "the folder of {} does not exist",
+            request.output.display()
+        ));
+    }
+    if let Some(missing) = files.iter().find(|f| !f.is_file()) {
+        return Err(format!("{} is not a file", missing.display()));
+    }
+    // the window of a picture starts from the default values and from the files it is given, never from the files of the person
+    let cfg = Config {
+        language: lang.code().to_owned(),
+        ..Config::default()
+    };
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_inner_size([request.size.0 as f32, request.size.1 as f32])
+        .with_title("EH3D-VISION-STUDIO");
+    if let Some(icon) = window_icon() {
+        viewport = viewport.with_icon(icon);
+    }
+    let options = eframe::NativeOptions {
+        viewport,
+        ..Default::default()
+    };
+    let outcome: ShotOutcome = Arc::new(Mutex::new(None));
+    let outcome_for_app = outcome.clone();
+    let theme = request.theme;
+    eframe::run_native(
+        "EH3D-VISION-STUDIO",
+        options,
+        Box::new(move |cc| {
+            install_fonts(&cc.egui_ctx);
+            apply_theme(&cc.egui_ctx, theme);
+            let mut app = App::new(cfg, None, &files);
+            app.shot = Some(ShotState {
+                request,
+                frame: 0,
+                outcome: outcome_for_app,
+            });
+            Ok(Box::new(app))
+        }),
+    )
+    .map_err(|e| e.to_string())?;
+    let taken = outcome.lock().map_err(|e| e.to_string())?.take();
+    match taken {
+        Some(result) => result,
+        None => Err("the window closed before the picture was taken".to_owned()),
+    }
 }

@@ -15,5 +15,6 @@ pub mod gui;
 pub mod lang;
 pub mod points;
 pub mod scale;
+pub mod shot;
 pub mod viewport;
 pub mod window;

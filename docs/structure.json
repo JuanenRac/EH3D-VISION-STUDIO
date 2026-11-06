@@ -158,6 +158,19 @@
           }
         },
         {
+          "name": "shot.rs",
+          "desc": {
+            "en": "the picture mode of the window (--shot): its arguments, read and checked without a screen",
+            "es": "el modo de captura de la ventana (--shot): sus argumentos, leídos y comprobados sin pantalla",
+            "de": "der Bildmodus des Fensters (--shot): seine Argumente, ohne Bildschirm gelesen und geprüft",
+            "fr": "le mode capture de la fenêtre (--shot) : ses arguments, lus et vérifiés sans écran",
+            "it": "la modalità immagine della finestra (--shot): i suoi argomenti, letti e verificati senza schermo",
+            "ja": "ウィンドウの画像モード（--shot）：画面なしで読み取り・検証される引数",
+            "zh": "窗口的截图模式（--shot）：无需屏幕即可读取和检查其参数",
+            "pt": "o modo de captura da janela (--shot): os seus argumentos, lidos e verificados sem ecrã"
+          }
+        },
+        {
           "name": "browse.rs",
           "desc": {
             "en": "the list of files of the window that opens a file",
@@ -253,6 +266,19 @@
             "ja": "コマンドラインのテスト：知らないオプションと語",
             "zh": "命令行测试：它不认识的选项和词",
             "pt": "testes da linha de comandos: opções e palavras que não conhece"
+          }
+        },
+        {
+          "name": "shot_sample.rs",
+          "desc": {
+            "en": "tests that the samples open in the window of a picture",
+            "es": "pruebas de que las muestras se abren en la ventana de una captura",
+            "de": "Tests, dass die Beispiele im Fenster eines Bildes öffnen",
+            "fr": "tests que les exemples s'ouvrent dans la fenêtre d'une capture",
+            "it": "test che gli esempi si aprano nella finestra di un'immagine",
+            "ja": "サンプルが画像用ウィンドウで開くことのテスト",
+            "zh": "示例能在截图窗口中打开的测试",
+            "pt": "testes de que os exemplos abrem na janela de uma captura"
           }
         },
         {
