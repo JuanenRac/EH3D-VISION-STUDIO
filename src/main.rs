@@ -6,12 +6,14 @@ mod cli_args;
 
 use cli_args::{finish, flag, num, switch};
 use eh3d_vision_studio::align::{accept, fit, isocam_args as isocam_lines};
+use eh3d_vision_studio::config::Config;
 use eh3d_vision_studio::fiducial::{find, Polarity, Settings};
 use eh3d_vision_studio::image::from_bytes;
+use eh3d_vision_studio::limit::{read_limited, read_text_limited};
 use eh3d_vision_studio::points::parse as parse_points;
 use eh3d_vision_studio::scale::Scale;
 use std::env;
-use std::fs;
+use std::path::Path;
 use std::process::ExitCode;
 
 const HELP: &str = "eh3d-vision: fiducials in a camera image
@@ -21,8 +23,17 @@ const HELP: &str = "eh3d-vision: fiducials in a camera image
 
 IMAGE is a PNG or a PGM file. The CSV files have one point per line: x,y in millimetres, in the same order in both files.";
 
+/// The largest file that is read, in MiB: `max_file_mib` of the configuration file (the default when the file is wrong, with a warning).
+fn max_mib() -> u64 {
+    let (config, problem) = Config::load();
+    if let Some(p) = problem {
+        eprintln!("warning: {p}; the default values are used");
+    }
+    config.max_file_mib
+}
+
 fn points(path: &str) -> Result<Vec<(f64, f64)>, String> {
-    let text = fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+    let text = read_text_limited(Path::new(path), max_mib())?;
     parse_points(&text, path)
 }
 
@@ -49,7 +60,7 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 .transpose()?;
             finish(&args, 1)?;
             let path = args.first().ok_or("find needs an image")?;
-            let img = from_bytes(&fs::read(path).map_err(|e| format!("{path}: {e}"))?)?;
+            let img = from_bytes(&read_limited(Path::new(path), max_mib())?)?;
             let found = find(&img, &s)?;
             let scale = match (known, found.first()) {
                 (Some(mm), Some(f)) => Some(Scale::from_known_diameter(f.diameter, mm)?),

@@ -17,7 +17,7 @@
 
 ---
 
-**Honesty check - what actually runs today:** a Rust library and a command line program (`eh3d-vision`) with 143 tests that run on a computer: finds round fiducial marks in an image, turns pixels into millimetres and works out the turn and the shift that put a board where its design says. It has a window (built with `--features gui`, the program `eh3d-vision-gui`) that opens a picture, shows the marks with their coordinates, sets the scale, fits the distortion of the lens from a grid, aligns with the design and exports the options of ISOCAM, but the window has not been looked at on a screen yet; it has not been tried on a machine and it has not been checked against a collection of real files.
+**Honesty check - what actually runs today:** a Rust library and a command line program (`eh3d-vision`) with 146 tests that run on a computer: finds round fiducial marks in an image, turns pixels into millimetres and works out the turn and the shift that put a board where its design says. It has a window (built with `--features gui`, the program `eh3d-vision-gui`) that opens a picture, shows the marks with their coordinates, sets the scale, fits the distortion of the lens from a grid, aligns with the design and exports the options of ISOCAM, but the window has not been looked at on a screen yet; it has not been tried on a machine and it has not been checked against a collection of real files.
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | Version | `0.0.3` |
 | Maturity | Scaffolding |
-| Tests | 143 |
+| Tests | 146 |
 | Stack | Rust |
 | On real hardware | Not tried: nothing here has run on a machine |
 
@@ -46,7 +46,7 @@ Each line is one part of this repository and the light says how far it is today.
 |---|---|---|
 | Core | 🟡 | finds round fiducial marks in an image, turns pixels into millimetres and works out the turn and the shift that put a board where its design says; tested on a computer with normal and damaged input, not with a collection of real files. |
 | Command line | 🟡 | `eh3d-vision` runs the same functions as the library and prints the result; every error comes back as a message and a non-zero exit code. |
-| Tests | 🟡 | 143 tests pass (`cargo test`), with normal cases, edge cases and damaged input. |
+| Tests | 🟡 | 146 tests pass (`cargo test`), with normal cases, edge cases and damaged input. |
 | Security | 🟡 | Plain safe Rust (`forbid(unsafe_code)`): nothing panics on the files it is given and a bad value is an error with its reason; no independent review. |
 | Window | 🟠 | Written (egui, `--features gui`, the program `eh3d-vision-gui`): open or drop a picture, see the marks with their coordinates, set the scale from a mark of known size, fit the distortion of the lens from a grid, align with a CSV design and export the options of ISOCAM; its logic is tested, but it has not been built or looked at on a screen yet. |
 | Real hardware | 🔴 | Not tried: nothing here has been run on a machine. |
@@ -77,6 +77,7 @@ How the parts of this repository fit together: who uses it, what it holds and wh
 * **Strict command line:** an option that is written wrong (`--powr`) or a word too many is an error that names it, not something to ignore; the program would otherwise make its output with the default values.
 * **Tests with damaged input:** the tests also feed empty files, garbage, huge numbers and cut files, and none of them may panic.
 * **No guessing:** a value that does not make sense is an error that says which value and why, never a result that only looks right.
+* **Size limit on the files it reads:** the command line reads a picture or a file of points only when it is not larger than `max_file_mib` of `vision.cfg` (64 MiB by default); a bigger file is refused with the code `file_too_large` and its name, a file that cannot be read with `file_unreadable` and a file of points that is not text with `file_not_text`, and nothing is loaded.
 * **No unsafe code:** `#![forbid(unsafe_code)]` in the library and the program.
 * **The marks for ISOCAM:** `align --isocam-args` prints each pair of marks as the option `--fiducial DESIGN_X,DESIGN_Y,MEASURED_X,MEASURED_Y` of `eh3d-isocam`.
 * **A window:** built with `--features gui` as the program `eh3d-vision-gui` (on Windows it opens without a console): it opens a PNG or PGM picture with zoom and pan, finds the marks with values that can be edited, draws them with their coordinates, sets the scale from a mark of known size, fits the distortion of the lens from a grid of marks, aligns with a design from a CSV file (the marks are paired with it by their places, so their order does not matter) and exports the options `--fiducial` of ISOCAM only when the alignment is accepted. It speaks the eight languages and needs no network.
@@ -122,7 +123,7 @@ To take a picture of the window without opening it by hand, run it with `--shot 
 
 ## 🧪 Testing
 
-The suite has 143 tests (`cargo test`, run on Windows and Linux in the CI). They check the normal cases, the edge cases and damaged input: empty files, garbage and cut files never panic. The CI also runs `cargo fmt --check`, `cargo clippy` with warnings as errors and `python -I tools/ci_validate.py`.
+The suite has 146 tests (`cargo test`, run on Windows and Linux in the CI). They check the normal cases, the edge cases and damaged input: empty files, garbage and cut files never panic. The CI also runs `cargo fmt --check`, `cargo clippy` with warnings as errors and `python -I tools/ci_validate.py`.
 
 ## 🏗️ Build & Release
 
@@ -153,6 +154,7 @@ EH3D-VISION-STUDIO/
 │   ├── fiducial.rs                              the round marks of a picture: threshold, spots and checks
 │   ├── grid.rs                                  the distortion of the lens from a grid of marks
 │   ├── points.rs                                the files of points of a design
+│   ├── limit.rs                                 reading a file with a size limit and a code for each refusal
 │   ├── scale.rs                                 pixels to millimetres and the radial distortion of the lens
 │   ├── shot.rs                                  the picture mode of the window (--shot): its arguments, read and checked without a screen
 │   ├── browse.rs                                the list of files of the window that opens a file
@@ -163,6 +165,7 @@ EH3D-VISION-STUDIO/
 ├── tests/
 │   ├── readme.rs                                tests that run what the README and the run scripts promise
 │   ├── strict.rs                                tests of the command line: options and words it does not know
+│   ├── read_limit.rs                            tests of the size limit of the files the command line reads
 │   ├── shot_sample.rs                           tests that the samples open in the window of a picture
 │   └── vision.rs                                tests of the library and the command line
 ├── examples/

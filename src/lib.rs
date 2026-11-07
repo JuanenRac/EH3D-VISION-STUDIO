@@ -13,6 +13,7 @@ pub mod grid;
 #[cfg(feature = "gui")]
 pub mod gui;
 pub mod lang;
+pub mod limit;
 pub mod points;
 pub mod scale;
 pub mod shot;

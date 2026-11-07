@@ -145,6 +145,19 @@
           }
         },
         {
+          "name": "limit.rs",
+          "desc": {
+            "en": "reading a file with a size limit and a code for each refusal",
+            "es": "lectura de un fichero con límite de tamaño y un código para cada rechazo",
+            "de": "Lesen einer Datei mit Größenlimit und einem Code für jede Ablehnung",
+            "fr": "lecture d'un fichier avec limite de taille et un code pour chaque refus",
+            "it": "lettura di un file con limite di dimensione e un codice per ogni rifiuto",
+            "ja": "サイズ上限付きのファイル読み込みと、拒否ごとのコード",
+            "zh": "带大小上限的文件读取，每种拒绝都有代码",
+            "pt": "leitura de um ficheiro com limite de tamanho e um código para cada recusa"
+          }
+        },
+        {
           "name": "scale.rs",
           "desc": {
             "en": "pixels to millimetres and the radial distortion of the lens",
@@ -266,6 +279,19 @@
             "ja": "コマンドラインのテスト：知らないオプションと語",
             "zh": "命令行测试：它不认识的选项和词",
             "pt": "testes da linha de comandos: opções e palavras que não conhece"
+          }
+        },
+        {
+          "name": "read_limit.rs",
+          "desc": {
+            "en": "tests of the size limit of the files the command line reads",
+            "es": "pruebas del límite de tamaño de los ficheros que lee la línea de comandos",
+            "de": "Tests des Größenlimits der Dateien, die die Kommandozeile liest",
+            "fr": "tests de la limite de taille des fichiers lus par la ligne de commande",
+            "it": "test del limite di dimensione dei file letti dalla riga di comando",
+            "ja": "コマンドラインが読むファイルのサイズ上限のテスト",
+            "zh": "命令行所读文件的大小上限测试",
+            "pt": "testes do limite de tamanho dos ficheiros que a linha de comandos lê"
           }
         },
         {

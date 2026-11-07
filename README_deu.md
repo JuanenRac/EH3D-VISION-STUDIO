@@ -17,7 +17,7 @@
 
 ---
 
-**Ehrlichkeitscheck - was heute wirklich läuft:** eine Rust-Bibliothek und ein Kommandozeilenprogramm (`eh3d-vision`) mit 143 Tests, die auf einem Computer laufen: findet runde Passmarken in einem Bild, wandelt Pixel in Millimeter um und berechnet Drehung und Verschiebung, die eine Platine dorthin bringen, wo ihr Entwurf sie haben will. Es hat ein Fenster (mit `--features gui` gebaut, das Programm `eh3d-vision-gui`), das ein Bild öffnet, die Marken mit ihren Koordinaten zeigt, den Maßstab setzt, die Verzeichnung des Objektivs aus einem Raster bestimmt, am Entwurf ausrichtet und die Optionen für ISOCAM exportiert, aber das Fenster wurde noch nicht auf einem Bildschirm angesehen; es wurde an keiner Maschine ausprobiert und nicht an einer Sammlung echter Dateien geprüft.
+**Ehrlichkeitscheck - was heute wirklich läuft:** eine Rust-Bibliothek und ein Kommandozeilenprogramm (`eh3d-vision`) mit 146 Tests, die auf einem Computer laufen: findet runde Passmarken in einem Bild, wandelt Pixel in Millimeter um und berechnet Drehung und Verschiebung, die eine Platine dorthin bringen, wo ihr Entwurf sie haben will. Es hat ein Fenster (mit `--features gui` gebaut, das Programm `eh3d-vision-gui`), das ein Bild öffnet, die Marken mit ihren Koordinaten zeigt, den Maßstab setzt, die Verzeichnung des Objektivs aus einem Raster bestimmt, am Entwurf ausrichtet und die Optionen für ISOCAM exportiert, aber das Fenster wurde noch nicht auf einem Bildschirm angesehen; es wurde an keiner Maschine ausprobiert und nicht an einer Sammlung echter Dateien geprüft.
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | Version | `0.0.3` |
 | Reifegrad | Gerüst |
-| Tests | 143 |
+| Tests | 146 |
 | Technologie-Stack | Rust |
 | Auf echter Hardware | Nicht erprobt: nichts davon lief an einer Maschine |
 
@@ -46,7 +46,7 @@ Jede Zeile ist ein Teil dieses Repositorys, und die Ampel sagt, wie weit er heut
 |---|---|---|
 | Kern | 🟡 | findet runde Passmarken in einem Bild, wandelt Pixel in Millimeter um und berechnet Drehung und Verschiebung, die eine Platine dorthin bringen, wo ihr Entwurf sie haben will; am Computer mit normalen und beschädigten Eingaben getestet, nicht mit einer Sammlung echter Dateien. |
 | Kommandozeile | 🟡 | `eh3d-vision` führt dieselben Funktionen wie die Bibliothek aus und gibt das Ergebnis aus; jeder Fehler kommt als Meldung mit einem Exit-Code ungleich null zurück. |
-| Tests | 🟡 | 143 Tests bestehen (`cargo test`), mit Normalfällen, Grenzfällen und beschädigten Eingaben. |
+| Tests | 🟡 | 146 Tests bestehen (`cargo test`), mit Normalfällen, Grenzfällen und beschädigten Eingaben. |
 | Sicherheit | 🟡 | Reines sicheres Rust (`forbid(unsafe_code)`): nichts gerät bei den übergebenen Dateien in Panik und ein schlechter Wert ist ein Fehler mit Begründung; keine unabhängige Prüfung. |
 | Fenster | 🟠 | Geschrieben (egui, `--features gui`, das Programm `eh3d-vision-gui`): ein Bild öffnen oder ablegen, die Marken mit ihren Koordinaten sehen, den Maßstab mit einer Marke bekannter Größe setzen, die Verzeichnung des Objektivs aus einem Raster bestimmen, an einem CSV-Entwurf ausrichten und die Optionen für ISOCAM exportieren; die Logik ist getestet, aber das Fenster wurde noch nicht gebaut oder auf einem Bildschirm angesehen. |
 | Echte Hardware | 🔴 | Nicht erprobt: nichts davon wurde an einer Maschine ausgeführt. |
@@ -77,6 +77,7 @@ Wie die Teile dieses Repositorys zusammenpassen: wer es nutzt, was es enthält u
 * **Strenge Kommandozeile:** Eine falsch geschriebene Option (`--powr`) oder ein überzähliges Wort ist ein Fehler, der sie nennt, und wird nicht ignoriert; sonst würde das Programm seine Ausgabe mit den Standardwerten erzeugen.
 * **Tests mit beschädigten Eingaben:** Die Tests füttern auch leere Dateien, Datenmüll, riesige Zahlen und abgeschnittene Dateien; keiner darf in Panik geraten.
 * **Kein Raten:** Ein unsinniger Wert ist ein Fehler, der sagt welcher und warum, nie ein Ergebnis, das nur richtig aussieht.
+* **Größenlimit für gelesene Dateien:** Die Kommandozeile liest ein Bild oder eine Punktdatei nur, wenn sie nicht größer ist als `max_file_mib` in `vision.cfg` (standardmäßig 64 MiB); eine größere Datei wird mit dem Code `file_too_large` und ihrem Namen abgelehnt, eine nicht lesbare mit `file_unreadable` und eine Punktdatei, die kein Text ist, mit `file_not_text`; es wird nichts geladen.
 * **Kein unsafe-Code:** `#![forbid(unsafe_code)]` in Bibliothek und Programm.
 * **Die Marken für ISOCAM:** `align --isocam-args` gibt jedes Markenpaar als Option `--fiducial ENTWURF_X,ENTWURF_Y,GEMESSEN_X,GEMESSEN_Y` von `eh3d-isocam` aus.
 * **Ein Fenster:** mit `--features gui` gebaut als Programm `eh3d-vision-gui` (unter Windows öffnet es sich ohne Konsole): es öffnet ein PNG- oder PGM-Bild mit Zoom und Verschieben, findet die Marken mit editierbaren Werten, zeichnet sie mit ihren Koordinaten, setzt den Maßstab mit einer Marke bekannter Größe, bestimmt die Verzeichnung des Objektivs aus einem Raster von Marken, richtet an einem Entwurf aus einer CSV-Datei aus (die Marken werden ihm nach ihrer Lage zugeordnet, die Reihenfolge ist also egal) und exportiert die Optionen `--fiducial` für ISOCAM nur, wenn die Ausrichtung angenommen wird. Es spricht die acht Sprachen und braucht kein Netzwerk.
@@ -122,7 +123,7 @@ Um ein Bild des Fensters aufzunehmen, ohne es von Hand zu öffnen, starten Sie e
 
 ## 🧪 Tests
 
-Die Suite hat 143 Tests (`cargo test`, in der CI unter Windows und Linux). Sie prüfen Normalfälle, Grenzfälle und beschädigte Eingaben: leere Dateien, Datenmüll und abgeschnittene Dateien lösen nie eine Panik aus. Die CI führt außerdem `cargo fmt --check`, `cargo clippy` mit Warnungen als Fehlern und `python -I tools/ci_validate.py` aus.
+Die Suite hat 146 Tests (`cargo test`, in der CI unter Windows und Linux). Sie prüfen Normalfälle, Grenzfälle und beschädigte Eingaben: leere Dateien, Datenmüll und abgeschnittene Dateien lösen nie eine Panik aus. Die CI führt außerdem `cargo fmt --check`, `cargo clippy` mit Warnungen als Fehlern und `python -I tools/ci_validate.py` aus.
 
 ## 🏗️ Build und Veröffentlichung
 
@@ -153,6 +154,7 @@ EH3D-VISION-STUDIO/
 │   ├── fiducial.rs                              die runden Marken eines Bildes: Schwellwert, Flecken und Prüfungen
 │   ├── grid.rs                                  die Verzeichnung des Objektivs aus einem Raster von Marken
 │   ├── points.rs                                die Punktdateien eines Entwurfs
+│   ├── limit.rs                                 Lesen einer Datei mit Größenlimit und einem Code für jede Ablehnung
 │   ├── scale.rs                                 von Pixeln zu Millimetern und die radiale Verzeichnung des Objektivs
 │   ├── shot.rs                                  der Bildmodus des Fensters (--shot): seine Argumente, ohne Bildschirm gelesen und geprüft
 │   ├── browse.rs                                die Dateiliste des Fensters zum Öffnen einer Datei
@@ -163,6 +165,7 @@ EH3D-VISION-STUDIO/
 ├── tests/
 │   ├── readme.rs                                Tests, die ausführen, was README und run-Skripte versprechen
 │   ├── strict.rs                                Tests der Kommandozeile: Optionen und Wörter, die sie nicht kennt
+│   ├── read_limit.rs                            Tests des Größenlimits der Dateien, die die Kommandozeile liest
 │   ├── shot_sample.rs                           Tests, dass die Beispiele im Fenster eines Bildes öffnen
 │   └── vision.rs                                Tests von Bibliothek und Kommandozeile
 ├── examples/

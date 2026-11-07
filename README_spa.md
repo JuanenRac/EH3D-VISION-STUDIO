@@ -17,7 +17,7 @@
 
 ---
 
-**Comprobación de honestidad - lo que funciona hoy:** una biblioteca Rust y un programa de línea de comandos (`eh3d-vision`) con 143 pruebas que se ejecutan en un ordenador: encuentra marcas fiduciales redondas en una imagen, convierte píxeles en milímetros y calcula el giro y el desplazamiento que colocan una placa donde dice su diseño. Tiene una ventana (se compila con `--features gui`, el programa `eh3d-vision-gui`) que abre una imagen, muestra las marcas con sus coordenadas, fija la escala, ajusta la distorsión del objetivo con una rejilla, alinea con el diseño y exporta las opciones de ISOCAM, pero todavía no se ha visto en una pantalla; no se ha probado en una máquina y no se ha comprobado con una colección de ficheros reales.
+**Comprobación de honestidad - lo que funciona hoy:** una biblioteca Rust y un programa de línea de comandos (`eh3d-vision`) con 146 pruebas que se ejecutan en un ordenador: encuentra marcas fiduciales redondas en una imagen, convierte píxeles en milímetros y calcula el giro y el desplazamiento que colocan una placa donde dice su diseño. Tiene una ventana (se compila con `--features gui`, el programa `eh3d-vision-gui`) que abre una imagen, muestra las marcas con sus coordenadas, fija la escala, ajusta la distorsión del objetivo con una rejilla, alinea con el diseño y exporta las opciones de ISOCAM, pero todavía no se ha visto en una pantalla; no se ha probado en una máquina y no se ha comprobado con una colección de ficheros reales.
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | Versión | `0.0.3` |
 | Madurez | Andamiaje |
-| Pruebas | 143 |
+| Pruebas | 146 |
 | Pila tecnológica | Rust |
 | En hardware real | No probado: nada de esto se ha ejecutado en una máquina |
 
@@ -46,7 +46,7 @@ Cada línea es una parte de este repositorio y la luz dice hasta dónde llega ho
 |---|---|---|
 | Núcleo | 🟡 | encuentra marcas fiduciales redondas en una imagen, convierte píxeles en milímetros y calcula el giro y el desplazamiento que colocan una placa donde dice su diseño; probado en un ordenador con entradas normales y dañadas, no con una colección de ficheros reales. |
 | Línea de comandos | 🟡 | `eh3d-vision` ejecuta las mismas funciones que la biblioteca e imprime el resultado; cada error vuelve como mensaje y un código de salida distinto de cero. |
-| Pruebas | 🟡 | 143 pruebas pasan (`cargo test`), con casos normales, casos límite y entradas dañadas. |
+| Pruebas | 🟡 | 146 pruebas pasan (`cargo test`), con casos normales, casos límite y entradas dañadas. |
 | Seguridad | 🟡 | Rust seguro y simple (`forbid(unsafe_code)`): nada entra en pánico con los ficheros recibidos y un valor malo es un error con su motivo; sin revisión independiente. |
 | Ventana | 🟠 | Escrita (egui, `--features gui`, el programa `eh3d-vision-gui`): abrir o soltar una imagen, ver las marcas con sus coordenadas, fijar la escala con una marca de tamaño conocido, ajustar la distorsión del objetivo con una rejilla, alinear con un diseño CSV y exportar las opciones de ISOCAM; su lógica está probada, pero todavía no se ha compilado ni visto en una pantalla. |
 | Hardware real | 🔴 | No probado: nada de esto se ha ejecutado en una máquina. |
@@ -77,6 +77,7 @@ Cómo encajan las partes de este repositorio: quién lo usa, qué contiene y de 
 * **Línea de comandos estricta:** una opción mal escrita (`--powr`) o una palabra de más es un error que la nombra, no algo que se ignora; si no, el programa haría su salida con los valores por defecto.
 * **Pruebas con entradas dañadas:** las pruebas también dan ficheros vacíos, basura, números enormes y ficheros cortados, y ninguna puede provocar un pánico.
 * **Sin adivinar:** un valor que no tiene sentido es un error que dice cuál y por qué, nunca un resultado que solo lo parece.
+* **Límite de tamaño de los ficheros que lee:** la línea de comandos lee una imagen o un fichero de puntos solo si no pesa más que `max_file_mib` de `vision.cfg` (64 MiB por defecto); un fichero mayor se rechaza con el código `file_too_large` y su nombre, uno que no se puede leer con `file_unreadable` y un fichero de puntos que no es texto con `file_not_text`, y no se carga nada.
 * **Sin código unsafe:** `#![forbid(unsafe_code)]` en la biblioteca y el programa.
 * **Las marcas para ISOCAM:** `align --isocam-args` escribe cada par de marcas como la opción `--fiducial X_DISEÑO,Y_DISEÑO,X_MEDIDA,Y_MEDIDA` de `eh3d-isocam`.
 * **Una ventana:** se compila con `--features gui` como el programa `eh3d-vision-gui` (en Windows se abre sin consola): abre una imagen PNG o PGM con zoom y desplazamiento, encuentra las marcas con valores que se pueden editar, las dibuja con sus coordenadas, fija la escala con una marca de tamaño conocido, ajusta la distorsión del objetivo con una rejilla de marcas, alinea con un diseño de un fichero CSV (las marcas se emparejan con él por su posición, así que el orden no importa) y exporta las opciones `--fiducial` de ISOCAM solo cuando la alineación se acepta. Habla los ocho idiomas y no necesita red.
@@ -122,7 +123,7 @@ Para sacar una captura de la ventana sin abrirla a mano, ejecútelo con `--shot 
 
 ## 🧪 Pruebas
 
-El conjunto tiene 143 pruebas (`cargo test`, ejecutadas en Windows y Linux en el CI). Comprueban los casos normales, los casos límite y las entradas dañadas: ficheros vacíos, basura y ficheros cortados nunca provocan un pánico. El CI ejecuta además `cargo fmt --check`, `cargo clippy` con las advertencias como errores y `python -I tools/ci_validate.py`.
+El conjunto tiene 146 pruebas (`cargo test`, ejecutadas en Windows y Linux en el CI). Comprueban los casos normales, los casos límite y las entradas dañadas: ficheros vacíos, basura y ficheros cortados nunca provocan un pánico. El CI ejecuta además `cargo fmt --check`, `cargo clippy` con las advertencias como errores y `python -I tools/ci_validate.py`.
 
 ## 🏗️ Compilación y publicación
 
@@ -153,6 +154,7 @@ EH3D-VISION-STUDIO/
 │   ├── fiducial.rs                              las marcas redondas de una imagen: umbral, manchas y comprobaciones
 │   ├── grid.rs                                  la distorsión del objetivo a partir de una rejilla de marcas
 │   ├── points.rs                                los ficheros de puntos de un diseño
+│   ├── limit.rs                                 lectura de un fichero con límite de tamaño y un código para cada rechazo
 │   ├── scale.rs                                 de píxeles a milímetros y la distorsión radial del objetivo
 │   ├── shot.rs                                  el modo de captura de la ventana (--shot): sus argumentos, leídos y comprobados sin pantalla
 │   ├── browse.rs                                la lista de ficheros de la ventana que abre un fichero
@@ -163,6 +165,7 @@ EH3D-VISION-STUDIO/
 ├── tests/
 │   ├── readme.rs                                pruebas que ejecutan lo que prometen el README y los scripts run
 │   ├── strict.rs                                pruebas de la línea de comandos: opciones y palabras que no conoce
+│   ├── read_limit.rs                            pruebas del límite de tamaño de los ficheros que lee la línea de comandos
 │   ├── shot_sample.rs                           pruebas de que las muestras se abren en la ventana de una captura
 │   └── vision.rs                                pruebas de la biblioteca y la línea de comandos
 ├── examples/
