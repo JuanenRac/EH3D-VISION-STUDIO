@@ -157,6 +157,17 @@ pub fn judge(t: &Transform, max_rms_mm: f64, max_stretch: f64) -> Verdict {
     }
 }
 
+/// A design point of an alignment against the mark the camera found for it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Residual {
+    /// Where the design puts the point in the picture, in pixels.
+    pub design: (f64, f64),
+    /// Where the camera found its mark, in pixels.
+    pub found: (f64, f64),
+    /// The distance between the two, in millimetres.
+    pub mm: f64,
+}
+
 /// The text of a value of the configuration.
 fn field_text(cfg: &Config, key: &str) -> String {
     match key {
@@ -656,6 +667,52 @@ impl Window {
             .collect()
     }
 
+    /// For each design point of an alignment, where the design puts it and where the camera found its mark, both in pixels of the picture, and how far apart they are in
+    /// millimetres: what the window draws as the lines of the alignment. None without a picture, a scale and an alignment.
+    pub fn residuals(&self) -> Vec<Residual> {
+        let (Some(a), Some(s), Some((centre, _))) = (&self.alignment, self.scale, self.picture())
+        else {
+            return Vec::new();
+        };
+        let to_px = |m: (f64, f64)| (centre.0 + m.0 / s.mm_per_px, centre.1 - m.1 / s.mm_per_px);
+        self.design
+            .iter()
+            .zip(&a.measured)
+            .map(|(d, found)| {
+                let placed = a.transform.apply(*d);
+                Residual {
+                    design: to_px(placed),
+                    found: to_px(*found),
+                    mm: (placed.0 - found.0).hypot(placed.1 - found.1),
+                }
+            })
+            .collect()
+    }
+
+    /// What a picture of the window asks for besides opening the files: the mark number `mark` (from 1) sets the scale, and `align` makes the alignment with the design.
+    /// The answer for what cannot be done is the reason, so that a picture is never taken of a state that was not asked for.
+    pub fn prepare_shot(&mut self, mark: Option<usize>, align: bool) -> Result<(), String> {
+        if let Some(n) = mark {
+            if n == 0 || n > self.marks.len() {
+                return Err(format!(
+                    "--mark {n}: the picture has {} marks, numbered from 1",
+                    self.marks.len()
+                ));
+            }
+            self.selected = Some(n - 1);
+            if !self.calibrate_selected() {
+                return Err(format!("--mark {n}: the scale could not be set from it"));
+            }
+        }
+        if align && !self.align() {
+            return Err(
+                "--align needs a picture, a scale (--mark N) and a design file with as many points as marks"
+                    .to_owned(),
+            );
+        }
+        Ok(())
+    }
+
     /// Fits the whole picture in a view of `w` x `h` pixels.
     pub fn fit_view(&mut self, w: f64, h: f64) {
         if let Some(img) = &self.image {
@@ -917,6 +974,84 @@ mod tests {
         assert!(lines.iter().all(|(_, problem)| !problem));
         assert!(lines[1].0.starts_with("Turn: 1.5"));
         assert_eq!(w.design_px().len(), 4);
+    }
+
+    /// A window with a picture of 200 x 100 pixels at half a millimetre a pixel, and an alignment worked out by hand.
+    fn hand_made_alignment() -> Window {
+        let mut w = window();
+        w.image = Some(Loaded {
+            name: "a.pgm".into(),
+            path: PathBuf::from("a.pgm"),
+            gray: Gray::blank(200, 100, 220).unwrap(),
+        });
+        w.scale = Some(Scale { mm_per_px: 0.5 });
+        w.design = vec![(0.0, 0.0), (10.0, 0.0)];
+        w.alignment = Some(Alignment {
+            transform: Transform {
+                dx: 1.0,
+                dy: 0.0,
+                theta_deg: 0.0,
+                scale: 1.0,
+                rms_mm: 0.0,
+            },
+            measured: vec![(1.0, 0.0), (11.0, 0.5)],
+            verdict: Verdict::Accepted,
+        });
+        w
+    }
+
+    #[test]
+    fn the_lines_of_the_alignment_join_the_design_to_the_marks_found() {
+        let w = hand_made_alignment();
+        // the centre of the picture is (100, 50); the design puts the points at 1 mm and 11 mm, which are 2 and 22 pixels to the right of it
+        let r = w.residuals();
+        assert_eq!(r.len(), 2);
+        assert_eq!(r[0].design, (102.0, 50.0));
+        assert_eq!(r[0].found, (102.0, 50.0));
+        assert_eq!(r[0].mm, 0.0);
+        assert_eq!(r[1].design, (122.0, 50.0));
+        // the second mark was found half a millimetre up, which is one pixel up in the picture
+        assert_eq!(r[1].found, (122.0, 49.0));
+        assert_eq!(r[1].mm, 0.5);
+    }
+
+    #[test]
+    fn there_are_no_lines_without_a_scale_or_an_alignment() {
+        let mut w = hand_made_alignment();
+        w.scale = None;
+        assert!(w.residuals().is_empty());
+        let mut w = hand_made_alignment();
+        w.alignment = None;
+        assert!(w.residuals().is_empty());
+        assert!(window().residuals().is_empty());
+    }
+
+    #[test]
+    fn a_picture_can_ask_for_the_scale_and_the_alignment_and_is_told_what_cannot_be_done() {
+        let s = Scratch::new("shot-steps");
+        let mut w = calibrated(&s);
+        // nothing asked, nothing done
+        assert!(w.prepare_shot(None, false).is_ok());
+        let e = w.prepare_shot(Some(0), false).unwrap_err();
+        assert!(e.contains("numbered from 1"), "{e}");
+        let e = w.prepare_shot(Some(5), false).unwrap_err();
+        assert!(e.contains("the picture has 4 marks"), "{e}");
+        // there is no design yet
+        let e = w.prepare_shot(Some(2), true).unwrap_err();
+        assert!(e.contains("--align needs"), "{e}");
+        assert_eq!(w.selected, Some(1));
+        let file = s.path("design.csv");
+        let text: String = w
+            .marks_mm()
+            .unwrap()
+            .iter()
+            .map(|m| format!("{},{}\n", m.0, m.1))
+            .collect();
+        fs::write(&file, text).unwrap();
+        assert!(w.load_design(&file));
+        assert!(w.prepare_shot(Some(1), true).is_ok());
+        assert!(w.alignment.is_some());
+        assert_eq!(w.residuals().len(), 4);
     }
 
     #[test]

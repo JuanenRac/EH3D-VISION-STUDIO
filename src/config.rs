@@ -11,7 +11,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 14] = [
+pub const KEYS: [&str; 15] = [
     "language",
     "polarity",
     "threshold",
@@ -26,6 +26,7 @@ pub const KEYS: [&str; 14] = [
     "max_rms",
     "max_stretch",
     "max_file_mib",
+    "show_residuals",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -51,6 +52,8 @@ pub struct Config {
     pub max_stretch: f64,
     /// The largest picture or file of points that is read, in MiB.
     pub max_file_mib: u64,
+    /// Whether the window draws, for each mark of the alignment, a line from the place the design puts it to the mark the camera found, with the distance in millimetres.
+    pub show_residuals: bool,
 }
 
 impl Default for Config {
@@ -71,6 +74,7 @@ impl Default for Config {
             max_rms: 0.1,
             max_stretch: 0.01,
             max_file_mib: 64,
+            show_residuals: true,
         }
     }
 }
@@ -151,6 +155,13 @@ impl Config {
                 self.max_file_mib = value
                     .parse::<u64>()
                     .map_err(|_| format!("max_file_mib '{value}' is not a whole number"))?
+            }
+            "show_residuals" => {
+                self.show_residuals = match value {
+                    "yes" | "true" | "on" => true,
+                    "no" | "false" | "off" => false,
+                    _ => return Err(format!("show_residuals '{value}' is not yes or no")),
+                }
             }
             other => return Err(format!("{other}: unknown key")),
         }
@@ -293,6 +304,10 @@ mod tests {
             ),
             ("language = xx", "line 1: language 'xx'"),
             (
+                "show_residuals = maybe",
+                "line 1: show_residuals 'maybe' is not yes or no",
+            ),
+            (
                 "grid_columns = 2.5",
                 "line 1: grid_columns '2.5' is not a whole number",
             ),
@@ -319,6 +334,13 @@ mod tests {
         ] {
             assert!(Config::parse(text).is_err(), "{text:?} was accepted");
         }
+    }
+
+    #[test]
+    fn the_lines_of_the_alignment_can_be_switched_off() {
+        assert!(Config::default().show_residuals);
+        assert!(!Config::parse("show_residuals = no").unwrap().show_residuals);
+        assert!(Config::parse("show_residuals = on").unwrap().show_residuals);
     }
 
     #[test]

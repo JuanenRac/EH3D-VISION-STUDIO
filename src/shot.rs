@@ -62,6 +62,10 @@ pub struct ShotRequest {
     pub theme: ShotTheme,
     /// The frames drawn before the picture is taken.
     pub wait: u32,
+    /// The mark (numbered from 1) whose size sets the scale before the picture is taken; none leaves the scale unset.
+    pub mark: Option<usize>,
+    /// Whether the design is aligned with the marks before the picture is taken, so that the lines of the alignment are in it.
+    pub align: bool,
 }
 
 /// What the window was asked for on the command line.
@@ -96,9 +100,11 @@ struct PictureOptions {
     theme: Option<ShotTheme>,
     wait: Option<u32>,
     replace: bool,
+    mark: Option<usize>,
+    align: bool,
 }
 
-/// Reads the arguments of the window (after an optional leading `gui`): `--shot FILE.png`, `--size WxH`, `--theme`, `--wait N`, `--replace`, `--lang CODE`, `--open FILE` and bare
+/// Reads the arguments of the window (after an optional leading `gui`): `--shot FILE.png`, `--size WxH`, `--theme`, `--wait N`, `--replace`, `--mark N`, `--align`, `--lang CODE`, `--open FILE` and bare
 /// file names, of which at most `max_files` are accepted. The answer for a mistake is the reason.
 pub fn parse_window_args(args: &[String], max_files: usize) -> Result<WindowArgs, String> {
     let args = if args.first().is_some_and(|a| a == "gui") {
@@ -144,6 +150,16 @@ pub fn parse_window_args(args: &[String], max_files: usize) -> Result<WindowArgs
                 parsed.lang = Some(Lang::from_code(tag).ok_or("unknown language code")?);
             }
             "--replace" => picture.replace = true,
+            "--mark" => {
+                let text = iter.next().ok_or("--mark needs the number of a mark")?;
+                picture.mark = Some(
+                    text.parse::<usize>()
+                        .ok()
+                        .filter(|n| *n >= 1)
+                        .ok_or("--mark is the number of a mark, from 1")?,
+                );
+            }
+            "--align" => picture.align = true,
             "--open" => {
                 let path = iter.next().ok_or("--open needs a file")?;
                 add_file(&mut parsed, path, max_files)?;
@@ -159,14 +175,20 @@ pub fn parse_window_args(args: &[String], max_files: usize) -> Result<WindowArgs
             size: picture.size.unwrap_or(DEFAULT_SIZE),
             theme: picture.theme.unwrap_or_default(),
             wait: picture.wait.unwrap_or(DEFAULT_WAIT),
+            mark: picture.mark,
+            align: picture.align,
         }),
         None => {
             if picture.size.is_some()
                 || picture.theme.is_some()
                 || picture.wait.is_some()
                 || picture.replace
+                || picture.mark.is_some()
+                || picture.align
             {
-                return Err("--size, --theme, --wait and --replace need --shot".to_owned());
+                return Err(
+                    "--size, --theme, --wait, --replace, --mark and --align need --shot".to_owned(),
+                );
             }
             None
         }
@@ -265,6 +287,8 @@ mod tests {
                 size: DEFAULT_SIZE,
                 theme: ShotTheme::Forge,
                 wait: DEFAULT_WAIT,
+                mark: None,
+                align: false,
             })
         );
         let upper = parse_window_args(&args(&["--shot", "B.PNG", "marks.pgm"]), 1).unwrap();
@@ -284,6 +308,9 @@ mod tests {
                 "--wait",
                 "12",
                 "--replace",
+                "--mark",
+                "2",
+                "--align",
                 "--open",
                 "marks.pgm",
                 "--lang",
@@ -302,6 +329,8 @@ mod tests {
                 size: (1280, 720),
                 theme: ShotTheme::Light,
                 wait: 12,
+                mark: Some(2),
+                align: true,
             })
         );
     }
@@ -318,6 +347,14 @@ mod tests {
     fn a_mistake_gives_its_reason() {
         for (list, reason) in [
             (vec!["--shot"], "needs a file to write"),
+            (
+                vec!["--shot", "a.png", "--mark"],
+                "needs the number of a mark",
+            ),
+            (vec!["--shot", "a.png", "--mark", "0"], "from 1"),
+            (vec!["--shot", "a.png", "--mark", "x"], "from 1"),
+            (vec!["--mark", "1"], "need --shot"),
+            (vec!["--align"], "need --shot"),
             (vec!["--shot", "a.jpg"], "must end in .png"),
             (vec!["--shot", "a.png", "--size"], "needs WIDTHxHEIGHT"),
             (

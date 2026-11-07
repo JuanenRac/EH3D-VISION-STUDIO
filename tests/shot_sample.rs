@@ -25,3 +25,19 @@ fn the_sample_picture_and_design_open_with_the_default_values() {
     assert!(!w.design.is_empty());
     assert!(matches!(w.status, Status::DesignLoaded { .. }));
 }
+
+#[test]
+fn the_picture_of_the_pair_shows_the_lines_of_the_alignment() {
+    let mut w = Window::new(Lang::En, Config::default(), None);
+    assert!(w.open_image(&sample("marks.pgm")));
+    assert_eq!(w.marks.len(), 2);
+    assert!(w.load_design(&sample("design_pair.csv")));
+    assert_eq!(w.design.len(), 2);
+    // the lines need a scale and an alignment: the picture asks for both
+    assert!(w.residuals().is_empty());
+    w.prepare_shot(Some(1), true).expect("the pair is aligned");
+    assert!(w.alignment.is_some());
+    let lines = w.residuals();
+    assert_eq!(lines.len(), 2);
+    assert!(lines.iter().all(|r| r.mm.is_finite() && r.mm < 1.0));
+}

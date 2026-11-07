@@ -315,6 +315,19 @@
           }
         },
         {
+          "name": "design_pair.csv",
+          "desc": {
+            "en": "a design for the two marks of marks.pgm",
+            "es": "un diseño para las dos marcas de marks.pgm",
+            "de": "ein Entwurf für die zwei Marken von marks.pgm",
+            "fr": "un dessin pour les deux marques de marks.pgm",
+            "it": "un disegno per i due segni di marks.pgm",
+            "ja": "marks.pgm の 2 つのマーク用の設計",
+            "zh": "marks.pgm 中两个标记的设计",
+            "pt": "um desenho para as duas marcas de marks.pgm"
+          }
+        },
+        {
           "name": "marks.pgm",
           "desc": {
             "en": "a sample to try the program with",

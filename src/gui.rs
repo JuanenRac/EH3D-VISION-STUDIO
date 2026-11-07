@@ -490,6 +490,27 @@ impl App {
                 colour,
             );
         }
+        if self.win.cfg.show_residuals {
+            for r in self.win.residuals() {
+                let (from, to) = (
+                    self.screen(rect, r.design.0, r.design.1),
+                    self.screen(rect, r.found.0, r.found.1),
+                );
+                let colour = if r.mm > self.win.cfg.max_rms {
+                    DANGER
+                } else {
+                    OK
+                };
+                painter.line_segment([from, to], Stroke::new(2.0, colour));
+                painter.text(
+                    to + egui::vec2(8.0, 8.0),
+                    egui::Align2::LEFT_TOP,
+                    format!("{:.3} mm", r.mm),
+                    egui::FontId::proportional(12.0),
+                    colour,
+                );
+            }
+        }
         for d in self.win.design_px() {
             let at = self.screen(rect, d.0, d.1);
             let arm = 7.0;
@@ -881,6 +902,7 @@ pub fn run_shot(files: Vec<PathBuf>, lang: Lang, request: ShotRequest) -> Result
             install_fonts(&cc.egui_ctx);
             apply_theme(&cc.egui_ctx, theme);
             let mut app = App::new(cfg, None, &files);
+            app.win.prepare_shot(request.mark, request.align)?;
             app.shot = Some(ShotState {
                 request,
                 frame: 0,
