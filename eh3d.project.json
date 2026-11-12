@@ -14,6 +14,7 @@
   "maturity": "functional",
   "evidence": "host-test",
   "hardware_bound": false,
+  "min_common": "0.2.0",
   "family": "CNC Workflow Tools",
   "parent": null,
   "depends_on": [
