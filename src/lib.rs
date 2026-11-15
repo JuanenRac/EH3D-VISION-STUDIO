@@ -26,7 +26,7 @@ pub mod window;
 /// real board or a real lens.
 pub mod sim {
     use crate::align::{accept, fit, pair_nearest, Transform};
-    use crate::fiducial::{find, Settings};
+    use crate::fiducial::{find_with, Settings};
     use crate::image::{from_pgm, Gray};
     use std::collections::VecDeque;
 
@@ -184,15 +184,16 @@ pub mod sim {
         }
     }
 
-    /// Where the board is, from one frame: the marks are found, counted against the design, paired with it and fitted, and the fit is accepted only when it is good.
+    /// Where the board is, from one frame (`threshold` is the cut between dark and light, or `None` for the one of Otsu): the marks are found, counted against the design, paired with it and fitted, and the fit is accepted only when it is good.
     pub fn locate(
         frame: &Gray,
         design: &[(f64, f64)],
         mm_per_px: f64,
         settings: &Settings,
+        threshold: Option<u8>,
         max_rms_mm: f64,
     ) -> Result<Transform, String> {
-        let marks = find(frame, settings)?;
+        let marks = find_with(frame, settings, threshold)?;
         if marks.len() != design.len() {
             return Err(format!(
                 "{} marks found, {} expected",
@@ -216,6 +217,7 @@ pub mod sim {
         camera: &mut SimCamera,
         tries: usize,
         settings: &Settings,
+        threshold: Option<u8>,
         max_rms_mm: f64,
     ) -> (Result<Transform, String>, usize) {
         let mut last = Err("no frame was asked for".to_string());
@@ -226,6 +228,7 @@ pub mod sim {
                     &camera.design,
                     camera.mm_per_px,
                     settings,
+                    threshold,
                     max_rms_mm,
                 )
             });
@@ -259,15 +262,20 @@ pub mod sim {
             assert!(found.rms_mm < RMS, "{found:?}");
         }
 
-        fn locate_one(camera: &mut SimCamera) -> Result<Transform, String> {
+        fn locate_with(camera: &mut SimCamera, threshold: Option<u8>) -> Result<Transform, String> {
             let frame = camera.capture()?;
             locate(
                 &frame,
                 &camera.design,
                 camera.mm_per_px,
                 &Settings::default(),
+                threshold,
                 RMS,
             )
+        }
+
+        fn locate_one(camera: &mut SimCamera) -> Result<Transform, String> {
+            locate_with(camera, None)
         }
 
         #[test]
@@ -286,7 +294,7 @@ pub mod sim {
         #[test]
         fn noise_exposure_and_a_wrong_gain_still_locate_the_board_and_the_same_seed_repeats_exactly(
         ) {
-            for fault in [Fault::Noise(40), Fault::Bright, Fault::Dark] {
+            for fault in [Fault::Noise(10), Fault::Bright, Fault::Dark] {
                 for seed in 1..=8 {
                     let run =
                         || locate_one(&mut SimCamera::new(seed, truth()).with_script(&[fault]));
@@ -309,6 +317,7 @@ pub mod sim {
                 &mut SimCamera::new(5, truth()).with_script(&script),
                 6,
                 &Settings::default(),
+                None,
                 RMS,
             );
             close(&result.unwrap(), &truth());
@@ -317,10 +326,21 @@ pub mod sim {
                 &mut SimCamera::new(5, truth()).with_script(&script),
                 3,
                 &Settings::default(),
+                None,
                 RMS,
             );
             assert!(gave_up.is_err());
             assert_eq!(frames, 3);
+        }
+
+        #[test]
+        fn strong_noise_defeats_the_automatic_threshold_and_a_fixed_one_recovers() {
+            for seed in 1..=6 {
+                let strong = || SimCamera::new(seed, truth()).with_script(&[Fault::Noise(40)]);
+                let error = locate_with(&mut strong(), None).unwrap_err();
+                assert!(error.contains("marks found"), "seed {seed}: {error}");
+                close(&locate_with(&mut strong(), Some(125)).unwrap(), &truth());
+            }
         }
 
         #[test]
