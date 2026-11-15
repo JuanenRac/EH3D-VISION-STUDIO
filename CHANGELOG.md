@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **A simulated camera over a board (`sim`):** a host twin that draws the fiducial marks of a design where a known turn and shift put them, with the faults of a camera on purpose (noise, a frame too bright or too dark, a dead sensor, a flat frame, dust the size of a mark, a frame that never arrives, a picture file cut before its end), the glue that finds the marks, counts them against the design, pairs them and fits the transform (refusing a count that does not match and a poor fit), and a retry that asks for another frame. Six new tests (152 in all) check that the turn and the shift that drew the frame come back, that the same seed repeats exactly, that bad frames are refused and the next good one recovers, and that a picture file cut at any place is refused. It has only run on drawn marks: no camera, lens or board was used.
+
 ## [0.0.4] - Picture mode with scale and alignment and size-limited file reads
 
 - **The shared validation tools are updated:** the validator also runs the workflow and lessons checks of the suite with their latest rules, including a check to run before every push.

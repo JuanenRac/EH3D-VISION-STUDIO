@@ -17,7 +17,7 @@
 
 ---
 
-**Ehrlichkeitscheck - was heute wirklich läuft:** eine Rust-Bibliothek und ein Kommandozeilenprogramm (`eh3d-vision`) mit 146 Tests, die auf einem Computer laufen: findet runde Passmarken in einem Bild, wandelt Pixel in Millimeter um und berechnet Drehung und Verschiebung, die eine Platine dorthin bringen, wo ihr Entwurf sie haben will. Es hat ein Fenster (mit `--features gui` gebaut, das Programm `eh3d-vision-gui`), das ein Bild öffnet, die Marken mit ihren Koordinaten zeigt, den Maßstab setzt, die Verzeichnung des Objektivs aus einem Raster bestimmt, am Entwurf ausrichtet und die Optionen für ISOCAM exportiert, aber das Fenster wurde noch nicht auf einem Bildschirm angesehen; es wurde an keiner Maschine ausprobiert und nicht an einer Sammlung echter Dateien geprüft.
+**Ehrlichkeitscheck - was heute wirklich läuft:** eine Rust-Bibliothek und ein Kommandozeilenprogramm (`eh3d-vision`) mit 152 Tests, die auf einem Computer laufen: findet runde Passmarken in einem Bild, wandelt Pixel in Millimeter um und berechnet Drehung und Verschiebung, die eine Platine dorthin bringen, wo ihr Entwurf sie haben will. Es hat ein Fenster (mit `--features gui` gebaut, das Programm `eh3d-vision-gui`), das ein Bild öffnet, die Marken mit ihren Koordinaten zeigt, den Maßstab setzt, die Verzeichnung des Objektivs aus einem Raster bestimmt, am Entwurf ausrichtet und die Optionen für ISOCAM exportiert, aber das Fenster wurde noch nicht auf einem Bildschirm angesehen; es wurde an keiner Maschine ausprobiert und nicht an einer Sammlung echter Dateien geprüft.
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | Version | `0.0.4` |
 | Reifegrad | Gerüst |
-| Tests | 146 |
+| Tests | 152 |
 | Technologie-Stack | Rust |
 | Auf echter Hardware | Nicht erprobt: nichts davon lief an einer Maschine |
 
@@ -46,7 +46,7 @@ Jede Zeile ist ein Teil dieses Repositorys, und die Ampel sagt, wie weit er heut
 |---|---|---|
 | Kern | 🟡 | findet runde Passmarken in einem Bild, wandelt Pixel in Millimeter um und berechnet Drehung und Verschiebung, die eine Platine dorthin bringen, wo ihr Entwurf sie haben will; am Computer mit normalen und beschädigten Eingaben getestet, nicht mit einer Sammlung echter Dateien. |
 | Kommandozeile | 🟡 | `eh3d-vision` führt dieselben Funktionen wie die Bibliothek aus und gibt das Ergebnis aus; jeder Fehler kommt als Meldung mit einem Exit-Code ungleich null zurück. |
-| Tests | 🟡 | 146 Tests bestehen (`cargo test`), mit Normalfällen, Grenzfällen und beschädigten Eingaben. |
+| Tests | 🟡 | 152 Tests bestehen (`cargo test`), mit Normalfällen, Grenzfällen und beschädigten Eingaben sowie einer simulierten Kamera über einer Platine, die Rauschen, falsche Belichtung, ein totes oder fehlendes Bild, wie eine Marke aussehenden Staub oder eine abgeschnittene Bilddatei hinzufügt und erneut abgefragt wird. |
 | Sicherheit | 🟡 | Reines sicheres Rust (`forbid(unsafe_code)`): nichts gerät bei den übergebenen Dateien in Panik und ein schlechter Wert ist ein Fehler mit Begründung; keine unabhängige Prüfung. |
 | Fenster | 🟠 | Geschrieben (egui, `--features gui`, das Programm `eh3d-vision-gui`): ein Bild öffnen oder ablegen, die Marken mit ihren Koordinaten sehen, den Maßstab mit einer Marke bekannter Größe setzen, die Verzeichnung des Objektivs aus einem Raster bestimmen, an einem CSV-Entwurf ausrichten und die Optionen für ISOCAM exportieren; die Logik ist getestet, aber das Fenster wurde noch nicht gebaut oder auf einem Bildschirm angesehen. |
 | Echte Hardware | 🔴 | Nicht erprobt: nichts davon wurde an einer Maschine ausgeführt. |
@@ -123,7 +123,7 @@ Um ein Bild des Fensters aufzunehmen, ohne es von Hand zu öffnen, starten Sie e
 
 ## 🧪 Tests
 
-Die Suite hat 146 Tests (`cargo test`, in der CI unter Windows und Linux). Sie prüfen Normalfälle, Grenzfälle und beschädigte Eingaben: leere Dateien, Datenmüll und abgeschnittene Dateien lösen nie eine Panik aus. Die CI führt außerdem `cargo fmt --check`, `cargo clippy` mit Warnungen als Fehlern und `python -I tools/ci_validate.py` aus.
+Die Suite hat 152 Tests (`cargo test`, in der CI unter Windows und Linux). Sie prüfen Normalfälle, Grenzfälle und beschädigte Eingaben: leere Dateien, Datenmüll und abgeschnittene Dateien lösen nie eine Panik aus. Die CI führt außerdem `cargo fmt --check`, `cargo clippy` mit Warnungen als Fehlern und `python -I tools/ci_validate.py` aus.
 
 ## 🏗️ Build und Veröffentlichung
 
