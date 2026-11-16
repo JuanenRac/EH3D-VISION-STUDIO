@@ -99,6 +99,15 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 .map(|v| num(&v, "--max-stretch"))
                 .transpose()?
                 .unwrap_or(0.01);
+            if !(max_rms.is_finite()
+                && max_rms >= 0.0
+                && max_stretch.is_finite()
+                && max_stretch >= 0.0)
+            {
+                return Err(
+                    "--max-rms and --max-stretch must be numbers that are not negative".into(),
+                );
+            }
             if args.len() < 2 {
                 return Err("align needs the design points and the measured points".into());
             }
@@ -108,14 +117,16 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 "shift ({:+.4}, {:+.4}) mm, turn {:+.4} degrees, size {:.5}, residual {:.4} mm",
                 t.dx, t.dy, t.theta_deg, t.scale, t.rms_mm
             );
-            if isocam_args {
+            // the arguments for the other program are printed only for a fit that is accepted: a script that captures the output must not receive a rejected fit
+            let verdict = accept(&t, max_rms, max_stretch);
+            if isocam_args && verdict.is_ok() {
                 // the marks as the options of eh3d-isocam, one pair for each row: design x, design y, measured x, measured y
                 let (design, measured) = (points(&args[0])?, points(&args[1])?);
                 for line in isocam_lines(&design, &measured) {
                     println!("{line}");
                 }
             }
-            accept(&t, max_rms, max_stretch)
+            verdict
         }
         other => Err(format!("{other}: unknown command (see help)")),
     }
