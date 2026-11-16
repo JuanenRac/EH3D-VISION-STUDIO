@@ -5,7 +5,7 @@
 mod cli_args;
 
 use cli_args::{finish, flag, num, switch};
-use eh3d_vision_studio::align::{accept, fit, isocam_args as isocam_lines};
+use eh3d_vision_studio::align::{accept, fit, isocam_args as isocam_lines, pair_nearest};
 use eh3d_vision_studio::config::Config;
 use eh3d_vision_studio::fiducial::{find, Polarity, Settings};
 use eh3d_vision_studio::image::from_bytes;
@@ -19,7 +19,7 @@ use std::process::ExitCode;
 const HELP: &str = "eh3d-vision: fiducials in a camera image
 
   eh3d-vision find IMAGE [--light] [--min-diam PX] [--max-diam PX] [--known-mm D]   the round marks found (--known-mm gives millimetres)
-  eh3d-vision align DESIGN.csv MEASURED.csv [--scale] [--isocam-args] [--max-rms 0.1] [--max-stretch 0.01]   the turn and the shift that put the board where it is
+  eh3d-vision align DESIGN.csv MEASURED.csv [--scale] [--pair-nearest] [--isocam-args] [--max-rms 0.1] [--max-stretch 0.01]   the turn and the shift that put the board where it is
 
 IMAGE is a PNG or a PGM file. The CSV files have one point per line: x,y in millimetres, in the same order in both files.";
 
@@ -91,6 +91,7 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
         "align" => {
             let allow = switch(&mut args, "--scale");
             let isocam_args = switch(&mut args, "--isocam-args");
+            let pair = switch(&mut args, "--pair-nearest");
             let max_rms = flag(&mut args, "--max-rms")?
                 .map(|v| num(&v, "--max-rms"))
                 .transpose()?
@@ -112,7 +113,13 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 return Err("align needs the design points and the measured points".into());
             }
             finish(&args, 2)?;
-            let t = fit(&points(&args[0])?, &points(&args[1])?, allow)?;
+            let design = points(&args[0])?;
+            let mut measured = points(&args[1])?;
+            if pair {
+                // the measured marks in any order: each design mark takes the nearest one
+                measured = pair_nearest(&design, &measured)?;
+            }
+            let t = fit(&design, &measured, allow)?;
             println!(
                 "shift ({:+.4}, {:+.4}) mm, turn {:+.4} degrees, size {:.5}, residual {:.4} mm",
                 t.dx, t.dy, t.theta_deg, t.scale, t.rms_mm
@@ -121,7 +128,6 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
             let verdict = accept(&t, max_rms, max_stretch);
             if isocam_args && verdict.is_ok() {
                 // the marks as the options of eh3d-isocam, one pair for each row: design x, design y, measured x, measured y
-                let (design, measured) = (points(&args[0])?, points(&args[1])?);
                 for line in isocam_lines(&design, &measured) {
                     println!("{line}");
                 }
