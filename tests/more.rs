@@ -653,3 +653,42 @@ fn align_can_print_the_marks_as_the_options_of_isocam() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn align_prints_no_isocam_arguments_for_a_fit_it_rejects() {
+    let dir = std::env::temp_dir().join(format!(
+        "eh3d_vision_isocam_rejected_{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let design = dir.join("design.csv");
+    let measured = dir.join("measured.csv");
+    std::fs::write(&design, "0,0\n50,0\n0,40\n50,40\n").unwrap();
+    // one mark 5 mm off: the residual is far above the allowed one
+    std::fs::write(&measured, "0,0\n50,0\n0,40\n55,45\n").unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_eh3d-vision"))
+        .args([
+            "align",
+            design.to_str().unwrap(),
+            measured.to_str().unwrap(),
+            "--isocam-args",
+        ])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(!out.status.success(), "{text}");
+    assert!(!text.contains("--fiducial"), "{text}");
+    let bad = Command::new(env!("CARGO_BIN_EXE_eh3d-vision"))
+        .args([
+            "align",
+            design.to_str().unwrap(),
+            design.to_str().unwrap(),
+            "--max-rms",
+            "-1",
+        ])
+        .output()
+        .unwrap();
+    assert!(!bad.status.success());
+    assert!(String::from_utf8_lossy(&bad.stderr).contains("not negative"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
