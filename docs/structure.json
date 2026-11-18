@@ -93,6 +93,19 @@
           }
         },
         {
+          "name": "batch.rs",
+          "desc": {
+            "en": "a folder of pictures at once, with a CSV report",
+            "es": "una carpeta de imágenes de una vez, con un informe CSV",
+            "de": "ein Ordner voller Bilder auf einmal, mit CSV-Bericht",
+            "fr": "un dossier d'images d'un coup, avec un rapport CSV",
+            "it": "una cartella di immagini in un colpo, con un rapporto CSV",
+            "ja": "フォルダ内の画像をまとめて処理し、CSV レポートを出力",
+            "zh": "一次处理整个文件夹的图片，并生成 CSV 报告",
+            "pt": "uma pasta de imagens de uma vez, com um relatório CSV"
+          }
+        },
+        {
           "name": "config.rs",
           "desc": {
             "en": "the configuration file: every tuned value",
@@ -106,6 +119,19 @@
           }
         },
         {
+          "name": "cross.rs",
+          "desc": {
+            "en": "cross-shaped fiducial marks",
+            "es": "marcas fiduciales en forma de cruz",
+            "de": "kreuzförmige Fiducial-Marken",
+            "fr": "repères fiduciaux en forme de croix",
+            "it": "marcatori fiduciali a forma di croce",
+            "ja": "十字形の基準マーク",
+            "zh": "十字形基准标记",
+            "pt": "marcas fiduciais em forma de cruz"
+          }
+        },
+        {
           "name": "fiducial.rs",
           "desc": {
             "en": "the round marks of a picture: threshold, spots and checks",
@@ -116,6 +142,19 @@
             "ja": "画像の円形マーク：しきい値・領域・検査",
             "zh": "图像中的圆形标记：阈值、斑点和检查",
             "pt": "as marcas redondas de uma imagem: limiar, manchas e verificações"
+          }
+        },
+        {
+          "name": "flatten.rs",
+          "desc": {
+            "en": "uneven light taken out of a picture",
+            "es": "la luz desigual quitada de una imagen",
+            "de": "ungleichmäßiges Licht aus einem Bild entfernt",
+            "fr": "la lumière inégale retirée d'une image",
+            "it": "la luce irregolare tolta da un'immagine",
+            "ja": "画像のムラのある照明を取り除く",
+            "zh": "去除图片中不均匀的光照",
+            "pt": "a luz irregular retirada de uma imagem"
           }
         },
         {
@@ -155,6 +194,19 @@
             "ja": "サイズ上限付きのファイル読み込みと、拒否ごとのコード",
             "zh": "带大小上限的文件读取，每种拒绝都有代码",
             "pt": "leitura de um ficheiro com limite de tamanho e um código para cada recusa"
+          }
+        },
+        {
+          "name": "measure.rs",
+          "desc": {
+            "en": "parts measured in millimetres, CSV and JSON files",
+            "es": "piezas medidas en milímetros, ficheros CSV y JSON",
+            "de": "Teile in Millimetern vermessen, CSV- und JSON-Dateien",
+            "fr": "pièces mesurées en millimètres, fichiers CSV et JSON",
+            "it": "pezzi misurati in millimetri, file CSV e JSON",
+            "ja": "部品をミリメートルで計測し、CSV と JSON を出力",
+            "zh": "以毫米测量零件，输出 CSV 和 JSON 文件",
+            "pt": "peças medidas em milímetros, ficheiros CSV e JSON"
           }
         },
         {
@@ -292,6 +344,19 @@
             "ja": "コマンドラインが読むファイルのサイズ上限のテスト",
             "zh": "命令行所读文件的大小上限测试",
             "pt": "testes do limite de tamanho dos ficheiros que a linha de comandos lê"
+          }
+        },
+        {
+          "name": "exchange.rs",
+          "desc": {
+            "en": "tests of the commands that read a picture and write a file",
+            "es": "pruebas de las órdenes que leen una imagen y escriben un fichero",
+            "de": "Tests der Befehle, die ein Bild lesen und eine Datei schreiben",
+            "fr": "tests des commandes qui lisent une image et écrivent un fichier",
+            "it": "test dei comandi che leggono un'immagine e scrivono un file",
+            "ja": "画像を読んでファイルを書くコマンドのテスト",
+            "zh": "读取图片并写出文件的命令的测试",
+            "pt": "testes dos comandos que leem uma imagem e escrevem um ficheiro"
           }
         },
         {
