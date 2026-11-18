@@ -6,6 +6,7 @@ mod cli_args;
 
 use cli_args::{finish, flag, num, switch};
 use eh3d_vision_studio::align::{accept, fit, isocam_args as isocam_lines, pair_nearest};
+use eh3d_vision_studio::batch::{check_picture, list_pictures, report_csv, summary, NO_MARKS, OK};
 use eh3d_vision_studio::config::Config;
 use eh3d_vision_studio::cross::{find_crosses, CrossSettings};
 use eh3d_vision_studio::fiducial::{find, refine, Polarity, Settings};
@@ -26,6 +27,7 @@ const HELP: &str = "eh3d-vision: fiducials in a camera image
   eh3d-vision measure IMAGE [--mm-per-px V] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   the parts of a picture: centre, turn, length, width and area in millimetres, as a CSV or JSON file
   eh3d-vision crosses IMAGE [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the cross-shaped marks found (plus signs with their arms along the axes of the picture)
   eh3d-vision calibrate IMAGE --pitch-mm D [--light] [--tolerance 0.05] [--flatten PX]   the millimetres of a pixel from a target whose neighbouring marks are D millimetres apart
+  eh3d-vision batch FOLDER [--light] [--flatten PX] [--report FILE.csv] [--replace]   every PNG and PGM picture of a folder: marks, scores and diameters, or the code of what went wrong, one line each
 
 IMAGE is a PNG or a PGM file. The CSV files have one point per line: x,y in millimetres, in the same order in both files.";
 
@@ -189,6 +191,49 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 }
             }
             verdict
+        }
+        "batch" => {
+            let mut settings = Settings::default();
+            if switch(&mut args, "--light") {
+                settings.polarity = Polarity::Light;
+            }
+            let replace = switch(&mut args, "--replace");
+            let flatten_px = flag(&mut args, "--flatten")?
+                .map(|v| count(&v, "--flatten"))
+                .transpose()?;
+            let report = flag(&mut args, "--report")?;
+            finish(&args, 1)?;
+            let folder = args.first().ok_or("batch needs a folder")?;
+            let cfg = config();
+            settings.min_diameter = cfg.min_diameter;
+            settings.max_diameter = cfg.max_diameter;
+            settings.min_fill = cfg.min_fill;
+            settings.max_elongation = cfg.max_elongation;
+            let window = flatten_px.unwrap_or(cfg.flatten_window);
+            let files = list_pictures(Path::new(folder), cfg.batch_max_files)?;
+            let rows: Vec<_> = files
+                .iter()
+                .map(|f| check_picture(f, cfg.max_file_mib, &settings, cfg.threshold, window))
+                .collect();
+            let text = report_csv(&rows);
+            let line = summary(&rows);
+            match report {
+                Some(path) => {
+                    write_text(Path::new(&path), &text, replace)?;
+                    println!("{line}; the report is in {path}");
+                }
+                None => {
+                    print!("{text}");
+                    eprintln!("{line}");
+                }
+            }
+            // a picture that could not be used is an error for a script, after the report is written
+            if rows.iter().any(|r| r.status != OK && r.status != NO_MARKS) {
+                return Err(
+                    "some pictures could not be used (see the status column of the report)".into(),
+                );
+            }
+            Ok(())
         }
         "calibrate" => {
             let mut settings = Settings::default();

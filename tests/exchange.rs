@@ -398,3 +398,102 @@ fn calibrate_needs_the_pitch_and_enough_marks() {
     );
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn batch_reports_every_picture_of_a_folder_and_does_not_write_over_a_report() {
+    let dir = scratch("batch");
+    let pictures = dir.join("pictures");
+    fs::create_dir_all(&pictures).unwrap();
+    fs::write(pictures.join("one.pgm"), soft_disc_picture(40.0, 30.0, 9.0)).unwrap();
+    fs::write(pictures.join("two.pgm"), part_picture()).unwrap();
+    fs::write(pictures.join("flat.pgm"), pgm(20, 20, &[100u8; 400])).unwrap();
+    fs::write(pictures.join("readme.txt"), "left out").unwrap();
+    // to the standard output: the CSV, and the summary on the error output
+    let shown = run(&dir, &["batch", "pictures"]);
+    assert!(shown.status.success(), "{}", err(&shown));
+    let text = out(&shown);
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.len(), 4, "{text}");
+    assert_eq!(
+        lines[0],
+        "file,status,marks,mean_score,min_score,mean_diameter_px,detail"
+    );
+    assert!(lines[1].starts_with("flat.pgm,no_marks,0,,,,"), "{text}");
+    assert!(lines[2].starts_with("one.pgm,ok,1,"), "{text}");
+    assert!(
+        err(&shown).contains("3 pictures: 1 with marks, 2 without"),
+        "{}",
+        err(&shown)
+    );
+    // to a report file
+    let args = ["batch", "pictures", "--report", "report.csv"];
+    let written = run(&dir, &args);
+    assert!(written.status.success(), "{}", err(&written));
+    assert!(
+        out(&written).contains("the report is in report.csv"),
+        "{}",
+        out(&written)
+    );
+    assert_eq!(
+        fs::read_to_string(dir.join("report.csv"))
+            .unwrap()
+            .replace('\r', ""),
+        text
+    );
+    let again = run(&dir, &args);
+    assert!(
+        !again.status.success() && err(&again).contains("file_exists"),
+        "{}",
+        err(&again)
+    );
+    let mut with_replace = args.to_vec();
+    with_replace.push("--replace");
+    assert!(run(&dir, &with_replace).status.success());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn batch_says_what_went_wrong_with_a_picture_and_refuses_what_is_too_big_or_too_many() {
+    let dir = scratch("batch_bad");
+    let pictures = dir.join("pictures");
+    fs::create_dir_all(&pictures).unwrap();
+    fs::write(
+        pictures.join("good.pgm"),
+        soft_disc_picture(40.0, 30.0, 9.0),
+    )
+    .unwrap();
+    fs::write(pictures.join("broken.pgm"), "P5\n10 10\n255\nshort").unwrap();
+    let failed = run(&dir, &["batch", "pictures", "--report", "r.csv"]);
+    // the report is written, and the exit code tells a script that a picture could not be used
+    assert!(
+        !failed.status.success() && err(&failed).contains("could not be used"),
+        "{}",
+        err(&failed)
+    );
+    let report = fs::read_to_string(dir.join("r.csv")).unwrap();
+    assert!(
+        report.contains("broken.pgm,picture_unreadable,0,,,,"),
+        "{report}"
+    );
+    assert!(report.contains("good.pgm,ok,1,"), "{report}");
+    fs::write(dir.join("vision.cfg"), "batch_max_files = 1\n").unwrap();
+    let many = run(&dir, &["batch", "pictures"]);
+    assert!(
+        !many.status.success() && err(&many).contains("too_many_files"),
+        "{}",
+        err(&many)
+    );
+    fs::write(dir.join("vision.cfg"), "max_file_mib = 1\n").unwrap();
+    fs::write(pictures.join("huge.pgm"), vec![0u8; 1_048_577]).unwrap();
+    let big = run(&dir, &["batch", "pictures", "--report", "r2.csv"]);
+    assert!(!big.status.success());
+    let report = fs::read_to_string(dir.join("r2.csv")).unwrap();
+    assert!(report.contains("huge.pgm,file_too_large,0,,,,"), "{report}");
+    let none = run(&dir, &["batch", "nowhere"]);
+    assert!(
+        !none.status.success() && err(&none).contains("file_unreadable"),
+        "{}",
+        err(&none)
+    );
+    let _ = fs::remove_dir_all(&dir);
+}

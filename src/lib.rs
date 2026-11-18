@@ -6,6 +6,7 @@
 /// The reader of PGM and PNG pictures, kept in EH3D-COMMON because the other programs that work from a picture read them the same way.
 pub use eh3d_image as image;
 pub mod align;
+pub mod batch;
 pub mod browse;
 pub mod config;
 pub mod cross;
