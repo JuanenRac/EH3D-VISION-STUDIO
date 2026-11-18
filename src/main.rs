@@ -9,8 +9,9 @@ use eh3d_vision_studio::align::{accept, fit, isocam_args as isocam_lines, pair_n
 use eh3d_vision_studio::config::Config;
 use eh3d_vision_studio::fiducial::{find, refine, Polarity, Settings};
 use eh3d_vision_studio::flatten::flatten;
-use eh3d_vision_studio::image::from_bytes;
-use eh3d_vision_studio::limit::{read_limited, read_text_limited};
+use eh3d_vision_studio::image::{from_bytes, Gray};
+use eh3d_vision_studio::limit::{read_limited, read_text_limited, write_text};
+use eh3d_vision_studio::measure::{measure_parts, to_csv, to_json, PartSettings};
 use eh3d_vision_studio::points::parse as parse_points;
 use eh3d_vision_studio::scale::Scale;
 use std::env;
@@ -21,6 +22,7 @@ const HELP: &str = "eh3d-vision: fiducials in a camera image
 
   eh3d-vision find IMAGE [--light] [--min-diam PX] [--max-diam PX] [--known-mm D] [--refine] [--flatten PX]   the round marks found (--known-mm gives millimetres, --refine the centre to a fraction of a pixel with a confidence, --flatten takes uneven light out first)
   eh3d-vision align DESIGN.csv MEASURED.csv [--scale] [--pair-nearest] [--isocam-args] [--max-rms 0.1] [--max-stretch 0.01]   the turn and the shift that put the board where it is
+  eh3d-vision measure IMAGE [--mm-per-px V] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   the parts of a picture: centre, turn, length, width and area in millimetres, as a CSV or JSON file
 
 IMAGE is a PNG or a PGM file. The CSV files have one point per line: x,y in millimetres, in the same order in both files.";
 
@@ -41,6 +43,26 @@ fn max_mib() -> u64 {
 fn points(path: &str) -> Result<Vec<(f64, f64)>, String> {
     let text = read_text_limited(Path::new(path), max_mib())?;
     parse_points(&text, path)
+}
+
+/// The picture of a file, read within the size limit, with the uneven light taken out when the option or the configuration file gives a window.
+fn picture(path: &str, cfg: &Config, flatten_px: Option<usize>) -> Result<Gray, String> {
+    let img = from_bytes(&read_limited(Path::new(path), cfg.max_file_mib)?)?;
+    match flatten_px.unwrap_or(cfg.flatten_window) {
+        0 => Ok(img),
+        window => flatten(&img, window),
+    }
+}
+
+/// Prints a text, or writes it to a new file when `output` is given.
+fn deliver(text: &str, output: Option<String>, replace: bool) -> Result<(), String> {
+    match output {
+        Some(path) => write_text(Path::new(&path), text, replace),
+        None => {
+            print!("{text}");
+            Ok(())
+        }
+    }
 }
 
 /// A whole number, or an error that names what it is for.
@@ -78,12 +100,7 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
             finish(&args, 1)?;
             let path = args.first().ok_or("find needs an image")?;
             let cfg = config();
-            let mut img = from_bytes(&read_limited(Path::new(path), cfg.max_file_mib)?)?;
-            // uneven light is taken out first when the option or the configuration file gives a window
-            let window = flatten_px.unwrap_or(cfg.flatten_window);
-            if window != 0 {
-                img = flatten(&img, window)?;
-            }
+            let img = picture(path, &cfg, flatten_px)?;
             let mut found = find(&img, &s)?;
             // the centre to a fraction of a pixel, and the confidence of each mark, when the option or the configuration file asks for it
             let mut confidence: Vec<f64> = Vec::new();
@@ -169,6 +186,47 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 }
             }
             verdict
+        }
+        "measure" => {
+            let mut s = PartSettings::default();
+            if switch(&mut args, "--light") {
+                s.polarity = Polarity::Light;
+            }
+            let replace = switch(&mut args, "--replace");
+            let flatten_px = flag(&mut args, "--flatten")?
+                .map(|v| count(&v, "--flatten"))
+                .transpose()?;
+            let mm_per_px = flag(&mut args, "--mm-per-px")?
+                .map(|v| num(&v, "--mm-per-px"))
+                .transpose()?;
+            let format = flag(&mut args, "--format")?.unwrap_or_else(|| "csv".to_string());
+            let output = flag(&mut args, "--output")?;
+            finish(&args, 1)?;
+            if !matches!(format.as_str(), "csv" | "json") {
+                return Err(format!("--format '{format}' is not csv or json"));
+            }
+            let path = args.first().ok_or("measure needs an image")?;
+            let cfg = config();
+            let mm = mm_per_px.unwrap_or(cfg.mm_per_px);
+            if mm <= 0.0 {
+                return Err(
+                    "measure needs the scale: --mm-per-px, or mm_per_px in vision.cfg (the command calibrate works it out)"
+                        .into(),
+                );
+            }
+            s.threshold = cfg.threshold;
+            s.min_area_px = cfg.part_min_area;
+            s.max_area_px = cfg.part_max_area;
+            s.max_parts = cfg.max_parts;
+            let img = picture(path, &cfg, flatten_px)?;
+            let scale = Scale { mm_per_px: mm };
+            let parts = measure_parts(&img, &s, scale)?;
+            let text = if format == "json" {
+                to_json(&parts, img.w, img.h, scale)
+            } else {
+                to_csv(&parts)
+            };
+            deliver(&text, output, replace)
         }
         other => Err(format!("{other}: unknown command (see help)")),
     }

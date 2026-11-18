@@ -138,3 +138,127 @@ fn find_flatten_takes_uneven_light_out_before_the_search() {
     assert!(!word.status.success() && err(&word).contains("--flatten"));
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// A light board of 240 by 160 with a dark rectangle of 61 by 31 pixels centred at (100, 60).
+fn part_picture() -> Vec<u8> {
+    let (w, h) = (240usize, 160usize);
+    let mut data = vec![220u8; w * h];
+    for y in 45..=75 {
+        for x in 70..=130 {
+            data[y * w + x] = 30;
+        }
+    }
+    pgm(w, h, &data)
+}
+
+#[test]
+fn measure_writes_the_parts_as_csv_or_json_and_never_writes_over_a_file() {
+    let dir = scratch("measure");
+    fs::write(dir.join("part.pgm"), part_picture()).unwrap();
+    let csv = run(&dir, &["measure", "part.pgm", "--mm-per-px", "0.5"]);
+    assert!(csv.status.success(), "{}", err(&csv));
+    let text = out(&csv);
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.len(), 2, "{text}");
+    assert_eq!(
+        lines[0],
+        "index,x_mm,y_mm,angle_deg,length_mm,width_mm,area_mm2"
+    );
+    // the centre of the picture is (120, 80): the part is 10 mm to the left and 10 mm up
+    assert!(
+        lines[1].starts_with("1,-10.0000,10.0000,0.000,30.5000,15.5000,472.7500"),
+        "{text}"
+    );
+    let json = run(
+        &dir,
+        &[
+            "measure",
+            "part.pgm",
+            "--mm-per-px",
+            "0.5",
+            "--format",
+            "json",
+        ],
+    );
+    assert!(json.status.success(), "{}", err(&json));
+    let j = out(&json);
+    assert!(
+        j.contains("\"format\": \"eh3d-vision-parts\"") && j.contains("\"x_mm\": -10.0000"),
+        "{j}"
+    );
+    // a file is written only where there is none, and only over another one when asked
+    let args = [
+        "measure",
+        "part.pgm",
+        "--mm-per-px",
+        "0.5",
+        "--output",
+        "parts.csv",
+    ];
+    assert!(run(&dir, &args).status.success());
+    assert_eq!(
+        fs::read_to_string(dir.join("parts.csv"))
+            .unwrap()
+            .replace('\r', ""),
+        text
+    );
+    let again = run(&dir, &args);
+    assert!(
+        !again.status.success() && err(&again).starts_with("error: file_exists"),
+        "{}",
+        err(&again)
+    );
+    let mut with_replace = args.to_vec();
+    with_replace.push("--replace");
+    assert!(run(&dir, &with_replace).status.success());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn measure_needs_a_scale_a_known_format_and_a_picture_within_the_limits() {
+    let dir = scratch("measure_bad");
+    fs::write(dir.join("part.pgm"), part_picture()).unwrap();
+    let no_scale = run(&dir, &["measure", "part.pgm"]);
+    assert!(
+        !no_scale.status.success() && err(&no_scale).contains("scale"),
+        "{}",
+        err(&no_scale)
+    );
+    // the scale can come from the configuration file
+    fs::write(dir.join("vision.cfg"), "mm_per_px = 0.5\n").unwrap();
+    assert!(run(&dir, &["measure", "part.pgm"]).status.success());
+    let format = run(&dir, &["measure", "part.pgm", "--format", "xml"]);
+    assert!(
+        !format.status.success() && err(&format).contains("csv or json"),
+        "{}",
+        err(&format)
+    );
+    // a part has to be larger than part_min_area, and a picture with more parts than max_parts is refused
+    fs::write(
+        dir.join("vision.cfg"),
+        "mm_per_px = 0.5\npart_min_area = 5000\n",
+    )
+    .unwrap();
+    assert_eq!(out(&run(&dir, &["measure", "part.pgm"])).lines().count(), 1);
+    fs::write(
+        dir.join("vision.cfg"),
+        "mm_per_px = 0.5\npart_min_area = 5\nmax_parts = 1\n",
+    )
+    .unwrap();
+    let mut data = vec![220u8; 240 * 160];
+    for (x0, y0) in [(20usize, 20usize), (100, 20), (180, 100)] {
+        for y in y0..y0 + 12 {
+            for x in x0..x0 + 12 {
+                data[y * 240 + x] = 30;
+            }
+        }
+    }
+    fs::write(dir.join("many.pgm"), pgm(240, 160, &data)).unwrap();
+    let many = run(&dir, &["measure", "many.pgm"]);
+    assert!(
+        !many.status.success() && err(&many).contains("too_many_parts"),
+        "{}",
+        err(&many)
+    );
+    let _ = fs::remove_dir_all(&dir);
+}

@@ -34,3 +34,39 @@ pub fn read_text_limited(path: &Path, max_mib: u64) -> Result<String, String> {
     String::from_utf8(bytes)
         .map_err(|_| format!("{NOT_TEXT}: {}: the file is not text", path.display()))
 }
+
+/// The file to write is already there and `--replace` was not given.
+pub const OUTPUT_EXISTS: &str = "file_exists";
+/// The file cannot be written.
+pub const UNWRITABLE: &str = "file_unwritable";
+
+/// Writes `text` to a new file. An existing file is never replaced unless `replace` is true, and even then not when it is a link (a link could lead anywhere); the refusals start with a
+/// code that does not change (`file_exists`, `file_unwritable`).
+pub fn write_text(path: &Path, text: &str, replace: bool) -> Result<(), String> {
+    use std::io::Write;
+    let shown = path.display();
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true);
+    if replace {
+        if std::fs::symlink_metadata(path)
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(false)
+        {
+            return Err(format!("{UNWRITABLE}: {shown}: it is a link, not a file"));
+        }
+        options.create(true).truncate(true);
+    } else {
+        options.create_new(true);
+    }
+    let mut file = options.open(path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::AlreadyExists {
+            format!(
+                "{OUTPUT_EXISTS}: {shown}: the file is already there (--replace writes over it)"
+            )
+        } else {
+            format!("{UNWRITABLE}: {shown}: {e}")
+        }
+    })?;
+    file.write_all(text.as_bytes())
+        .map_err(|e| format!("{UNWRITABLE}: {shown}: {e}"))
+}

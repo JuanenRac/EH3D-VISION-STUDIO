@@ -11,7 +11,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 18] = [
+pub const KEYS: [&str; 22] = [
     "language",
     "polarity",
     "threshold",
@@ -30,6 +30,10 @@ pub const KEYS: [&str; 18] = [
     "refine_subpixel",
     "full_contrast",
     "flatten_window",
+    "mm_per_px",
+    "part_min_area",
+    "part_max_area",
+    "max_parts",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -63,6 +67,13 @@ pub struct Config {
     pub full_contrast: f64,
     /// The side in pixels of the window over which the light is averaged to take uneven light out of a picture before the marks are searched for; 0 leaves the picture as it is.
     pub flatten_window: usize,
+    /// The millimetres of a pixel of the camera, as `calibrate` works it out; 0 means that it is not known (the command `measure` then needs `--mm-per-px`).
+    pub mm_per_px: f64,
+    /// The fewest and the most pixels a spot has to count as a part.
+    pub part_min_area: u64,
+    pub part_max_area: u64,
+    /// The most parts that are measured in a picture; a picture with more is refused.
+    pub max_parts: usize,
 }
 
 impl Default for Config {
@@ -87,6 +98,10 @@ impl Default for Config {
             refine_subpixel: false,
             full_contrast: 0.3,
             flatten_window: 0,
+            mm_per_px: 0.0,
+            part_min_area: 100,
+            part_max_area: 50_000_000,
+            max_parts: 1000,
         }
     }
 }
@@ -184,6 +199,10 @@ impl Config {
             }
             "full_contrast" => self.full_contrast = number(value, key)?,
             "flatten_window" => self.flatten_window = count(value, key)?,
+            "mm_per_px" => self.mm_per_px = number(value, key)?,
+            "part_min_area" => self.part_min_area = count(value, key)? as u64,
+            "part_max_area" => self.part_max_area = count(value, key)? as u64,
+            "max_parts" => self.max_parts = count(value, key)?,
             other => return Err(format!("{other}: unknown key")),
         }
         Ok(())
@@ -226,6 +245,15 @@ impl Config {
                 crate::flatten::MIN_WINDOW,
                 crate::flatten::MAX_WINDOW
             ));
+        }
+        if self.mm_per_px < 0.0 {
+            return Err("mm_per_px must be 0 (not known) or more".into());
+        }
+        if self.part_min_area == 0 || self.part_max_area < self.part_min_area {
+            return Err("part_min_area must be 1 or more and part_max_area not below it".into());
+        }
+        if !(1..=100_000).contains(&self.max_parts) {
+            return Err("max_parts must be from 1 to 100000".into());
         }
         Ok(())
     }
@@ -369,6 +397,12 @@ mod tests {
             "full_contrast = 1.5",
             "flatten_window = 2",
             "flatten_window = 5000",
+            "mm_per_px = -0.1",
+            "part_min_area = 0",
+            "part_min_area = 500
+part_max_area = 100",
+            "max_parts = 0",
+            "max_parts = 100001",
         ] {
             assert!(Config::parse(text).is_err(), "{text:?} was accepted");
         }
