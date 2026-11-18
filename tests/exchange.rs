@@ -307,3 +307,94 @@ fn crosses_finds_the_plus_signs_and_not_the_discs() {
     assert!(out(&run(&dir, &["crosses", "marks.pgm"])).contains("no crosses"));
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// A light board of 260 by 200 with a grid of dark discs 40 pixels apart (5 columns, 4 rows).
+fn target_picture(columns: usize, rows: usize, skip: Option<(usize, usize)>) -> Vec<u8> {
+    let (w, h) = (260usize, 200usize);
+    let mut data = vec![220u8; w * h];
+    for r in 0..rows {
+        for c in 0..columns {
+            if skip == Some((c, r)) {
+                continue;
+            }
+            let (cx, cy) = (40.0 + c as f64 * 40.0, 40.0 + r as f64 * 40.0);
+            for y in 0..h {
+                for x in 0..w {
+                    if (x as f64 - cx).powi(2) + (y as f64 - cy).powi(2) <= 64.0 {
+                        data[y * w + x] = 30;
+                    }
+                }
+            }
+        }
+    }
+    pgm(w, h, &data)
+}
+
+#[test]
+fn calibrate_gives_the_scale_from_the_pitch_of_a_target() {
+    let dir = scratch("calibrate");
+    fs::write(dir.join("target.pgm"), target_picture(5, 4, None)).unwrap();
+    let ok = run(&dir, &["calibrate", "target.pgm", "--pitch-mm", "2"]);
+    assert!(ok.status.success(), "{}", err(&ok));
+    let text = out(&ok);
+    assert!(
+        text.starts_with("20 marks, 2 mm apart: 0.050000 mm per pixel"),
+        "{text}"
+    );
+    assert!(text.lines().any(|l| l == "mm_per_px = 0.050000"), "{text}");
+    // a mark that is missing does not change the answer
+    fs::write(dir.join("hole.pgm"), target_picture(5, 4, Some((2, 1)))).unwrap();
+    let hole = run(&dir, &["calibrate", "hole.pgm", "--pitch-mm", "2"]);
+    assert!(
+        out(&hole).starts_with("19 marks"),
+        "{}{}",
+        out(&hole),
+        err(&hole)
+    );
+    // the line it prints is a line the configuration file reads, and measure then needs no option
+    fs::write(dir.join("vision.cfg"), "mm_per_px = 0.05\n").unwrap();
+    assert!(run(&dir, &["measure", "target.pgm"]).status.success());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn calibrate_needs_the_pitch_and_enough_marks() {
+    let dir = scratch("calibrate_bad");
+    fs::write(dir.join("target.pgm"), target_picture(5, 4, None)).unwrap();
+    let none = run(&dir, &["calibrate", "target.pgm"]);
+    assert!(
+        !none.status.success() && err(&none).contains("--pitch-mm"),
+        "{}",
+        err(&none)
+    );
+    let zero = run(&dir, &["calibrate", "target.pgm", "--pitch-mm", "0"]);
+    assert!(
+        !zero.status.success() && err(&zero).contains("more than 0"),
+        "{}",
+        err(&zero)
+    );
+    fs::write(dir.join("two.pgm"), target_picture(2, 1, None)).unwrap();
+    let few = run(&dir, &["calibrate", "two.pgm", "--pitch-mm", "2"]);
+    assert!(
+        !few.status.success() && err(&few).contains("at least 4"),
+        "{}",
+        err(&few)
+    );
+    let tight = run(
+        &dir,
+        &[
+            "calibrate",
+            "target.pgm",
+            "--pitch-mm",
+            "2",
+            "--tolerance",
+            "-1",
+        ],
+    );
+    assert!(
+        !tight.status.success() && err(&tight).contains("tolerance"),
+        "{}",
+        err(&tight)
+    );
+    let _ = fs::remove_dir_all(&dir);
+}

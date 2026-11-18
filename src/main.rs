@@ -14,7 +14,7 @@ use eh3d_vision_studio::image::{from_bytes, Gray};
 use eh3d_vision_studio::limit::{read_limited, read_text_limited, write_text};
 use eh3d_vision_studio::measure::{measure_parts, to_csv, to_json, PartSettings};
 use eh3d_vision_studio::points::parse as parse_points;
-use eh3d_vision_studio::scale::Scale;
+use eh3d_vision_studio::scale::{from_pitch, Scale};
 use std::env;
 use std::path::Path;
 use std::process::ExitCode;
@@ -25,6 +25,7 @@ const HELP: &str = "eh3d-vision: fiducials in a camera image
   eh3d-vision align DESIGN.csv MEASURED.csv [--scale] [--pair-nearest] [--isocam-args] [--max-rms 0.1] [--max-stretch 0.01]   the turn and the shift that put the board where it is
   eh3d-vision measure IMAGE [--mm-per-px V] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   the parts of a picture: centre, turn, length, width and area in millimetres, as a CSV or JSON file
   eh3d-vision crosses IMAGE [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the cross-shaped marks found (plus signs with their arms along the axes of the picture)
+  eh3d-vision calibrate IMAGE --pitch-mm D [--light] [--tolerance 0.05] [--flatten PX]   the millimetres of a pixel from a target whose neighbouring marks are D millimetres apart
 
 IMAGE is a PNG or a PGM file. The CSV files have one point per line: x,y in millimetres, in the same order in both files.";
 
@@ -188,6 +189,42 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 }
             }
             verdict
+        }
+        "calibrate" => {
+            let mut settings = Settings::default();
+            if switch(&mut args, "--light") {
+                settings.polarity = Polarity::Light;
+            }
+            let flatten_px = flag(&mut args, "--flatten")?
+                .map(|v| count(&v, "--flatten"))
+                .transpose()?;
+            let pitch = flag(&mut args, "--pitch-mm")?
+                .map(|v| num(&v, "--pitch-mm"))
+                .transpose()?
+                .ok_or("calibrate needs --pitch-mm, the distance in millimetres between neighbouring marks")?;
+            let cfg = config();
+            let tolerance = flag(&mut args, "--tolerance")?
+                .map(|v| num(&v, "--tolerance"))
+                .transpose()?
+                .unwrap_or(cfg.pitch_tolerance);
+            finish(&args, 1)?;
+            let path = args.first().ok_or("calibrate needs an image")?;
+            settings.min_diameter = cfg.min_diameter;
+            settings.max_diameter = cfg.max_diameter;
+            settings.min_fill = cfg.min_fill;
+            settings.max_elongation = cfg.max_elongation;
+            let img = picture(path, &cfg, flatten_px)?;
+            let marks: Vec<(f64, f64)> =
+                find(&img, &settings)?.iter().map(|f| (f.x, f.y)).collect();
+            let p = from_pitch(&marks, pitch, tolerance)?;
+            println!(
+                "{} marks, {pitch} mm apart: {:.6} mm per pixel (the distances to the nearest neighbour differ by {:.1} %)",
+                p.marks,
+                p.scale.mm_per_px,
+                p.spread * 100.0
+            );
+            println!("mm_per_px = {:.6}", p.scale.mm_per_px);
+            Ok(())
         }
         "crosses" => {
             let mut s = CrossSettings::default();

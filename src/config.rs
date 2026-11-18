@@ -11,7 +11,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 25] = [
+pub const KEYS: [&str; 26] = [
     "language",
     "polarity",
     "threshold",
@@ -37,6 +37,7 @@ pub const KEYS: [&str; 25] = [
     "cross_min_size",
     "cross_max_size",
     "cross_max_elongation",
+    "pitch_tolerance",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -81,6 +82,8 @@ pub struct Config {
     pub cross_min_size: f64,
     pub cross_max_size: f64,
     pub cross_max_elongation: f64,
+    /// How much the distances between neighbouring marks of a target may differ (0.05 is five percent) for `calibrate` to give a scale from their pitch.
+    pub pitch_tolerance: f64,
 }
 
 impl Default for Config {
@@ -112,6 +115,7 @@ impl Default for Config {
             cross_min_size: 12.0,
             cross_max_size: 200.0,
             cross_max_elongation: 1.2,
+            pitch_tolerance: 0.05,
         }
     }
 }
@@ -216,6 +220,7 @@ impl Config {
             "cross_min_size" => self.cross_min_size = number(value, key)?,
             "cross_max_size" => self.cross_max_size = number(value, key)?,
             "cross_max_elongation" => self.cross_max_elongation = number(value, key)?,
+            "pitch_tolerance" => self.pitch_tolerance = number(value, key)?,
             other => return Err(format!("{other}: unknown key")),
         }
         Ok(())
@@ -276,6 +281,9 @@ impl Config {
         }
         if self.cross_max_elongation < 1.0 {
             return Err("cross_max_elongation must be 1 or more".into());
+        }
+        if !(0.0..=1.0).contains(&self.pitch_tolerance) {
+            return Err("pitch_tolerance must be from 0 to 1".into());
         }
         Ok(())
     }
@@ -429,6 +437,8 @@ part_max_area = 100",
             "cross_min_size = 50
 cross_max_size = 20",
             "cross_max_elongation = 0.9",
+            "pitch_tolerance = -0.1",
+            "pitch_tolerance = 2",
         ] {
             assert!(Config::parse(text).is_err(), "{text:?} was accepted");
         }
