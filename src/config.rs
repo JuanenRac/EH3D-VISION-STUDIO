@@ -11,7 +11,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 15] = [
+pub const KEYS: [&str; 17] = [
     "language",
     "polarity",
     "threshold",
@@ -27,6 +27,8 @@ pub const KEYS: [&str; 15] = [
     "max_stretch",
     "max_file_mib",
     "show_residuals",
+    "refine_subpixel",
+    "full_contrast",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -54,6 +56,10 @@ pub struct Config {
     pub max_file_mib: u64,
     /// Whether the window draws, for each mark of the alignment, a line from the place the design puts it to the mark the camera found, with the distance in millimetres.
     pub show_residuals: bool,
+    /// Whether `find` works the centre of each mark out again from the grey levels (to a fraction of a pixel) and prints a confidence.
+    pub refine_subpixel: bool,
+    /// The contrast (0 to 1) from which the confidence of a mark is the score of its shape alone; a mark that stands out less is trusted less.
+    pub full_contrast: f64,
 }
 
 impl Default for Config {
@@ -75,6 +81,8 @@ impl Default for Config {
             max_stretch: 0.01,
             max_file_mib: 64,
             show_residuals: true,
+            refine_subpixel: false,
+            full_contrast: 0.3,
         }
     }
 }
@@ -163,6 +171,14 @@ impl Config {
                     _ => return Err(format!("show_residuals '{value}' is not yes or no")),
                 }
             }
+            "refine_subpixel" => {
+                self.refine_subpixel = match value {
+                    "yes" | "true" | "on" => true,
+                    "no" | "false" | "off" => false,
+                    _ => return Err(format!("refine_subpixel '{value}' is not yes or no")),
+                }
+            }
+            "full_contrast" => self.full_contrast = number(value, key)?,
             other => return Err(format!("{other}: unknown key")),
         }
         Ok(())
@@ -192,6 +208,9 @@ impl Config {
         }
         if !(1..=1024).contains(&self.max_file_mib) {
             return Err("max_file_mib must be from 1 to 1024".into());
+        }
+        if !(self.full_contrast > 0.0 && self.full_contrast <= 1.0) {
+            return Err("full_contrast must be more than 0 and at most 1".into());
         }
         Ok(())
     }
@@ -331,6 +350,8 @@ mod tests {
             "grid_columns = 51",
             "max_rms = -1",
             "max_file_mib = 0",
+            "full_contrast = 0",
+            "full_contrast = 1.5",
         ] {
             assert!(Config::parse(text).is_err(), "{text:?} was accepted");
         }
