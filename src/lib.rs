@@ -9,6 +9,7 @@ pub mod align;
 pub mod browse;
 pub mod config;
 pub mod fiducial;
+pub mod flatten;
 pub mod grid;
 #[cfg(feature = "gui")]
 pub mod gui;

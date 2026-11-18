@@ -11,7 +11,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 17] = [
+pub const KEYS: [&str; 18] = [
     "language",
     "polarity",
     "threshold",
@@ -29,6 +29,7 @@ pub const KEYS: [&str; 17] = [
     "show_residuals",
     "refine_subpixel",
     "full_contrast",
+    "flatten_window",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -60,6 +61,8 @@ pub struct Config {
     pub refine_subpixel: bool,
     /// The contrast (0 to 1) from which the confidence of a mark is the score of its shape alone; a mark that stands out less is trusted less.
     pub full_contrast: f64,
+    /// The side in pixels of the window over which the light is averaged to take uneven light out of a picture before the marks are searched for; 0 leaves the picture as it is.
+    pub flatten_window: usize,
 }
 
 impl Default for Config {
@@ -83,6 +86,7 @@ impl Default for Config {
             show_residuals: true,
             refine_subpixel: false,
             full_contrast: 0.3,
+            flatten_window: 0,
         }
     }
 }
@@ -179,6 +183,7 @@ impl Config {
                 }
             }
             "full_contrast" => self.full_contrast = number(value, key)?,
+            "flatten_window" => self.flatten_window = count(value, key)?,
             other => return Err(format!("{other}: unknown key")),
         }
         Ok(())
@@ -211,6 +216,16 @@ impl Config {
         }
         if !(self.full_contrast > 0.0 && self.full_contrast <= 1.0) {
             return Err("full_contrast must be more than 0 and at most 1".into());
+        }
+        if self.flatten_window != 0
+            && !(crate::flatten::MIN_WINDOW..=crate::flatten::MAX_WINDOW)
+                .contains(&self.flatten_window)
+        {
+            return Err(format!(
+                "flatten_window must be 0 (off) or from {} to {}",
+                crate::flatten::MIN_WINDOW,
+                crate::flatten::MAX_WINDOW
+            ));
         }
         Ok(())
     }
@@ -352,6 +367,8 @@ mod tests {
             "max_file_mib = 0",
             "full_contrast = 0",
             "full_contrast = 1.5",
+            "flatten_window = 2",
+            "flatten_window = 5000",
         ] {
             assert!(Config::parse(text).is_err(), "{text:?} was accepted");
         }

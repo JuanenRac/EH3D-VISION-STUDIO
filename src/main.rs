@@ -8,6 +8,7 @@ use cli_args::{finish, flag, num, switch};
 use eh3d_vision_studio::align::{accept, fit, isocam_args as isocam_lines, pair_nearest};
 use eh3d_vision_studio::config::Config;
 use eh3d_vision_studio::fiducial::{find, refine, Polarity, Settings};
+use eh3d_vision_studio::flatten::flatten;
 use eh3d_vision_studio::image::from_bytes;
 use eh3d_vision_studio::limit::{read_limited, read_text_limited};
 use eh3d_vision_studio::points::parse as parse_points;
@@ -18,7 +19,7 @@ use std::process::ExitCode;
 
 const HELP: &str = "eh3d-vision: fiducials in a camera image
 
-  eh3d-vision find IMAGE [--light] [--min-diam PX] [--max-diam PX] [--known-mm D] [--refine]   the round marks found (--known-mm gives millimetres, --refine the centre to a fraction of a pixel with a confidence)
+  eh3d-vision find IMAGE [--light] [--min-diam PX] [--max-diam PX] [--known-mm D] [--refine] [--flatten PX]   the round marks found (--known-mm gives millimetres, --refine the centre to a fraction of a pixel with a confidence, --flatten takes uneven light out first)
   eh3d-vision align DESIGN.csv MEASURED.csv [--scale] [--pair-nearest] [--isocam-args] [--max-rms 0.1] [--max-stretch 0.01]   the turn and the shift that put the board where it is
 
 IMAGE is a PNG or a PGM file. The CSV files have one point per line: x,y in millimetres, in the same order in both files.";
@@ -42,6 +43,13 @@ fn points(path: &str) -> Result<Vec<(f64, f64)>, String> {
     parse_points(&text, path)
 }
 
+/// A whole number, or an error that names what it is for.
+fn count(text: &str, what: &str) -> Result<usize, String> {
+    text.trim()
+        .parse::<usize>()
+        .map_err(|_| format!("{what} '{text}' is not a whole number"))
+}
+
 fn run(mut args: Vec<String>) -> Result<(), String> {
     if args.is_empty() || matches!(args[0].as_str(), "help" | "--help" | "-h") {
         println!("{HELP}");
@@ -61,15 +69,23 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 s.max_diameter = num(&v, "--max-diam")?;
             }
             let refine_on = switch(&mut args, "--refine");
+            let flatten_px = flag(&mut args, "--flatten")?
+                .map(|v| count(&v, "--flatten"))
+                .transpose()?;
             let known = flag(&mut args, "--known-mm")?
                 .map(|v| num(&v, "--known-mm"))
                 .transpose()?;
             finish(&args, 1)?;
             let path = args.first().ok_or("find needs an image")?;
-            let img = from_bytes(&read_limited(Path::new(path), max_mib())?)?;
+            let cfg = config();
+            let mut img = from_bytes(&read_limited(Path::new(path), cfg.max_file_mib)?)?;
+            // uneven light is taken out first when the option or the configuration file gives a window
+            let window = flatten_px.unwrap_or(cfg.flatten_window);
+            if window != 0 {
+                img = flatten(&img, window)?;
+            }
             let mut found = find(&img, &s)?;
             // the centre to a fraction of a pixel, and the confidence of each mark, when the option or the configuration file asks for it
-            let cfg = config();
             let mut confidence: Vec<f64> = Vec::new();
             if refine_on || cfg.refine_subpixel {
                 for f in &mut found {

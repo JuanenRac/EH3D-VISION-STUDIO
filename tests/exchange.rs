@@ -89,3 +89,52 @@ fn find_refine_prints_the_centre_to_a_fraction_of_a_pixel_and_a_confidence() {
     assert!(err(&bad).contains("full_contrast"), "{}", err(&bad));
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// A board whose light fades from 250 at the left to 60 at the right, with three dark discs that are 40 % of the light where they lie.
+fn faded_board_picture() -> Vec<u8> {
+    let (w, h) = (400usize, 120usize);
+    let light = |x: usize| 250.0 - x as f64 * 190.0 / w as f64;
+    let mut data = vec![0u8; w * h];
+    for y in 0..h {
+        for x in 0..w {
+            data[y * w + x] = light(x) as u8;
+            for cx in [60usize, 190, 330] {
+                if (x as f64 - cx as f64).powi(2) + (y as f64 - 60.0).powi(2) <= 100.0 {
+                    data[y * w + x] = (0.4 * light(cx)) as u8;
+                }
+            }
+        }
+    }
+    pgm(w, h, &data)
+}
+
+/// The number of marks a `find` printed.
+fn marks_in(text: &str) -> usize {
+    text.lines()
+        .filter(|l| l.chars().next().is_some_and(|c| c.is_ascii_digit()))
+        .count()
+}
+
+#[test]
+fn find_flatten_takes_uneven_light_out_before_the_search() {
+    let dir = scratch("flatten");
+    fs::write(dir.join("faded.pgm"), faded_board_picture()).unwrap();
+    let plain = run(&dir, &["find", "faded.pgm"]);
+    assert!(plain.status.success(), "{}", err(&plain));
+    assert!(marks_in(&out(&plain)) < 3, "{}", out(&plain));
+    let flat = run(&dir, &["find", "faded.pgm", "--flatten", "61"]);
+    assert!(flat.status.success(), "{}", err(&flat));
+    assert_eq!(marks_in(&out(&flat)), 3, "{}", out(&flat));
+    // the configuration file can give the window, and a window that makes no sense is refused
+    fs::write(dir.join("vision.cfg"), "flatten_window = 61\n").unwrap();
+    assert_eq!(marks_in(&out(&run(&dir, &["find", "faded.pgm"]))), 3);
+    let bad = run(&dir, &["find", "faded.pgm", "--flatten", "2"]);
+    assert!(
+        !bad.status.success() && err(&bad).contains("window"),
+        "{}",
+        err(&bad)
+    );
+    let word = run(&dir, &["find", "faded.pgm", "--flatten", "wide"]);
+    assert!(!word.status.success() && err(&word).contains("--flatten"));
+    let _ = fs::remove_dir_all(&dir);
+}
