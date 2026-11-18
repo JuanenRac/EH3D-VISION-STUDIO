@@ -11,7 +11,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 22] = [
+pub const KEYS: [&str; 25] = [
     "language",
     "polarity",
     "threshold",
@@ -34,6 +34,9 @@ pub const KEYS: [&str; 22] = [
     "part_min_area",
     "part_max_area",
     "max_parts",
+    "cross_min_size",
+    "cross_max_size",
+    "cross_max_elongation",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -74,6 +77,10 @@ pub struct Config {
     pub part_max_area: u64,
     /// The most parts that are measured in a picture; a picture with more is refused.
     pub max_parts: usize,
+    /// The range of the side of the box of a cross-shaped mark, in pixels, and how much longer than wide that box may be.
+    pub cross_min_size: f64,
+    pub cross_max_size: f64,
+    pub cross_max_elongation: f64,
 }
 
 impl Default for Config {
@@ -102,6 +109,9 @@ impl Default for Config {
             part_min_area: 100,
             part_max_area: 50_000_000,
             max_parts: 1000,
+            cross_min_size: 12.0,
+            cross_max_size: 200.0,
+            cross_max_elongation: 1.2,
         }
     }
 }
@@ -203,6 +213,9 @@ impl Config {
             "part_min_area" => self.part_min_area = count(value, key)? as u64,
             "part_max_area" => self.part_max_area = count(value, key)? as u64,
             "max_parts" => self.max_parts = count(value, key)?,
+            "cross_min_size" => self.cross_min_size = number(value, key)?,
+            "cross_max_size" => self.cross_max_size = number(value, key)?,
+            "cross_max_elongation" => self.cross_max_elongation = number(value, key)?,
             other => return Err(format!("{other}: unknown key")),
         }
         Ok(())
@@ -254,6 +267,15 @@ impl Config {
         }
         if !(1..=100_000).contains(&self.max_parts) {
             return Err("max_parts must be from 1 to 100000".into());
+        }
+        if !(self.cross_min_size >= 7.0 && self.cross_max_size >= self.cross_min_size) {
+            return Err(
+                "the side of a cross must be from 7 pixels up and the largest not below the smallest"
+                    .into(),
+            );
+        }
+        if self.cross_max_elongation < 1.0 {
+            return Err("cross_max_elongation must be 1 or more".into());
         }
         Ok(())
     }
@@ -403,6 +425,10 @@ mod tests {
 part_max_area = 100",
             "max_parts = 0",
             "max_parts = 100001",
+            "cross_min_size = 5",
+            "cross_min_size = 50
+cross_max_size = 20",
+            "cross_max_elongation = 0.9",
         ] {
             assert!(Config::parse(text).is_err(), "{text:?} was accepted");
         }

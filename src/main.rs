@@ -7,6 +7,7 @@ mod cli_args;
 use cli_args::{finish, flag, num, switch};
 use eh3d_vision_studio::align::{accept, fit, isocam_args as isocam_lines, pair_nearest};
 use eh3d_vision_studio::config::Config;
+use eh3d_vision_studio::cross::{find_crosses, CrossSettings};
 use eh3d_vision_studio::fiducial::{find, refine, Polarity, Settings};
 use eh3d_vision_studio::flatten::flatten;
 use eh3d_vision_studio::image::{from_bytes, Gray};
@@ -23,6 +24,7 @@ const HELP: &str = "eh3d-vision: fiducials in a camera image
   eh3d-vision find IMAGE [--light] [--min-diam PX] [--max-diam PX] [--known-mm D] [--refine] [--flatten PX]   the round marks found (--known-mm gives millimetres, --refine the centre to a fraction of a pixel with a confidence, --flatten takes uneven light out first)
   eh3d-vision align DESIGN.csv MEASURED.csv [--scale] [--pair-nearest] [--isocam-args] [--max-rms 0.1] [--max-stretch 0.01]   the turn and the shift that put the board where it is
   eh3d-vision measure IMAGE [--mm-per-px V] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   the parts of a picture: centre, turn, length, width and area in millimetres, as a CSV or JSON file
+  eh3d-vision crosses IMAGE [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the cross-shaped marks found (plus signs with their arms along the axes of the picture)
 
 IMAGE is a PNG or a PGM file. The CSV files have one point per line: x,y in millimetres, in the same order in both files.";
 
@@ -186,6 +188,46 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 }
             }
             verdict
+        }
+        "crosses" => {
+            let mut s = CrossSettings::default();
+            if switch(&mut args, "--light") {
+                s.polarity = Polarity::Light;
+            }
+            let flatten_px = flag(&mut args, "--flatten")?
+                .map(|v| count(&v, "--flatten"))
+                .transpose()?;
+            let cfg = config();
+            s.threshold = cfg.threshold;
+            s.min_size = cfg.cross_min_size;
+            s.max_size = cfg.cross_max_size;
+            s.max_elongation = cfg.cross_max_elongation;
+            s.max_spots = cfg.max_parts;
+            if let Some(v) = flag(&mut args, "--min-size")? {
+                s.min_size = num(&v, "--min-size")?;
+            }
+            if let Some(v) = flag(&mut args, "--max-size")? {
+                s.max_size = num(&v, "--max-size")?;
+            }
+            finish(&args, 1)?;
+            let path = args.first().ok_or("crosses needs an image")?;
+            let img = picture(path, &cfg, flatten_px)?;
+            let found = find_crosses(&img, &s)?;
+            for (i, c) in found.iter().enumerate() {
+                println!(
+                    "{}: ({:.2}, {:.2}) px, size {:.0} px, arm {:.1} px, score {:.2}",
+                    i + 1,
+                    c.x,
+                    c.y,
+                    c.size,
+                    c.arm,
+                    c.score
+                );
+            }
+            if found.is_empty() {
+                println!("no crosses found");
+            }
+            Ok(())
         }
         "measure" => {
             let mut s = PartSettings::default();

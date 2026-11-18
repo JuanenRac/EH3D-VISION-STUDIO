@@ -8,6 +8,7 @@ pub use eh3d_image as image;
 pub mod align;
 pub mod browse;
 pub mod config;
+pub mod cross;
 pub mod fiducial;
 pub mod flatten;
 pub mod grid;

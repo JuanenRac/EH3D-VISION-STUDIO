@@ -262,3 +262,48 @@ fn measure_needs_a_scale_a_known_format_and_a_picture_within_the_limits() {
     );
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// A board of 240 by 140 with one dark cross of 31 pixels centred at (60, 50) and one dark disc.
+fn cross_picture() -> Vec<u8> {
+    let (w, h) = (240usize, 140usize);
+    let mut data = vec![220u8; w * h];
+    for y in 0..h {
+        for x in 0..w {
+            let (dx, dy) = (x.abs_diff(60), y.abs_diff(50));
+            let in_cross = dx <= 15 && dy <= 15 && (dx <= 2 || dy <= 2);
+            let in_disc = (x as f64 - 170.0).powi(2) + (y as f64 - 80.0).powi(2) <= 225.0;
+            if in_cross || in_disc {
+                data[y * w + x] = 30;
+            }
+        }
+    }
+    pgm(w, h, &data)
+}
+
+#[test]
+fn crosses_finds_the_plus_signs_and_not_the_discs() {
+    let dir = scratch("crosses");
+    fs::write(dir.join("marks.pgm"), cross_picture()).unwrap();
+    let found = run(&dir, &["crosses", "marks.pgm"]);
+    assert!(found.status.success(), "{}", err(&found));
+    let text = out(&found);
+    assert_eq!(marks_in(&text), 1, "{text}");
+    assert!(
+        text.starts_with("1: (60.00, 50.00) px, size 31 px, arm 5.0 px, score "),
+        "{text}"
+    );
+    // the discs are still the business of find
+    assert_eq!(marks_in(&out(&run(&dir, &["find", "marks.pgm"]))), 1);
+    // the range of the size is an option, and a bad one is refused
+    let none = run(&dir, &["crosses", "marks.pgm", "--min-size", "40"]);
+    assert!(out(&none).contains("no crosses found"), "{}", out(&none));
+    let bad = run(&dir, &["crosses", "marks.pgm", "--min-size", "3"]);
+    assert!(
+        !bad.status.success() && err(&bad).contains("crosses"),
+        "{}",
+        err(&bad)
+    );
+    fs::write(dir.join("vision.cfg"), "cross_min_size = 40\n").unwrap();
+    assert!(out(&run(&dir, &["crosses", "marks.pgm"])).contains("no crosses"));
+    let _ = fs::remove_dir_all(&dir);
+}
