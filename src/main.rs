@@ -14,14 +14,18 @@ use eh3d_vision_studio::flatten::flatten;
 use eh3d_vision_studio::image::{from_bytes, Gray};
 use eh3d_vision_studio::inspect::{
     find_package, judge, parse_table, summary as inspect_summary, to_csv as inspect_csv,
-    to_json as inspect_json,
+    to_json as inspect_json, Package,
 };
 use eh3d_vision_studio::lang::Lang;
 use eh3d_vision_studio::lens::{fit_lens, undistort2};
 use eh3d_vision_studio::limit::{read_limited, read_text_limited, write_text};
-use eh3d_vision_studio::measure::{measure_parts, to_csv, to_json, PartSettings};
-use eh3d_vision_studio::offset::{pick_offset, to_csv as offset_csv, to_json as offset_json};
+use eh3d_vision_studio::measure::{measure_parts, to_csv, to_json, Part, PartSettings};
+use eh3d_vision_studio::offset::{
+    estimate_nozzle, mirror_parts, nozzle_cfg, pick_offset, pick_offsets, to_csv as offset_csv,
+    to_json as offset_json, to_table_csv as offset_table, OffsetSettings,
+};
 use eh3d_vision_studio::points::parse as parse_points;
+use eh3d_vision_studio::quality;
 use eh3d_vision_studio::report::html as report_html;
 use eh3d_vision_studio::ring::find_rings;
 use eh3d_vision_studio::scale::{from_pitch, Scale};
@@ -37,7 +41,9 @@ const HELP: &str = "eh3d-vision: fiducials in a camera image
   eh3d-vision align DESIGN.csv MEASURED.csv [--scale] [--pair-nearest] [--isocam-args] [--max-rms 0.1] [--max-stretch 0.01]   the turn and the shift that put the board where it is
   eh3d-vision measure IMAGE [--mm-per-px V] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   the parts of a picture: centre, turn, length, width and area in millimetres, as a CSV or JSON file
   eh3d-vision crosses IMAGE [--turned] [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the cross-shaped marks found (plus signs; with --turned the arms may have any angle and the angle is printed)
-  eh3d-vision offset IMAGE --package NAME [--table FILE] [--mm-per-px V] [--nozzle-x MM] [--nozzle-y MM] [--nominal-angle DEG] [--tolerance MM] [--max-offset MM] [--max-turn DEG] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   where a picked part is held, from a picture of it taken from below (one part in it): its offset from the axis of the nozzle and its turn from the way it should be held, the correction that puts it right, its size against the body of the package; exit 1 when it is the wrong size, too far off or turned too much
+  eh3d-vision offset IMAGE --package NAME [--table FILE] [--mm-per-px V] [--nozzle-x MM] [--nozzle-y MM] [--nominal-angle DEG] [--tolerance MM] [--max-offset MM] [--max-turn DEG] [--mirror] [--each] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   where a picked part is held, from a picture of it taken from below (one part in it): its offset from the axis of the nozzle and its turn from the way it should be held, the correction that puts it right, its size against the body of the package; --mirror when the camera sees the part turned over left to right; --each takes every part of the picture (a tray) and writes a table of corrections, one row for each; exit 1 when a part is the wrong size, too far off or turned too much
+  eh3d-vision nozzle IMAGE IMAGE... --package NAME [--table FILE] [--mm-per-px V] [--mirror] [--light] [--flatten PX] [--output FILE] [--replace]   where the axis of the nozzle is, from pictures of parts picked with it (one part in each, at least two pictures): the lines nozzle_x_mm and nozzle_y_mm for vision.cfg, with how spread the parts are
+  eh3d-vision quality IMAGE [--min-contrast V] [--min-mean V] [--max-mean V] [--min-sharpness V] [--format csv|json] [--output FILE] [--replace]   whether a picture is good enough to measure from: its sharpness, contrast and mean grey level, and why it is refused (flat, dark, bright or blurry); exit 1 when it is refused
   eh3d-vision inspect IMAGE --package NAME [--table FILE] [--mm-per-px V] [--tolerance MM] [--max-angle DEG] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   each part of a picture compared with the body of its package from a table (CSV with package, body_long_mm, body_short_mm), one verdict per part; exit 1 when a part fails
   eh3d-vision shots (--package NAME [--table FILE] | --body-long MM --body-short MM) --fov-w MM --fov-h MM [--overlap F] [--margin MM] [--output FILE] [--replace]   the places of the camera that cover a part bigger than its field (millimetres from the centre of the part), row after row, as CSV; no camera is needed
   eh3d-vision lens IMAGE [--columns C] [--rows R] [--max-rms PX] [--light] [--flatten PX]   the two radial factors of the lens from a grid of marks (columns and rows as grid_columns and grid_rows), refused when the marks stay farther than --max-rms pixels from their lattice
@@ -109,6 +115,114 @@ fn count(text: &str, what: &str) -> Result<usize, String> {
     text.trim()
         .parse::<usize>()
         .map_err(|_| format!("{what} '{text}' is not a whole number"))
+}
+
+/// What `offset` and `nozzle` read from their options and the configuration file before the picture is looked at.
+struct PickOptions {
+    parts: PartSettings,
+    flatten_px: Option<usize>,
+    mm_per_px: Option<f64>,
+    package: String,
+    table: Option<String>,
+    settings: OffsetSettings,
+    /// The camera sees the part turned over left to right (`--mirror` or `pick_mirror`).
+    mirror: bool,
+}
+
+/// Takes the options of a command about a part held by a nozzle out of `args`: the polarity, the light, the scale, the package and its table, and the numbers of the offset.
+fn pick_options(cmd: &str, args: &mut Vec<String>, cfg: &Config) -> Result<PickOptions, String> {
+    let mut parts = PartSettings::default();
+    if switch(args, "--light") {
+        parts.polarity = Polarity::Light;
+    }
+    let mirror = switch(args, "--mirror") || cfg.pick_mirror;
+    let flatten_px = flag(args, "--flatten")?
+        .map(|v| count(&v, "--flatten"))
+        .transpose()?;
+    let mm_per_px = flag(args, "--mm-per-px")?
+        .map(|v| num(&v, "--mm-per-px"))
+        .transpose()?;
+    let package = flag(args, "--package")?;
+    let table = flag(args, "--table")?;
+    let package = package
+        .or_else(|| (!cfg.inspect_package.is_empty()).then(|| cfg.inspect_package.clone()))
+        .ok_or_else(|| format!("{cmd} needs --package, the name of the package in the table (or inspect_package in vision.cfg)"))?;
+    let mut settings = cfg.offset_settings();
+    for (name, slot) in [
+        ("--nozzle-x", &mut settings.nozzle_x_mm),
+        ("--nozzle-y", &mut settings.nozzle_y_mm),
+        ("--nominal-angle", &mut settings.nominal_angle_deg),
+        ("--tolerance", &mut settings.tolerance_mm),
+        ("--max-offset", &mut settings.max_offset_mm),
+        ("--max-turn", &mut settings.max_turn_deg),
+    ] {
+        if let Some(v) = flag(args, name)? {
+            *slot = num(&v, name)?;
+        }
+    }
+    parts.threshold = cfg.threshold;
+    parts.min_area_px = cfg.part_min_area;
+    parts.max_area_px = cfg.part_max_area;
+    parts.max_parts = cfg.max_parts;
+    Ok(PickOptions {
+        parts,
+        flatten_px,
+        mm_per_px,
+        package,
+        table,
+        settings,
+        mirror,
+    })
+}
+
+/// The millimetres of a pixel and the package (read from its table) that the options name.
+fn pick_inputs(cmd: &str, opts: &PickOptions, cfg: &Config) -> Result<(f64, Package), String> {
+    let mm = opts.mm_per_px.unwrap_or(cfg.mm_per_px);
+    if mm <= 0.0 {
+        return Err(format!(
+            "{cmd} needs the scale: --mm-per-px, or mm_per_px in vision.cfg (the command calibrate works it out)"
+        ));
+    }
+    let table_file = opts
+        .table
+        .clone()
+        .unwrap_or_else(|| cfg.package_table.clone());
+    if table_file.is_empty() {
+        return Err(format!(
+            "{cmd} needs the table of packages: --table, or package_table in vision.cfg"
+        ));
+    }
+    let table = parse_table(&read_text_limited(
+        Path::new(&table_file),
+        cfg.max_file_mib,
+    )?)
+    .map_err(|e| format!("{table_file}: {e}"))?;
+    let body = find_package(&table, &opts.package)?.clone();
+    Ok((mm, body))
+}
+
+/// The parts of a picture of picked parts, in millimetres: the picture is read, checked when `quality_check` is on (as it was taken, before the light is flattened), measured and turned over
+/// left to right when the camera sees them mirrored.
+fn picked_parts(
+    path: &str,
+    cfg: &Config,
+    opts: &PickOptions,
+    mm_per_px: f64,
+) -> Result<Vec<Part>, String> {
+    let raw = picture(path, cfg, Some(0))?;
+    if cfg.quality_check {
+        quality::require_good(&raw, &cfg.quality_settings()).map_err(|e| format!("{path}: {e}"))?;
+    }
+    let img = match opts.flatten_px.unwrap_or(cfg.flatten_window) {
+        0 => raw,
+        window => flatten(&raw, window)?,
+    };
+    let parts = measure_parts(&img, &opts.parts, Scale { mm_per_px })?;
+    Ok(if opts.mirror {
+        mirror_parts(&parts)
+    } else {
+        parts
+    })
 }
 
 fn run(mut args: Vec<String>) -> Result<(), String> {
@@ -413,75 +527,48 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
             Ok(())
         }
         "offset" => {
-            let mut s = PartSettings::default();
-            if switch(&mut args, "--light") {
-                s.polarity = Polarity::Light;
-            }
             let replace = switch(&mut args, "--replace");
-            let flatten_px = flag(&mut args, "--flatten")?
-                .map(|v| count(&v, "--flatten"))
-                .transpose()?;
-            let mm_per_px = flag(&mut args, "--mm-per-px")?
-                .map(|v| num(&v, "--mm-per-px"))
-                .transpose()?;
-            let package = flag(&mut args, "--package")?;
-            let table_path = flag(&mut args, "--table")?;
+            let each = switch(&mut args, "--each");
             let cfg = config();
-            let package = package
-                .or_else(|| (!cfg.inspect_package.is_empty()).then(|| cfg.inspect_package.clone()))
-                .ok_or("offset needs --package, the name of the package in the table (or inspect_package in vision.cfg)")?;
+            let opts = pick_options("offset", &mut args, &cfg)?;
             let replace = replace || cfg.replace_output;
-            let mut settings = cfg.offset_settings();
-            for (name, slot) in [
-                ("--nozzle-x", &mut settings.nozzle_x_mm),
-                ("--nozzle-y", &mut settings.nozzle_y_mm),
-                ("--nominal-angle", &mut settings.nominal_angle_deg),
-                ("--tolerance", &mut settings.tolerance_mm),
-                ("--max-offset", &mut settings.max_offset_mm),
-                ("--max-turn", &mut settings.max_turn_deg),
-            ] {
-                if let Some(v) = flag(&mut args, name)? {
-                    *slot = num(&v, name)?;
-                }
-            }
             let format = flag(&mut args, "--format")?.unwrap_or_else(|| "csv".to_string());
             let output = flag(&mut args, "--output")?;
             finish(&args, 1)?;
             if !matches!(format.as_str(), "csv" | "json") {
                 return Err(format!("--format '{format}' is not csv or json"));
             }
+            if each && format == "json" {
+                return Err("--each writes a CSV table; --format json is for one part".into());
+            }
             let path = args.first().ok_or("offset needs an image")?;
-            let mm = mm_per_px.unwrap_or(cfg.mm_per_px);
-            if mm <= 0.0 {
-                return Err(
-                    "offset needs the scale: --mm-per-px, or mm_per_px in vision.cfg (the command calibrate works it out)"
-                        .into(),
+            let (mm, body) = pick_inputs("offset", &opts, &cfg)?;
+            let parts = picked_parts(path, &cfg, &opts, mm)?;
+            if each {
+                // every part of the picture, each on its own: the table of corrections of a tray
+                let held = pick_offsets(&parts, &body, &opts.settings)?;
+                deliver(&offset_table(&held, &body), output, replace)?;
+                let failing = held.iter().filter(|o| !o.passes()).count();
+                eprintln!(
+                    "{} parts, {} pass and {} do not",
+                    held.len(),
+                    held.len() - failing,
+                    failing
                 );
+                if failing > 0 {
+                    return Err(format!(
+                        "{failing} of {} parts do not pass for the package {}",
+                        held.len(),
+                        body.name
+                    ));
+                }
+                return Ok(());
             }
-            let table_file = table_path.unwrap_or_else(|| cfg.package_table.clone());
-            if table_file.is_empty() {
-                return Err(
-                    "offset needs the table of packages: --table, or package_table in vision.cfg"
-                        .into(),
-                );
-            }
-            let table = parse_table(&read_text_limited(
-                Path::new(&table_file),
-                cfg.max_file_mib,
-            )?)
-            .map_err(|e| format!("{table_file}: {e}"))?;
-            let body = find_package(&table, &package)?;
-            s.threshold = cfg.threshold;
-            s.min_area_px = cfg.part_min_area;
-            s.max_area_px = cfg.part_max_area;
-            s.max_parts = cfg.max_parts;
-            let img = picture(path, &cfg, flatten_px)?;
-            let parts = measure_parts(&img, &s, Scale { mm_per_px: mm })?;
-            let held = pick_offset(&parts, body, &settings)?;
+            let held = pick_offset(&parts, &body, &opts.settings)?;
             let text = if format == "json" {
-                offset_json(&held, body)
+                offset_json(&held, &body)
             } else {
-                offset_csv(&held, body)
+                offset_csv(&held, &body)
             };
             deliver(&text, output, replace)?;
             let (cx, cy, cr) = held.correction();
@@ -495,6 +582,86 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                     "the part does not pass for the package {}: {}",
                     body.name,
                     held.reasons.join(", ")
+                ));
+            }
+            Ok(())
+        }
+        "nozzle" => {
+            let replace = switch(&mut args, "--replace");
+            let cfg = config();
+            let opts = pick_options("nozzle", &mut args, &cfg)?;
+            let replace = replace || cfg.replace_output;
+            let output = flag(&mut args, "--output")?;
+            finish(&args, usize::MAX)?;
+            if args.len() < 2 {
+                return Err(
+                    "nozzle needs at least two pictures, each with one part picked with the nozzle"
+                        .into(),
+                );
+            }
+            let (mm, body) = pick_inputs("nozzle", &opts, &cfg)?;
+            let mut held = Vec::new();
+            for path in &args {
+                let parts = picked_parts(path, &cfg, &opts, mm)?;
+                held.push(
+                    pick_offset(&parts, &body, &opts.settings)
+                        .map_err(|e| format!("{path}: {e}"))?,
+                );
+            }
+            let e = estimate_nozzle(&held)?;
+            deliver(&nozzle_cfg(&e), output, replace)?;
+            eprintln!(
+                "the axis of the nozzle from {} parts: ({:+.4}, {:+.4}) mm; spread {:.4} mm in x and {:.4} mm in y, the farthest part {:.4} mm from it; mean turn {:+.2} degrees",
+                e.count, e.x_mm, e.y_mm, e.spread_x_mm, e.spread_y_mm, e.farthest_mm, e.mean_turn_deg
+            );
+            Ok(())
+        }
+        "quality" => {
+            let replace = switch(&mut args, "--replace");
+            let cfg = config();
+            let mut s = cfg.quality_settings();
+            for (name, slot) in [
+                ("--min-contrast", &mut s.min_contrast),
+                ("--min-mean", &mut s.min_mean),
+                ("--max-mean", &mut s.max_mean),
+                ("--min-sharpness", &mut s.min_sharpness),
+            ] {
+                if let Some(v) = flag(&mut args, name)? {
+                    *slot = num(&v, name)?;
+                }
+            }
+            let format = flag(&mut args, "--format")?.unwrap_or_else(|| "csv".to_string());
+            let output = flag(&mut args, "--output")?;
+            finish(&args, 1)?;
+            if !matches!(format.as_str(), "csv" | "json") {
+                return Err(format!("--format '{format}' is not csv or json"));
+            }
+            let path = args.first().ok_or("quality needs an image")?;
+            let img = picture(path, &cfg, Some(0))?;
+            let q = quality::measure(&img)?;
+            let why = quality::reasons(&q, &s)?;
+            let text = if format == "json" {
+                quality::to_json(&q, &why)
+            } else {
+                quality::to_csv(&q, &why)
+            };
+            deliver(&text, output, replace || cfg.replace_output)?;
+            eprintln!(
+                "sharpness {:.2}, contrast {:.2}, mean level {:.2}: {}",
+                q.sharpness,
+                q.contrast,
+                q.mean,
+                if why.is_empty() {
+                    "good".to_string()
+                } else {
+                    format!("poor ({})", why.join(", "))
+                }
+            );
+            // a picture that is refused is an error for a script, after the file is written
+            if !why.is_empty() {
+                return Err(format!(
+                    "the picture is not good enough to measure from: {}",
+                    why.join(", ")
                 ));
             }
             Ok(())

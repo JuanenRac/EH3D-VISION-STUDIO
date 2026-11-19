@@ -7,6 +7,11 @@ use crate::inspect::{
 };
 use crate::lang::Msg;
 use crate::limit::{read_text_limited, write_text};
+use crate::measure::measure_parts;
+use crate::offset::{
+    mirror_parts, pick_offsets, to_table_csv as offsets_csv, REASON_OFFSET, REASON_TURN,
+};
+use crate::quality;
 use crate::shots::{plan, to_csv as shots_csv};
 use crate::window::{show, Status, Window};
 use std::path::Path;
@@ -170,6 +175,171 @@ impl Window {
                 false
             }
         }
+    }
+
+    /// Works out how each part of the picture is held, as `eh3d-vision offset --each` does: the parts are measured from the picture (with the picture check first when `quality_check` is on, and
+    /// turned over left to right when `pick_mirror` is on), each is judged against the package `inspect_package` of the table, and for each one the offset from the axis of the nozzle, the
+    /// turn from `nominal_angle_deg` and the correction that puts it right are kept. The table is read again each time.
+    pub fn offset_parts(&mut self) -> bool {
+        if self.image.is_none() {
+            self.status = Status::NeedImage;
+            return false;
+        }
+        let Some(scale) = self.measure_scale() else {
+            self.status = Status::NeedScale;
+            return false;
+        };
+        if !self.load_packages() {
+            return false;
+        }
+        let name = self.cfg.inspect_package.trim().to_string();
+        if name.is_empty() {
+            self.status = Status::NeedPackage;
+            return false;
+        }
+        let package = match find_package(&self.packages, &name) {
+            Ok(p) => p.clone(),
+            Err(e) => {
+                self.status = Status::Failed(e);
+                return false;
+            }
+        };
+        let settings = self.part_settings();
+        let check = self.cfg.quality_check.then(|| self.cfg.quality_settings());
+        // the picture is checked as it was taken, before the light is flattened
+        let raw_check = match (&check, self.image.as_ref()) {
+            (Some(q), Some(img)) => quality::require_good(&img.gray, q).map(|_| ()),
+            _ => Ok(()),
+        };
+        let measured = raw_check.and_then(|()| {
+            self.working()
+                .and_then(|g| measure_parts(&g, &settings, scale))
+        });
+        self.held.clear();
+        self.held_package = None;
+        let mut parts = match measured {
+            Ok(p) => p,
+            Err(e) => {
+                self.status = Status::Failed(e);
+                return false;
+            }
+        };
+        if parts.is_empty() {
+            self.status = Status::PartsFound(0);
+            return false;
+        }
+        if self.cfg.pick_mirror {
+            parts = mirror_parts(&parts);
+        }
+        match pick_offsets(&parts, &package, &self.cfg.offset_settings()) {
+            Ok(held) => {
+                let pass = held.iter().filter(|o| o.passes()).count();
+                self.status = Status::OffsetDone {
+                    pass,
+                    fail: held.len() - pass,
+                };
+                self.held = held;
+                self.held_package = Some(package);
+                true
+            }
+            Err(e) => {
+                self.status = Status::Failed(e);
+                false
+            }
+        }
+    }
+
+    /// One line per part with its correction and, for a part that fails, why (length, width, too far from the nozzle, turned too much), in the language of the window; true when it passes.
+    pub fn offset_lines(&self) -> Vec<(String, bool)> {
+        self.held
+            .iter()
+            .enumerate()
+            .map(|(i, o)| {
+                let (cx, cy, cr) = o.correction();
+                let (n, x, y, r) = ((i + 1).to_string(), show(cx, 3), show(cy, 3), show(cr, 2));
+                if o.passes() {
+                    (Msg::OffsetPass.with(self.lang, &[&n, &x, &y, &r]), true)
+                } else {
+                    let why: Vec<&str> = o
+                        .reasons
+                        .iter()
+                        .map(|reason| match *reason {
+                            REASON_LENGTH => Msg::ReasonLength.tr(self.lang),
+                            REASON_OFFSET => Msg::ReasonOffset.tr(self.lang),
+                            REASON_TURN => Msg::ReasonTurn.tr(self.lang),
+                            _ => Msg::ReasonWidth.tr(self.lang),
+                        })
+                        .collect();
+                    (
+                        Msg::OffsetFail.with(self.lang, &[&n, &why.join(", "), &x, &y, &r]),
+                        false,
+                    )
+                }
+            })
+            .collect()
+    }
+
+    /// Writes the table of corrections as the CSV file `<picture>-offsets.csv` beside the picture, the columns of `eh3d-vision offset --each`.
+    pub fn save_offsets(&mut self) -> bool {
+        let Some((folder, stem)) = self.beside() else {
+            self.status = Status::NeedImage;
+            return false;
+        };
+        let Some(package) = self.held_package.clone().filter(|_| !self.held.is_empty()) else {
+            self.status = Status::NeedParts;
+            return false;
+        };
+        let name = format!("{stem}-offsets.csv");
+        match write_text(
+            &folder.join(&name),
+            &offsets_csv(&self.held, &package),
+            self.cfg.replace_output,
+        ) {
+            Ok(()) => {
+                self.status = Status::Exported(name);
+                true
+            }
+            Err(e) => {
+                self.status = Status::Failed(e);
+                false
+            }
+        }
+    }
+
+    /// Measures the sharpness, the contrast and the mean grey level of the open picture and says whether it is good enough to measure from, with the values of the panel (the picture as it
+    /// was opened, not with the light flattened).
+    pub fn check_quality(&mut self) -> bool {
+        let Some(img) = self.image.as_ref() else {
+            self.status = Status::NeedImage;
+            return false;
+        };
+        let result = quality::measure(&img.gray)
+            .and_then(|q| quality::reasons(&q, &self.cfg.quality_settings()).map(|why| (q, why)));
+        match result {
+            Ok((q, why)) => {
+                self.quality = Some(q);
+                self.status = if why.is_empty() {
+                    Status::QualityGood
+                } else {
+                    Status::QualityPoor(why)
+                };
+                true
+            }
+            Err(e) => {
+                self.quality = None;
+                self.status = Status::Failed(e);
+                false
+            }
+        }
+    }
+
+    /// The numbers of the last check of the picture, in the language of the window.
+    pub fn quality_line(&self) -> Option<String> {
+        let q = self.quality?;
+        Some(Msg::QualityLine.with(
+            self.lang,
+            &[show(q.sharpness, 2), show(q.contrast, 2), show(q.mean, 2)],
+        ))
     }
 
     /// The size in millimetres of the part the pictures are planned for: `shots_part_width` by `shots_part_height` when both are above 0, else the body of the package `inspect_package`
@@ -736,6 +906,210 @@ mod tests {
                 rows: 2,
             },
             Status::NeedBody,
+        ] {
+            let texts: Vec<String> = Lang::ALL.iter().map(|l| st.text(*l)).collect();
+            assert!(
+                texts.iter().all(|t| !t.is_empty() && !t.contains('{')),
+                "{st:?}"
+            );
+            assert_ne!(texts[0], texts[5], "{st:?}");
+        }
+    }
+
+    /// A window with the picture of two parts open, the scale, the table and the package `0805` named, and the lines of `extra` after them.
+    fn holding(s: &Scratch, extra: &str) -> Window {
+        let cfg = format!(
+            "mm_per_px = 0.05\npackage_table = {}\ninspect_package = 0805\n{extra}",
+            table(s).display()
+        );
+        let mut w = window_with(&cfg);
+        assert!(w.open_image(&parts_picture(s)));
+        w
+    }
+
+    fn field(w: &Window, key: &str) -> usize {
+        w.fields.iter().position(|f| f.key == key).unwrap()
+    }
+
+    #[test]
+    fn the_correction_of_every_part_is_worked_out_listed_and_saved_as_a_table() {
+        let s = Scratch::new("offsets");
+        let mut none = window_with("");
+        assert!(!none.offset_parts());
+        assert_eq!(none.status, Status::NeedImage);
+        assert!(!none.save_offsets());
+        assert_eq!(none.status, Status::NeedImage);
+        let mut w = holding(&s, "nozzle_x_mm = -5\nnominal_angle_deg = 0\n");
+        assert!(!w.save_offsets());
+        assert_eq!(w.status, Status::NeedParts);
+        assert!(w.offset_parts());
+        // the wider part is the larger one and comes first; it is too wide for the package
+        assert_eq!(w.status, Status::OffsetDone { pass: 1, fail: 1 });
+        assert_eq!(w.held.len(), 2);
+        assert_eq!(w.held[0].reasons, vec!["width"]);
+        assert!(w.held[1].passes());
+        // the offset is the place of the part from the axis of the nozzle, and the correction the opposite
+        let o = &w.held[1];
+        assert!((o.x_mm - (o.part.x_mm + 5.0)).abs() < 1e-9, "{o:?}");
+        assert!((o.y_mm - o.part.y_mm).abs() < 1e-9);
+        let lines = w.offset_lines();
+        assert_eq!(lines.len(), 2);
+        assert!(!lines[0].1 && lines[1].1);
+        assert!(
+            lines[0].0.starts_with("Part 1 fails (width): correction ("),
+            "{lines:?}"
+        );
+        let (cx, cy, cr) = o.correction();
+        assert_eq!(
+            lines[1].0,
+            format!(
+                "Part 2: correction ({}, {}) mm, turn {} degrees",
+                show(cx, 3),
+                show(cy, 3),
+                show(cr, 2)
+            )
+        );
+        // the table is the one of the command line: a column with the number of the part and a row for each
+        assert!(w.save_offsets());
+        assert_eq!(w.status, Status::Exported("parts-offsets.csv".into()));
+        let csv = fs::read_to_string(s.path("parts-offsets.csv")).unwrap();
+        assert_eq!(
+            csv,
+            crate::offset::to_table_csv(&w.held, w.held_package.as_ref().unwrap())
+        );
+        assert!(csv.starts_with(crate::offset::TABLE_HEADER), "{csv}");
+        assert_eq!(csv.lines().count(), 3);
+        assert!(!w.save_offsets());
+        assert!(matches!(&w.status, Status::Failed(e) if e.starts_with("file_exists")));
+        // a limit that is too tight fails the part with its reason, in the language of the window
+        let far = field(&w, "pick_max_offset_mm");
+        assert!(w.set_field(far, "0.01".into()));
+        assert!(w.offset_parts());
+        assert_eq!(w.status, Status::OffsetDone { pass: 0, fail: 2 });
+        assert!(
+            w.offset_lines()[1].0.contains("too far from the nozzle"),
+            "{:?}",
+            w.offset_lines()
+        );
+        let turn = field(&w, "pick_max_turn_deg");
+        assert!(!w.set_field(turn, "91".into()) && w.status.is_problem());
+        // a new picture forgets the table
+        assert!(w.open_image(&parts_picture(&s)));
+        assert!(w.held.is_empty() && w.offset_lines().is_empty());
+    }
+
+    #[test]
+    fn a_camera_that_sees_the_parts_mirrored_changes_the_sign_of_their_x_and_of_their_turn() {
+        let s = Scratch::new("offsets_mirror");
+        let mut w = holding(&s, "");
+        assert!(w.offset_parts());
+        let direct = w.held.clone();
+        w.set_pick_mirror(true);
+        assert!(w.held.is_empty());
+        assert!(w.offset_parts());
+        assert_eq!(w.held.len(), direct.len());
+        for (m, d) in w.held.iter().zip(&direct) {
+            assert_eq!(m.part.x_mm, -d.part.x_mm);
+            assert_eq!(m.part.y_mm, d.part.y_mm);
+            assert_eq!(m.x_mm, -d.x_mm);
+            assert_eq!(m.part.length_mm, d.part.length_mm);
+        }
+        w.set_pick_mirror(false);
+        assert!(w.offset_parts());
+        assert_eq!(w.held, direct);
+    }
+
+    #[test]
+    fn the_corrections_are_refused_with_the_reason_and_leave_nothing_behind() {
+        let s = Scratch::new("offsets_refused");
+        // no scale
+        let mut w = window_with("");
+        assert!(w.open_image(&parts_picture(&s)));
+        assert!(!w.offset_parts());
+        assert_eq!(w.status, Status::NeedScale);
+        // no table, no package, a package that is not in the table
+        let mut w = window_with("mm_per_px = 0.05\n");
+        assert!(w.open_image(&parts_picture(&s)));
+        assert!(!w.offset_parts());
+        assert_eq!(w.status, Status::NeedTable);
+        let mut w = holding(&s, "");
+        let name = field(&w, "inspect_package");
+        assert!(w.set_field(name, String::new()));
+        assert!(!w.offset_parts());
+        assert_eq!(w.status, Status::NeedPackage);
+        assert!(w.set_field(name, "nope".into()));
+        assert!(!w.offset_parts());
+        assert!(matches!(&w.status, Status::Failed(e) if e.starts_with("package_unknown")));
+        assert!(w.held.is_empty());
+        // a picture with nothing in it
+        let mut blank = holding(&s, "");
+        let path = s.path("blank.pgm");
+        fs::write(&path, pgm(&Gray::blank(100, 100, 220).unwrap())).unwrap();
+        assert!(blank.open_image(&path));
+        assert!(!blank.offset_parts());
+        assert_eq!(blank.status, Status::PartsFound(0));
+        // the check of the picture comes first when it is on: a flat picture is refused, a good one is not
+        let mut checked = holding(&s, "quality_check = yes\n");
+        assert!(checked.offset_parts());
+        assert!(checked.open_image(&path));
+        assert!(!checked.offset_parts());
+        assert!(
+            matches!(&checked.status, Status::Failed(e) if e.starts_with("poor_picture: flat")),
+            "{:?}",
+            checked.status
+        );
+        assert!(checked.held.is_empty());
+        checked.set_quality_check(false);
+        assert!(!checked.offset_parts());
+        assert_eq!(checked.status, Status::PartsFound(0));
+    }
+
+    #[test]
+    fn the_picture_is_checked_with_the_values_of_the_panel_and_the_numbers_are_told() {
+        let s = Scratch::new("quality");
+        let mut w = window_with("");
+        assert!(!w.check_quality());
+        assert_eq!(w.status, Status::NeedImage);
+        assert!(w.quality_line().is_none());
+        assert!(w.open_image(&parts_picture(&s)));
+        assert!(w.check_quality());
+        assert_eq!(w.status, Status::QualityGood);
+        assert!(!w.status.is_problem());
+        let line = w.quality_line().unwrap();
+        assert!(
+            line.starts_with("Sharpness ")
+                && line.contains(", contrast ")
+                && line.contains(", mean level "),
+            "{line}"
+        );
+        // a contrast that this picture does not have, a mean that it is below, and a sharpness that it is below
+        let contrast = field(&w, "quality_min_contrast");
+        assert!(w.set_field(contrast, "250".into()));
+        assert!(w.check_quality());
+        assert_eq!(w.status, Status::QualityPoor(vec!["flat"]));
+        assert!(w.status.is_problem());
+        assert_eq!(w.status.text(Lang::En), "Poor picture: no contrast");
+        assert!(w.set_field(contrast, "10".into()));
+        let sharp = field(&w, "quality_min_sharpness");
+        assert!(w.set_field(sharp, "1000000".into()));
+        assert!(w.check_quality());
+        assert_eq!(w.status, Status::QualityPoor(vec!["blurry"]));
+        let min = field(&w, "quality_min_mean");
+        assert!(w.set_field(sharp, "0".into()));
+        assert!(w.set_field(min, "230".into()));
+        assert!(w.check_quality());
+        assert_eq!(w.status, Status::QualityPoor(vec!["dark"]));
+        // a mean range that makes no sense is refused and the old one stays
+        assert!(!w.set_field(min, "240".into()));
+        assert!(w.status.is_problem());
+        // a new picture forgets the numbers
+        assert!(w.open_image(&parts_picture(&s)));
+        assert!(w.quality_line().is_none());
+        // the new status sentences are spoken in every language
+        for st in [
+            Status::OffsetDone { pass: 2, fail: 1 },
+            Status::QualityGood,
+            Status::QualityPoor(vec!["flat", "dark", "bright", "blurry"]),
         ] {
             let texts: Vec<String> = Lang::ALL.iter().map(|l| st.text(*l)).collect();
             assert!(

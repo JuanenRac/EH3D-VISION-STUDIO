@@ -212,6 +212,17 @@ impl Window {
         }
     }
 
+    /// The settings of the search for parts that the values of the window make.
+    pub(crate) fn part_settings(&self) -> PartSettings {
+        PartSettings {
+            polarity: self.cfg.polarity,
+            threshold: self.cfg.threshold,
+            min_area_px: self.cfg.part_min_area,
+            max_area_px: self.cfg.part_max_area,
+            max_parts: self.cfg.max_parts,
+        }
+    }
+
     /// Measures the parts of the picture in millimetres.
     pub fn measure(&mut self) -> bool {
         if self.image.is_none() {
@@ -222,13 +233,7 @@ impl Window {
             self.status = Status::NeedScale;
             return false;
         };
-        let settings = PartSettings {
-            polarity: self.cfg.polarity,
-            threshold: self.cfg.threshold,
-            min_area_px: self.cfg.part_min_area,
-            max_area_px: self.cfg.part_max_area,
-            max_parts: self.cfg.max_parts,
-        };
+        let settings = self.part_settings();
         let result = self
             .working()
             .and_then(|gray| measure_parts(&gray, &settings, scale));

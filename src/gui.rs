@@ -513,6 +513,70 @@ impl App {
             });
     }
 
+    fn offset_section(&mut self, ui: &mut egui::Ui) {
+        let lang = self.win.lang;
+        Self::heading(ui, Msg::OffsetTitle.tr(lang));
+        let mut mirrored = self.win.cfg.pick_mirror;
+        if ui
+            .checkbox(&mut mirrored, Msg::OffsetMirror.tr(lang))
+            .changed()
+        {
+            self.win.set_pick_mirror(mirrored);
+        }
+        self.fields(ui, Section::Offset);
+        let has_image = self.win.image.is_some();
+        ui.horizontal(|ui| {
+            if ui
+                .add_enabled(has_image, egui::Button::new(Msg::OffsetRun.tr(lang)))
+                .clicked()
+            {
+                self.win.offset_parts();
+            }
+            if ui
+                .add_enabled(
+                    !self.win.held.is_empty(),
+                    egui::Button::new(Msg::OffsetSave.tr(lang)),
+                )
+                .clicked()
+            {
+                self.win.save_offsets();
+            }
+        });
+        let lines = self.win.offset_lines();
+        egui::ScrollArea::vertical()
+            .id_salt("offsets")
+            .max_height(140.0)
+            .show(ui, |ui| {
+                for (line, passes) in lines {
+                    let colour = if passes { OK } else { DANGER };
+                    ui.label(egui::RichText::new(line).color(colour));
+                }
+            });
+    }
+
+    fn quality_section(&mut self, ui: &mut egui::Ui) {
+        let lang = self.win.lang;
+        Self::heading(ui, Msg::QualityTitle.tr(lang));
+        let mut on = self.win.cfg.quality_check;
+        if ui
+            .checkbox(&mut on, Msg::QualityCheckBox.tr(lang))
+            .changed()
+        {
+            self.win.set_quality_check(on);
+        }
+        self.fields(ui, Section::Quality);
+        let has_image = self.win.image.is_some();
+        if ui
+            .add_enabled(has_image, egui::Button::new(Msg::QualityRun.tr(lang)))
+            .clicked()
+        {
+            self.win.check_quality();
+        }
+        if let Some(line) = self.win.quality_line() {
+            ui.label(egui::RichText::new(line).color(DIM));
+        }
+    }
+
     fn shots_section(&mut self, ui: &mut egui::Ui) {
         let lang = self.win.lang;
         Self::heading(ui, Msg::ShotsTitle.tr(lang));
@@ -581,6 +645,7 @@ impl App {
                     .id_salt("tools")
                     .show(ui, |ui| {
                         self.search_section(ui);
+                        self.quality_section(ui);
                         self.refine_section(ui);
                         self.marks_section(ui);
                         self.scale_section(ui);
@@ -590,6 +655,7 @@ impl App {
                         self.rings_section(ui);
                         self.measure_section(ui);
                         self.inspect_section(ui);
+                        self.offset_section(ui);
                         self.shots_section(ui);
                         self.align_section(ui);
                         self.batch_section(ui);

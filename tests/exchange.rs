@@ -1618,3 +1618,424 @@ fn shots_needs_the_field_and_one_way_to_say_the_size_of_the_part() {
     }
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// The picture of `part_picture` with the part moved `dx` pixels to the right.
+fn shifted_picture(dx: usize) -> Vec<u8> {
+    let (w, h) = (240usize, 160usize);
+    let mut data = vec![220u8; w * h];
+    for y in 45..=75 {
+        for x in 70 + dx..=130 + dx {
+            data[y * w + x] = 30;
+        }
+    }
+    pgm(w, h, &data)
+}
+
+const PICK_TABLE: &str =
+    "package,body_long_mm,body_short_mm,tolerance_mm\nBIG,30.5,15.5,\nSMALL,20,10,\n";
+
+#[test]
+fn offset_each_gives_the_table_of_corrections_of_a_picture_with_several_parts() {
+    let dir = scratch("offset_each");
+    fs::write(dir.join("part.pgm"), part_picture()).unwrap();
+    fs::write(dir.join("tray.pgm"), turned_picture()).unwrap();
+    fs::write(dir.join("packages.csv"), PICK_TABLE).unwrap();
+    let with = |picture: &str, package: &str, extra: &[&str]| {
+        let mut args = vec![
+            "offset",
+            picture,
+            "--mm-per-px",
+            "0.5",
+            "--table",
+            "packages.csv",
+            "--package",
+            package,
+            "--each",
+        ];
+        args.extend_from_slice(extra);
+        run(&dir, &args)
+    };
+    // one part that passes: the header of the table and one row with the number of the part first
+    let one = with("part.pgm", "BIG", &[]);
+    assert!(one.status.success(), "{}", err(&one));
+    let text = out(&one);
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.len(), 2, "{text}");
+    assert!(
+        lines[0].starts_with("part,x_offset_mm,y_offset_mm,rot_offset_deg,"),
+        "{text}"
+    );
+    assert_eq!(
+        lines[1],
+        "1,-10.0000,10.0000,0.000,10.0000,-10.0000,0.000,30.5000,15.5000,BIG,0.0000,0.0000,pass,"
+    );
+    assert!(
+        err(&one).contains("1 parts, 1 pass and 0 do not"),
+        "{}",
+        err(&one)
+    );
+    // a picture with several parts that are not the package: a row for each, written, and the exit code is 1
+    let tray = with("tray.pgm", "BIG", &[]);
+    assert!(!tray.status.success());
+    let text = out(&tray);
+    let rows: Vec<&str> = text.lines().skip(1).collect();
+    assert!(rows.len() >= 2, "{text}");
+    for (i, row) in rows.iter().enumerate() {
+        assert!(row.starts_with(&format!("{},", i + 1)), "{row}");
+        assert_eq!(row.split(',').count(), 14, "{row}");
+    }
+    assert!(
+        err(&tray).contains(&format!(
+            "{} of {} parts do not pass",
+            rows.len(),
+            rows.len()
+        )),
+        "{}",
+        err(&tray)
+    );
+    // the single-part form still refuses a tray, and JSON is for one part
+    let single = run(
+        &dir,
+        &[
+            "offset",
+            "tray.pgm",
+            "--mm-per-px",
+            "0.5",
+            "--table",
+            "packages.csv",
+            "--package",
+            "BIG",
+        ],
+    );
+    assert!(err(&single).contains("parts_count"), "{}", err(&single));
+    let json = with("tray.pgm", "BIG", &["--format", "json"]);
+    assert!(
+        err(&json).contains("--each writes a CSV table"),
+        "{}",
+        err(&json)
+    );
+    // the table goes to a file that is not written over without --replace
+    assert!(with("part.pgm", "BIG", &["--output", "table.csv"])
+        .status
+        .success());
+    let again = with("part.pgm", "BIG", &["--output", "table.csv"]);
+    assert!(err(&again).contains("file_exists"), "{}", err(&again));
+    assert!(
+        with("part.pgm", "BIG", &["--output", "table.csv", "--replace"])
+            .status
+            .success()
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn offset_mirror_turns_a_part_that_the_camera_sees_over_left_to_right() {
+    let dir = scratch("offset_mirror");
+    fs::write(dir.join("part.pgm"), part_picture()).unwrap();
+    fs::write(dir.join("packages.csv"), PICK_TABLE).unwrap();
+    let base = [
+        "offset",
+        "part.pgm",
+        "--mm-per-px",
+        "0.5",
+        "--table",
+        "packages.csv",
+        "--package",
+        "BIG",
+    ];
+    // the part is 10 mm to the left and 10 mm up; in a mirror it is 10 mm to the right
+    let mut args = base.to_vec();
+    args.push("--mirror");
+    let seen = run(&dir, &args);
+    assert!(seen.status.success(), "{}", err(&seen));
+    assert!(
+        out(&seen).contains("\n10.0000,10.0000,0.000,-10.0000,-10.0000,0.000,"),
+        "{}",
+        out(&seen)
+    );
+    // the configuration file says the same, and the option adds nothing to it
+    fs::write(dir.join("vision.cfg"), "pick_mirror = yes\n").unwrap();
+    let cfg = run(&dir, &base);
+    assert!(out(&cfg).contains("\n10.0000,10.0000,"), "{}", out(&cfg));
+    let both = run(&dir, &args);
+    assert!(out(&both).contains("\n10.0000,10.0000,"), "{}", out(&both));
+    fs::write(dir.join("vision.cfg"), "pick_mirror = perhaps\n").unwrap();
+    let bad = run(&dir, &base);
+    assert!(
+        err(&bad).contains("pick_mirror 'perhaps' is not yes or no"),
+        "{}",
+        err(&bad)
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn nozzle_gives_the_axis_from_the_parts_that_were_picked_with_it() {
+    let dir = scratch("nozzle");
+    fs::write(dir.join("a.pgm"), part_picture()).unwrap();
+    fs::write(dir.join("b.pgm"), shifted_picture(4)).unwrap();
+    fs::write(dir.join("flat.pgm"), pgm(40, 40, &[128u8; 1600])).unwrap();
+    fs::write(dir.join("packages.csv"), PICK_TABLE).unwrap();
+    let with = |pictures: &[&str], extra: &[&str]| {
+        let mut args = vec!["nozzle"];
+        args.extend_from_slice(pictures);
+        args.extend_from_slice(&[
+            "--mm-per-px",
+            "0.5",
+            "--table",
+            "packages.csv",
+            "--package",
+            "BIG",
+        ]);
+        args.extend_from_slice(extra);
+        run(&dir, &args)
+    };
+    // the parts are at (-10, 10) and (-8, 10) millimetres: the axis is between them
+    let two = with(&["a.pgm", "b.pgm"], &[]);
+    assert!(two.status.success(), "{}", err(&two));
+    assert_eq!(out(&two), "nozzle_x_mm = -9.0000\nnozzle_y_mm = 10.0000\n");
+    assert!(
+        err(&two).contains("the axis of the nozzle from 2 parts: (-9.0000, +10.0000) mm"),
+        "{}",
+        err(&two)
+    );
+    // the lines go to a file that vision.cfg can be, and with that axis the offset of a part is from it
+    assert!(with(&["a.pgm", "b.pgm"], &["--output", "vision.cfg"])
+        .status
+        .success());
+    let held = run(
+        &dir,
+        &[
+            "offset",
+            "a.pgm",
+            "--mm-per-px",
+            "0.5",
+            "--table",
+            "packages.csv",
+            "--package",
+            "BIG",
+        ],
+    );
+    assert!(held.status.success(), "{}", err(&held));
+    assert!(
+        out(&held).contains("\n-1.0000,0.0000,0.000,1.0000,0.0000,0.000,"),
+        "{}",
+        out(&held)
+    );
+    assert!(err(&with(&["a.pgm", "b.pgm"], &["--output", "vision.cfg"])).contains("file_exists"));
+    // one picture is not enough, a picture with no part is named, and the scale and the package are needed
+    let one = with(&["a.pgm"], &[]);
+    assert!(err(&one).contains("at least two pictures"), "{}", err(&one));
+    let none = with(&["a.pgm", "flat.pgm"], &["--output", "other.cfg"]);
+    assert!(err(&none).contains("flat.pgm: no_parts"), "{}", err(&none));
+    assert!(!dir.join("other.cfg").exists());
+    let noscale = run(
+        &dir,
+        &[
+            "nozzle",
+            "a.pgm",
+            "b.pgm",
+            "--table",
+            "packages.csv",
+            "--package",
+            "BIG",
+        ],
+    );
+    assert!(
+        err(&noscale).contains("nozzle needs the scale"),
+        "{}",
+        err(&noscale)
+    );
+    let nopackage = run(
+        &dir,
+        &[
+            "nozzle",
+            "a.pgm",
+            "b.pgm",
+            "--mm-per-px",
+            "0.5",
+            "--table",
+            "packages.csv",
+        ],
+    );
+    assert!(
+        err(&nopackage).contains("nozzle needs --package"),
+        "{}",
+        err(&nopackage)
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn quality_says_whether_a_picture_is_good_enough_to_measure_from() {
+    let dir = scratch("quality");
+    fs::write(dir.join("part.pgm"), part_picture()).unwrap();
+    fs::write(dir.join("flat.pgm"), pgm(40, 40, &[128u8; 1600])).unwrap();
+    fs::write(dir.join("dark.pgm"), pgm(40, 40, &[4u8; 1600])).unwrap();
+    let good = run(&dir, &["quality", "part.pgm"]);
+    assert!(good.status.success(), "{}", err(&good));
+    let text = out(&good);
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines[0], "sharpness,contrast,mean,verdict,reason");
+    assert!(lines[1].ends_with(",pass,"), "{text}");
+    assert!(err(&good).contains(": good"), "{}", err(&good));
+    // a flat picture, and a dark one, are refused with their reasons: the file is written and the exit code is 1
+    let flat = run(&dir, &["quality", "flat.pgm"]);
+    assert!(!flat.status.success());
+    assert!(
+        out(&flat).trim_end().ends_with(",fail,flat"),
+        "{}",
+        out(&flat)
+    );
+    assert!(
+        err(&flat).contains("not good enough to measure from: flat"),
+        "{}",
+        err(&flat)
+    );
+    let dark = run(&dir, &["quality", "dark.pgm", "--format", "json"]);
+    assert!(!dark.status.success());
+    assert!(
+        out(&dark).contains("\"reasons\": [\"flat\", \"dark\"]"),
+        "{}",
+        out(&dark)
+    );
+    assert!(
+        out(&dark).contains("\"format\": \"eh3d-vision-quality\""),
+        "{}",
+        out(&dark)
+    );
+    // the least values are options, or lines of the configuration file
+    let strict = run(&dir, &["quality", "part.pgm", "--min-contrast", "200"]);
+    assert!(
+        out(&strict).trim_end().ends_with(",fail,flat"),
+        "{}",
+        out(&strict)
+    );
+    let sharp = run(
+        &dir,
+        &["quality", "part.pgm", "--min-sharpness", "100000000"],
+    );
+    assert!(
+        out(&sharp).trim_end().ends_with(",fail,blurry"),
+        "{}",
+        out(&sharp)
+    );
+    fs::write(dir.join("vision.cfg"), "quality_max_mean = 100\n").unwrap();
+    let bright = run(&dir, &["quality", "part.pgm"]);
+    assert!(
+        out(&bright).trim_end().ends_with(",fail,bright"),
+        "{}",
+        out(&bright)
+    );
+    fs::remove_file(dir.join("vision.cfg")).unwrap();
+    // a file that is not written over without --replace, and the refusals
+    assert!(run(&dir, &["quality", "part.pgm", "--output", "q.csv"])
+        .status
+        .success());
+    let again = run(&dir, &["quality", "part.pgm", "--output", "q.csv"]);
+    assert!(err(&again).contains("file_exists"), "{}", err(&again));
+    assert!(run(
+        &dir,
+        &["quality", "part.pgm", "--output", "q.csv", "--replace"]
+    )
+    .status
+    .success());
+    for (args, want) in [
+        (
+            vec!["quality", "part.pgm", "--format", "xml"],
+            "not csv or json",
+        ),
+        (
+            vec![
+                "quality",
+                "part.pgm",
+                "--min-mean",
+                "300",
+                "--max-mean",
+                "400",
+            ],
+            "make no sense",
+        ),
+        (
+            vec!["quality", "part.pgm", "--min-contrast", "-3"],
+            "make no sense",
+        ),
+        (vec!["quality"], "quality needs an image"),
+        (vec!["quality", "part.pgm", "--sharp"], "unknown option"),
+    ] {
+        let bad = run(&dir, &args);
+        assert!(
+            !bad.status.success() && err(&bad).contains(want),
+            "{args:?}: {}",
+            err(&bad)
+        );
+    }
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn offset_refuses_a_poor_picture_only_when_the_check_is_on() {
+    let dir = scratch("offset_quality");
+    fs::write(dir.join("part.pgm"), part_picture()).unwrap();
+    fs::write(
+        dir.join("dim.pgm"),
+        pgm(240, 160, &{
+            // the part picture with every level cut to a twentieth: it is too dark to trust
+            let bytes = part_picture();
+            let header = bytes.len() - 240 * 160;
+            bytes[header..].iter().map(|v| v / 20).collect::<Vec<u8>>()
+        }),
+    )
+    .unwrap();
+    fs::write(dir.join("packages.csv"), PICK_TABLE).unwrap();
+    let args = |picture: &'static str| {
+        vec![
+            "offset",
+            picture,
+            "--mm-per-px",
+            "0.5",
+            "--table",
+            "packages.csv",
+            "--package",
+            "BIG",
+        ]
+    };
+    // off by default: the dim picture is measured
+    let off = run(&dir, &args("dim.pgm"));
+    assert!(off.status.success(), "{}", err(&off));
+    fs::write(dir.join("vision.cfg"), "quality_check = yes\n").unwrap();
+    let on = run(&dir, &args("dim.pgm"));
+    assert!(!on.status.success());
+    assert!(
+        err(&on).contains("dim.pgm: poor_picture: flat+dark"),
+        "{}",
+        err(&on)
+    );
+    assert!(out(&on).is_empty());
+    // a good picture is measured with the check on
+    assert!(run(&dir, &args("part.pgm")).status.success());
+    // the same for the table of a tray and for the axis of the nozzle
+    let mut each = args("dim.pgm");
+    each.push("--each");
+    assert!(err(&run(&dir, &each)).contains("poor_picture"));
+    let nozzle = run(
+        &dir,
+        &[
+            "nozzle",
+            "part.pgm",
+            "dim.pgm",
+            "--mm-per-px",
+            "0.5",
+            "--table",
+            "packages.csv",
+            "--package",
+            "BIG",
+        ],
+    );
+    assert!(
+        err(&nozzle).contains("dim.pgm: poor_picture"),
+        "{}",
+        err(&nozzle)
+    );
+    let _ = fs::remove_dir_all(&dir);
+}

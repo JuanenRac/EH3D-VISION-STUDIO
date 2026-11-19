@@ -10,7 +10,9 @@ use crate::job::BatchJob;
 use crate::lang::{Lang, Msg};
 use crate::lens::{corrected_grid, fit_lens, predicted_grid, undistort2, Lens};
 use crate::measure::Part;
+use crate::offset::Offset;
 use crate::points;
+use crate::quality::Quality;
 use crate::ring::Ring;
 use crate::scale::Scale;
 use crate::shots::Plan;
@@ -38,6 +40,8 @@ pub enum Section {
     Inspect,
     Shots,
     Rings,
+    Offset,
+    Quality,
 }
 
 /// A value of the configuration that the person can edit in the window.
@@ -81,6 +85,13 @@ pub enum Status {
         rows: usize,
     },
     NeedBody,
+    OffsetDone {
+        pass: usize,
+        fail: usize,
+    },
+    QualityGood,
+    /// The reasons that the picture is poor (`flat`, `dark`, `bright`, `blurry`).
+    QualityPoor(Vec<&'static str>),
     RingsFound(usize),
     DesignLoaded {
         name: String,
@@ -168,6 +179,22 @@ impl Status {
                 ],
             ),
             Status::NeedBody => Msg::NeedBody.tr(lang).to_string(),
+            Status::OffsetDone { pass, fail } => {
+                Msg::OffsetDone.with(lang, &[&pass.to_string(), &fail.to_string()])
+            }
+            Status::QualityGood => Msg::QualityGood.tr(lang).to_string(),
+            Status::QualityPoor(reasons) => {
+                let why: Vec<&str> = reasons
+                    .iter()
+                    .map(|r| match *r {
+                        crate::quality::REASON_FLAT => Msg::ReasonFlat.tr(lang),
+                        crate::quality::REASON_DARK => Msg::ReasonDark.tr(lang),
+                        crate::quality::REASON_BRIGHT => Msg::ReasonBright.tr(lang),
+                        _ => Msg::ReasonBlurry.tr(lang),
+                    })
+                    .collect();
+                Msg::QualityPoor.with(lang, &[why.join(", ")])
+            }
             Status::RingsFound(0) => Msg::NoRingsFound.tr(lang).to_string(),
             Status::RingsFound(n) => Msg::RingsFound.with(lang, &[&n.to_string()]),
             Status::DesignLoaded { name, points } => {
@@ -228,6 +255,7 @@ impl Status {
                 | Status::NeedParts
                 | Status::NeedPackage
                 | Status::NeedBody
+                | Status::QualityPoor(_)
                 | Status::GridCount { .. }
                 | Status::TooLarge { .. }
                 | Status::SameFile
@@ -332,6 +360,15 @@ fn field_text(cfg: &Config, key: &str) -> String {
         "ring_min_ratio" => cfg.ring_min_ratio.to_string(),
         "ring_max_ratio" => cfg.ring_max_ratio.to_string(),
         "ring_split" => cfg.ring_split.to_string(),
+        "nozzle_x_mm" => cfg.nozzle_x_mm.to_string(),
+        "nozzle_y_mm" => cfg.nozzle_y_mm.to_string(),
+        "nominal_angle_deg" => cfg.nominal_angle_deg.to_string(),
+        "pick_max_offset_mm" => cfg.pick_max_offset_mm.to_string(),
+        "pick_max_turn_deg" => cfg.pick_max_turn_deg.to_string(),
+        "quality_min_contrast" => cfg.quality_min_contrast.to_string(),
+        "quality_min_mean" => cfg.quality_min_mean.to_string(),
+        "quality_max_mean" => cfg.quality_max_mean.to_string(),
+        "quality_min_sharpness" => cfg.quality_min_sharpness.to_string(),
         _ => String::new(),
     }
 }
@@ -370,6 +407,10 @@ pub struct Window {
     pub judged: Vec<Judged>,
     pub judged_package: Option<Package>,
     pub plan: Option<Plan>,
+    /// How each part of the picture is held (the table of corrections), with the package it was judged against, and what the check of the picture measured.
+    pub held: Vec<Offset>,
+    pub held_package: Option<Package>,
+    pub quality: Option<Quality>,
     pub selected: Option<usize>,
     pub scale: Option<Scale>,
     pub distortion: Option<Lens>,
@@ -437,6 +478,23 @@ impl Window {
             ("ring_min_ratio", Msg::RingMinRatio, Section::Rings),
             ("ring_max_ratio", Msg::RingMaxRatio, Section::Rings),
             ("ring_split", Msg::RingSplit, Section::Rings),
+            ("nozzle_x_mm", Msg::NozzleX, Section::Offset),
+            ("nozzle_y_mm", Msg::NozzleY, Section::Offset),
+            ("nominal_angle_deg", Msg::NominalAngle, Section::Offset),
+            ("pick_max_offset_mm", Msg::PickMaxOffset, Section::Offset),
+            ("pick_max_turn_deg", Msg::PickMaxTurn, Section::Offset),
+            (
+                "quality_min_contrast",
+                Msg::QualityMinContrast,
+                Section::Quality,
+            ),
+            ("quality_min_mean", Msg::QualityMinMean, Section::Quality),
+            ("quality_max_mean", Msg::QualityMaxMean, Section::Quality),
+            (
+                "quality_min_sharpness",
+                Msg::QualityMinSharpness,
+                Section::Quality,
+            ),
         ]
         .into_iter()
         .map(|(key, label, section)| FieldState {
@@ -461,6 +519,9 @@ impl Window {
             judged: Vec::new(),
             judged_package: None,
             plan: None,
+            held: Vec::new(),
+            held_package: None,
+            quality: None,
             selected: None,
             scale: None,
             distortion: None,
@@ -508,6 +569,18 @@ impl Window {
         };
     }
 
+    /// Whether the camera sees the picked parts turned over left to right (the x and the turn of each part change sign).
+    pub fn set_pick_mirror(&mut self, mirrored: bool) {
+        self.cfg.pick_mirror = mirrored;
+        self.held.clear();
+        self.held_package = None;
+    }
+
+    /// Whether a poor picture is refused before a part is measured from it.
+    pub fn set_quality_check(&mut self, on: bool) {
+        self.cfg.quality_check = on;
+    }
+
     pub fn set_allow_scale(&mut self, allow: bool) {
         self.cfg.allow_scale = allow;
         self.alignment = None;
@@ -552,6 +625,9 @@ impl Window {
                 });
                 self.image_serial += 1;
                 self.scale = None;
+                self.held.clear();
+                self.held_package = None;
+                self.quality = None;
                 self.detect();
                 self.status = Status::Opened { name, w, h };
                 true
@@ -1056,10 +1132,26 @@ mod tests {
     }
 
     #[test]
+    fn every_field_is_a_key_of_the_configuration_with_its_value_as_text() {
+        let w = window();
+        for f in &w.fields {
+            assert!(crate::config::KEYS.contains(&f.key), "{}", f.key);
+            // typing the text that is shown changes nothing
+            let mut trial = w.cfg.clone();
+            assert!(trial.set(f.key, &f.text).is_ok(), "{}", f.key);
+            assert_eq!(trial, w.cfg, "{}", f.key);
+        }
+        let mut keys: Vec<&str> = w.fields.iter().map(|f| f.key).collect();
+        keys.sort_unstable();
+        keys.dedup();
+        assert_eq!(keys.len(), w.fields.len());
+    }
+
+    #[test]
     fn a_new_window_waits_for_a_picture() {
         let w = window();
         assert_eq!(w.status, Status::Ready);
-        assert_eq!(w.fields.len(), 42);
+        assert_eq!(w.fields.len(), 51);
         assert_eq!(w.fields[0].text, "auto");
         assert_eq!(w.fields[1].text, "8");
         assert!(!w.light_marks());

@@ -122,6 +122,25 @@ pub fn pick_offset(
             ))
         }
     };
+    held_part(part, package, s)
+}
+
+/// How each part of the picture is held, one after the other and each on its own (the parts are not told apart from the part under the nozzle: this is the table of corrections that the
+/// window and `offset --each` give for a picture with several parts, such as a tray). A picture with no part is the error `no_parts`.
+pub fn pick_offsets(
+    parts: &[Part],
+    package: &Package,
+    s: &OffsetSettings,
+) -> Result<Vec<Offset>, String> {
+    check(s)?;
+    if parts.is_empty() {
+        return Err("no_parts: no part was found in the picture".into());
+    }
+    parts.iter().map(|p| held_part(*p, package, s)).collect()
+}
+
+/// The offset of one part (the settings are already checked).
+fn held_part(part: Part, package: &Package, s: &OffsetSettings) -> Result<Offset, String> {
     let size = judge(&[part], package, s.tolerance_mm, 0.0)?
         .into_iter()
         .next()
@@ -157,9 +176,14 @@ pub fn pick_offset(
 /// The offset as CSV: the line `CSV_HEADER` and one line with the offset, the correction, the size of the part, the package, the deviation from its body, the verdict (`pass` or `fail`) and the
 /// reasons joined with `+`.
 pub fn to_csv(o: &Offset, package: &Package) -> String {
+    format!("{CSV_HEADER}\n{}\n", csv_row(o, package))
+}
+
+/// The line of the CSV file for one part, without the end of the line.
+fn csv_row(o: &Offset, package: &Package) -> String {
     let (cx, cy, cr) = o.correction();
     format!(
-        "{CSV_HEADER}\n{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+        "{},{},{},{},{},{},{},{},{},{},{},{},{}",
         fixed(o.x_mm, 4),
         fixed(o.y_mm, 4),
         fixed(o.rot_deg, 3),
@@ -173,6 +197,94 @@ pub fn to_csv(o: &Offset, package: &Package) -> String {
         fixed(o.size.delta_short_mm, 4),
         if o.passes() { "pass" } else { "fail" },
         o.reasons.join("+")
+    )
+}
+
+/// The table of corrections of a picture with several parts, as CSV: the line `TABLE_HEADER` (the column `part`, the number of the part from 1 in the order of the picture, then the columns
+/// of `CSV_HEADER`) and one line for each part.
+pub fn to_table_csv(offsets: &[Offset], package: &Package) -> String {
+    let mut out = format!("{TABLE_HEADER}\n");
+    for (i, o) in offsets.iter().enumerate() {
+        out.push_str(&format!("{},{}\n", i + 1, csv_row(o, package)));
+    }
+    out
+}
+
+/// The line of column names of the table of corrections.
+pub const TABLE_HEADER: &str = "part,x_offset_mm,y_offset_mm,rot_offset_deg,x_correction_mm,y_correction_mm,rot_correction_deg,length_mm,width_mm,package,delta_long_mm,delta_short_mm,verdict,reason";
+
+/// The parts as they are held when the camera sees them turned over left to right (a camera under the nozzle that looks up, or a mirror in the way): the x of every part changes sign and its
+/// turn changes sign (kept above -90 and up to 90). The parts are turned, not the pixels, so that no half pixel is lost to the side of the centre of the picture.
+pub fn mirror_parts(parts: &[Part]) -> Vec<Part> {
+    parts
+        .iter()
+        .map(|p| {
+            let turned = -p.angle_deg;
+            Part {
+                x_mm: -p.x_mm,
+                angle_deg: if turned <= -90.0 {
+                    turned + 180.0
+                } else {
+                    turned
+                },
+                ..*p
+            }
+        })
+        .collect()
+}
+
+/// Where the axis of the nozzle is in the picture, worked out from the parts that were picked with it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NozzleEstimate {
+    /// How many parts it was worked out from.
+    pub count: usize,
+    /// The mean place of the parts in the picture, in millimetres from its centre (x to the right, y up): the best axis of the nozzle when the parts are picked at their centre.
+    pub x_mm: f64,
+    pub y_mm: f64,
+    /// How far the parts are spread about it: the standard deviation in x and in y, and the distance of the farthest part from the mean place.
+    pub spread_x_mm: f64,
+    pub spread_y_mm: f64,
+    pub farthest_mm: f64,
+    /// The mean turn of the parts from the way they should be held, in degrees.
+    pub mean_turn_deg: f64,
+}
+
+/// The axis of the nozzle from the offsets of several parts picked with it: the mean place of the parts (it does not depend on the axis that was in use when they were measured) with how
+/// spread they are. Fewer than 2 parts are the error `few_pickups`, because one part says nothing about the axis.
+pub fn estimate_nozzle(offsets: &[Offset]) -> Result<NozzleEstimate, String> {
+    let n = offsets.len();
+    if n < 2 {
+        return Err(format!(
+            "few_pickups: {n} part was given and at least 2 are needed to tell where the axis of the nozzle is"
+        ));
+    }
+    let count = n as f64;
+    let mean = |f: fn(&Offset) -> f64| offsets.iter().map(f).sum::<f64>() / count;
+    let x_mm = mean(|o| o.part.x_mm);
+    let y_mm = mean(|o| o.part.y_mm);
+    let spread = |f: fn(&Offset) -> f64, m: f64| {
+        (offsets.iter().map(|o| (f(o) - m).powi(2)).sum::<f64>() / (count - 1.0)).sqrt()
+    };
+    Ok(NozzleEstimate {
+        count: n,
+        x_mm,
+        y_mm,
+        spread_x_mm: spread(|o| o.part.x_mm, x_mm),
+        spread_y_mm: spread(|o| o.part.y_mm, y_mm),
+        farthest_mm: offsets
+            .iter()
+            .map(|o| (o.part.x_mm - x_mm).hypot(o.part.y_mm - y_mm))
+            .fold(0.0, f64::max),
+        mean_turn_deg: mean(|o| o.rot_deg),
+    })
+}
+
+/// The estimate as the two lines of `vision.cfg` that set the axis of the nozzle (`nozzle_x_mm` and `nozzle_y_mm`).
+pub fn nozzle_cfg(e: &NozzleEstimate) -> String {
+    format!(
+        "nozzle_x_mm = {}\nnozzle_y_mm = {}\n",
+        fixed(e.x_mm, 4),
+        fixed(e.y_mm, 4)
     )
 }
 
@@ -207,6 +319,7 @@ pub fn to_json(o: &Offset, package: &Package) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::image::Gray;
 
     fn package(long: f64, short: f64) -> Package {
         Package {
@@ -353,6 +466,155 @@ mod tests {
         ] {
             assert!(pick_offset(&one, &p, &bad).is_err(), "{bad:?}");
         }
+    }
+
+    #[test]
+    fn each_part_of_a_tray_gets_its_own_offset_and_its_row_in_the_table_of_corrections() {
+        let p = package(2.0, 1.25);
+        let s = OffsetSettings {
+            nozzle_x_mm: 1.0,
+            max_offset_mm: 2.5,
+            ..OffsetSettings::default()
+        };
+        let parts = [
+            part(1.5, 0.0, 3.0, 2.0, 1.25),
+            part(-2.0, 1.0, -4.0, 2.0, 1.25),
+            part(4.0, 0.0, 0.0, 2.0, 1.25),
+        ];
+        // the single-part function refuses a tray; the table takes every part, each on its own
+        assert!(pick_offset(&parts, &p, &s).is_err());
+        let all = pick_offsets(&parts, &p, &s).unwrap();
+        assert_eq!(all.len(), 3);
+        for (one, part) in all.iter().zip(&parts) {
+            assert_eq!(*one, pick_offset(&[*part], &p, &s).unwrap());
+        }
+        assert!(all[0].passes() && !all[1].passes() && !all[2].passes());
+        assert_eq!(all[1].reasons, vec!["offset"]);
+        let table = to_table_csv(&all, &p);
+        let lines: Vec<&str> = table.lines().collect();
+        assert_eq!(lines[0], TABLE_HEADER);
+        assert_eq!(lines.len(), 4);
+        assert_eq!(
+            lines[1],
+            "1,0.5000,0.0000,3.000,-0.5000,0.0000,-3.000,2.0000,1.2500,0805,0.0000,0.0000,pass,"
+        );
+        assert!(lines[2].starts_with("2,-3.0000,1.0000,-4.000,3.0000,-1.0000,4.000,"));
+        assert!(lines[2].ends_with(",fail,offset") && lines[3].starts_with("3,3.0000,0.0000,"));
+        // the table has the columns of the file of one part, with the number of the part first
+        assert_eq!(TABLE_HEADER, format!("part,{CSV_HEADER}"));
+        assert_eq!(lines[1].split(',').count(), TABLE_HEADER.split(',').count());
+        // none is the error of the single part, and settings that make no sense are refused
+        assert!(pick_offsets(&[], &p, &s)
+            .unwrap_err()
+            .starts_with("no_parts"));
+        let bad = OffsetSettings {
+            tolerance_mm: 0.0,
+            ..s
+        };
+        assert!(pick_offsets(&parts, &p, &bad).is_err());
+        assert_eq!(to_table_csv(&[], &p), format!("{TABLE_HEADER}\n"));
+    }
+
+    /// A picture of 120 by 80 with a dark rectangle of 40 by 16 pixels turned by `angle` degrees about (80, 30).
+    fn turned_rectangle(angle: f64) -> Gray {
+        let (w, h) = (120usize, 80usize);
+        let (sin, cos) = angle.to_radians().sin_cos();
+        let mut g = Gray::blank(w, h, 220).unwrap();
+        for y in 0..h {
+            for x in 0..w {
+                let (dx, up) = (x as f64 - 80.0, 30.0 - y as f64);
+                let (u, v) = (dx * cos + up * sin, -dx * sin + up * cos);
+                if u.abs() <= 20.0 && v.abs() <= 8.0 {
+                    g.data[y * w + x] = 30;
+                }
+            }
+        }
+        g
+    }
+
+    #[test]
+    fn a_part_seen_turned_over_left_to_right_changes_the_sign_of_its_x_and_of_its_turn() {
+        let g = turned_rectangle(30.0);
+        let scale = crate::scale::Scale { mm_per_px: 0.1 };
+        let settings = crate::measure::PartSettings::default();
+        let direct = crate::measure::measure_parts(&g, &settings, scale).unwrap();
+        assert!((direct[0].angle_deg - 30.0).abs() < 1.0, "{direct:?}");
+        let seen = mirror_parts(&direct);
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].x_mm, -direct[0].x_mm);
+        assert_eq!(seen[0].angle_deg, -direct[0].angle_deg);
+        // the y and the size do not change
+        assert_eq!(seen[0].y_mm, direct[0].y_mm);
+        assert_eq!(seen[0].length_mm, direct[0].length_mm);
+        assert_eq!(seen[0].area_mm2, direct[0].area_mm2);
+        // the turn stays above -90 and up to 90, and turning twice gives the part back
+        let edge = [
+            part(1.0, 2.0, 90.0, 2.0, 1.0),
+            part(-1.0, 2.0, 45.0, 2.0, 1.0),
+            part(0.0, 0.0, -89.5, 2.0, 1.0),
+            part(0.0, 0.0, 0.0, 2.0, 1.0),
+        ];
+        let once = mirror_parts(&edge);
+        assert_eq!(once[0].angle_deg, 90.0);
+        assert_eq!(once[1].angle_deg, -45.0);
+        assert_eq!(once[2].angle_deg, 89.5);
+        assert_eq!(once[0].x_mm, -1.0);
+        assert!(once
+            .iter()
+            .all(|p| p.angle_deg > -90.0 && p.angle_deg <= 90.0));
+        assert_eq!(mirror_parts(&once), edge.to_vec());
+        assert!(mirror_parts(&[]).is_empty());
+        // a part seen in a mirror, held a little to the right of the nozzle, is to the left in the picture
+        let pack = package(2.0, 1.0);
+        let held = pick_offset(
+            &mirror_parts(&[part(-0.4, 0.0, -3.0, 2.0, 1.0)]),
+            &pack,
+            &OffsetSettings::default(),
+        )
+        .unwrap();
+        assert_eq!((held.x_mm, held.rot_deg), (0.4, 3.0));
+    }
+
+    #[test]
+    fn the_axis_of_the_nozzle_is_the_mean_place_of_the_parts_picked_with_it() {
+        let p = package(2.0, 1.25);
+        let places = [(0.30, 0.10), (0.34, 0.14), (0.26, 0.06)];
+        let held = |nozzle_x: f64, nozzle_y: f64| {
+            let s = OffsetSettings {
+                nozzle_x_mm: nozzle_x,
+                nozzle_y_mm: nozzle_y,
+                ..OffsetSettings::default()
+            };
+            let parts: Vec<Part> = places
+                .iter()
+                .enumerate()
+                .map(|(i, (x, y))| part(*x, *y, i as f64, 2.0, 1.25))
+                .collect();
+            pick_offsets(&parts, &p, &s).unwrap()
+        };
+        let e = estimate_nozzle(&held(0.0, 0.0)).unwrap();
+        assert_eq!(e.count, 3);
+        assert!(
+            (e.x_mm - 0.30).abs() < 1e-12 && (e.y_mm - 0.10).abs() < 1e-12,
+            "{e:?}"
+        );
+        assert!((e.spread_x_mm - 0.04).abs() < 1e-12 && (e.spread_y_mm - 0.04).abs() < 1e-12);
+        assert!((e.farthest_mm - 0.04f64.hypot(0.04)).abs() < 1e-12);
+        assert!((e.mean_turn_deg - 1.0).abs() < 1e-12);
+        // the axis that was in use when the parts were measured does not change the answer
+        assert_eq!(estimate_nozzle(&held(5.0, -3.0)).unwrap().x_mm, e.x_mm);
+        assert_eq!(
+            nozzle_cfg(&e),
+            "nozzle_x_mm = 0.3000\nnozzle_y_mm = 0.1000\n"
+        );
+        // the lines are the keys of the configuration file
+        let cfg = crate::config::Config::parse(&nozzle_cfg(&e)).unwrap();
+        assert_eq!((cfg.nozzle_x_mm, cfg.nozzle_y_mm), (0.3, 0.1));
+        // one part says nothing about the axis, and none says less
+        assert!(estimate_nozzle(&held(0.0, 0.0)[..1])
+            .unwrap_err()
+            .starts_with("few_pickups"));
+        assert!(estimate_nozzle(&[]).unwrap_err().starts_with("few_pickups"));
     }
 
     #[test]

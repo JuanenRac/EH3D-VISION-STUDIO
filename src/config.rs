@@ -4,6 +4,7 @@
 
 use crate::fiducial::{Polarity, Settings};
 use crate::offset::OffsetSettings;
+use crate::quality::QualitySettings;
 use crate::ring::RingSettings;
 use std::path::{Path, PathBuf};
 
@@ -13,7 +14,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 59] = [
+pub const KEYS: [&str; 66] = [
     "language",
     "polarity",
     "threshold",
@@ -73,6 +74,13 @@ pub const KEYS: [&str; 59] = [
     "nozzle_y_mm",
     "pick_max_offset_mm",
     "pick_max_turn_deg",
+    "nominal_angle_deg",
+    "pick_mirror",
+    "quality_check",
+    "quality_min_contrast",
+    "quality_min_mean",
+    "quality_max_mean",
+    "quality_min_sharpness",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -173,6 +181,16 @@ pub struct Config {
     pub nozzle_y_mm: f64,
     pub pick_max_offset_mm: f64,
     pub pick_max_turn_deg: f64,
+    /// The turn of the long side of a picked part when it is held as it should be, in degrees counter-clockwise from the x axis (`offset` and the window turn the part from it).
+    pub nominal_angle_deg: f64,
+    /// Whether the camera sees the picked part turned over left to right (it looks up from under the nozzle, or there is a mirror): the x and the turn of each part change sign.
+    pub pick_mirror: bool,
+    /// Whether a picture is refused before a part is measured from it when it is flat, too dark, too bright or (when `quality_min_sharpness` is above 0) blurred, and the values of that check.
+    pub quality_check: bool,
+    pub quality_min_contrast: f64,
+    pub quality_min_mean: f64,
+    pub quality_max_mean: f64,
+    pub quality_min_sharpness: f64,
 }
 
 impl Default for Config {
@@ -238,6 +256,13 @@ impl Default for Config {
             nozzle_y_mm: 0.0,
             pick_max_offset_mm: 0.0,
             pick_max_turn_deg: 0.0,
+            nominal_angle_deg: 0.0,
+            pick_mirror: false,
+            quality_check: false,
+            quality_min_contrast: 10.0,
+            quality_min_mean: 20.0,
+            quality_max_mean: 235.0,
+            quality_min_sharpness: 0.0,
         }
     }
 }
@@ -247,6 +272,15 @@ fn number(text: &str, key: &str) -> Result<f64, String> {
         .ok()
         .filter(|v| v.is_finite())
         .ok_or_else(|| format!("{key} '{text}' is not a number"))
+}
+
+/// `yes`, `true` or `on`, or `no`, `false` or `off`.
+fn yes_no(text: &str, key: &str) -> Result<bool, String> {
+    match text {
+        "yes" | "true" | "on" => Ok(true),
+        "no" | "false" | "off" => Ok(false),
+        _ => Err(format!("{key} '{text}' is not yes or no")),
+    }
 }
 
 fn count(text: &str, key: &str) -> Result<usize, String> {
@@ -271,10 +305,20 @@ impl Config {
         OffsetSettings {
             nozzle_x_mm: self.nozzle_x_mm,
             nozzle_y_mm: self.nozzle_y_mm,
-            nominal_angle_deg: 0.0,
+            nominal_angle_deg: self.nominal_angle_deg,
             tolerance_mm: self.inspect_tolerance,
             max_offset_mm: self.pick_max_offset_mm,
             max_turn_deg: self.pick_max_turn_deg,
+        }
+    }
+
+    /// The settings of the check of the picture that the values make.
+    pub fn quality_settings(&self) -> QualitySettings {
+        QualitySettings {
+            min_contrast: self.quality_min_contrast,
+            min_mean: self.quality_min_mean,
+            max_mean: self.quality_max_mean,
+            min_sharpness: self.quality_min_sharpness,
         }
     }
 
@@ -411,6 +455,13 @@ impl Config {
             "nozzle_y_mm" => self.nozzle_y_mm = number(value, key)?,
             "pick_max_offset_mm" => self.pick_max_offset_mm = number(value, key)?,
             "pick_max_turn_deg" => self.pick_max_turn_deg = number(value, key)?,
+            "nominal_angle_deg" => self.nominal_angle_deg = number(value, key)?,
+            "pick_mirror" => self.pick_mirror = yes_no(value, key)?,
+            "quality_check" => self.quality_check = yes_no(value, key)?,
+            "quality_min_contrast" => self.quality_min_contrast = number(value, key)?,
+            "quality_min_mean" => self.quality_min_mean = number(value, key)?,
+            "quality_max_mean" => self.quality_max_mean = number(value, key)?,
+            "quality_min_sharpness" => self.quality_min_sharpness = number(value, key)?,
             "replace_output" => {
                 self.replace_output = match value {
                     "yes" | "true" | "on" => true,
@@ -560,6 +611,7 @@ impl Config {
         if !(0.0..=90.0).contains(&self.pick_max_turn_deg) {
             return Err("pick_max_turn_deg must be from 0 (not checked) to 90".into());
         }
+        crate::quality::check(&self.quality_settings())?;
         if self.ring_size_gap <= 1.0 {
             return Err("ring_size_gap must be above 1".into());
         }
@@ -768,6 +820,14 @@ square_max_size = 20",
             "pick_max_offset_mm = -1",
             "pick_max_turn_deg = 91",
             "pick_max_turn_deg = -1",
+            "nominal_angle_deg = north",
+            "pick_mirror = maybe",
+            "quality_check = 1",
+            "quality_min_contrast = -1",
+            "quality_min_sharpness = -1",
+            "quality_min_mean = 200
+quality_max_mean = 100",
+            "quality_max_mean = 300",
             "shots_part_height = -0.5",
             "inspect_package = a b",
         ] {
