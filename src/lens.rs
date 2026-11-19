@@ -33,6 +33,79 @@ pub fn undistort2(p: (f64, f64), centre: (f64, f64), k1: f64, k2: f64, norm: f64
     (centre.0 + dx * factor, centre.1 + dy * factor)
 }
 
+/// Where a lens with the factors puts a point that should be at `ideal`: the point that `undistort2` takes back to `ideal`, found by iterating. It is the inverse of `undistort2` for
+/// the factors of a real lens (below `K_LIMIT`); a point that does not settle, or a factor that would flip the picture over, is left where it is.
+pub fn distort2(ideal: (f64, f64), centre: (f64, f64), k1: f64, k2: f64, norm: f64) -> (f64, f64) {
+    let mut m = ideal;
+    for _ in 0..100 {
+        let (dx, dy) = (m.0 - centre.0, m.1 - centre.1);
+        let r2 = (dx * dx + dy * dy) / (norm * norm);
+        let factor = 1.0 + k1 * r2 + k2 * r2 * r2;
+        if !factor.is_finite() || factor < 0.05 {
+            return ideal;
+        }
+        let next = (
+            centre.0 + (ideal.0 - centre.0) / factor,
+            centre.1 + (ideal.1 - centre.1) / factor,
+        );
+        let moved = (next.0 - m.0).abs().max((next.1 - m.1).abs());
+        m = next;
+        if moved < 1e-9 {
+            break;
+        }
+    }
+    m
+}
+
+/// The places in the picture where the lens with the factors puts the lattice of a grid of `columns` x `rows` marks: the lattice that fits the marks once they are corrected, bent back
+/// through the lens. The marks of a picture that was fitted lie on these places; one that does not is a mark that is wrong. The places come in the order of the grid, row after row from
+/// the top of the picture, each row from the left.
+pub fn predicted_grid(
+    points: &[(f64, f64)],
+    columns: usize,
+    rows: usize,
+    centre: (f64, f64),
+    norm: f64,
+    k1: f64,
+    k2: f64,
+) -> Result<Vec<(f64, f64)>, String> {
+    if !(norm.is_finite() && norm > 0.0) {
+        return Err("the size of the picture must be a number above 0".into());
+    }
+    let ordered = order(points, columns, rows)?;
+    let corrected: Vec<(f64, f64)> = ordered
+        .iter()
+        .map(|p| undistort2(*p, centre, k1, k2, norm))
+        .collect();
+    let ideal = lattice(&corrected, columns, rows)?;
+    Ok(ideal
+        .into_iter()
+        .map(|p| distort2(p, centre, k1, k2, norm))
+        .collect())
+}
+
+/// The lattice that fits the marks once they are corrected with the factors, where the corrected marks are drawn (the window shows the corrected marks when the correction is on): the
+/// same lattice as `predicted_grid` before it is bent back through the lens.
+pub fn corrected_grid(
+    points: &[(f64, f64)],
+    columns: usize,
+    rows: usize,
+    centre: (f64, f64),
+    norm: f64,
+    k1: f64,
+    k2: f64,
+) -> Result<Vec<(f64, f64)>, String> {
+    if !(norm.is_finite() && norm > 0.0) {
+        return Err("the size of the picture must be a number above 0".into());
+    }
+    let ordered = order(points, columns, rows)?;
+    let corrected: Vec<(f64, f64)> = ordered
+        .iter()
+        .map(|p| undistort2(*p, centre, k1, k2, norm))
+        .collect();
+    lattice(&corrected, columns, rows)
+}
+
 /// How far the points are from their lattice, in pixels (root mean square), and the lattice.
 fn residual(
     corrected: &[(f64, f64)],
@@ -181,6 +254,64 @@ mod tests {
             );
         }
         m
+    }
+
+    #[test]
+    fn bending_a_point_and_correcting_it_are_the_inverse_of_each_other() {
+        for (k1, k2) in [(-0.1, 0.03), (0.08, -0.02), (0.0, 0.0), (0.2, 0.1)] {
+            for p in [
+                (500.0, 100.0),
+                (10.0, 470.0),
+                (320.0, 240.0),
+                (330.0, 250.0),
+            ] {
+                let bent = distort2(p, CENTRE, k1, k2, norm());
+                let back = undistort2(bent, CENTRE, k1, k2, norm());
+                assert!(
+                    (back.0 - p.0).abs() < 1e-6 && (back.1 - p.1).abs() < 1e-6,
+                    "{p:?} {k1} {k2}"
+                );
+            }
+        }
+        // a factor that would flip the picture over leaves the point where it is
+        assert_eq!(
+            distort2((600.0, 20.0), CENTRE, -3.0, 0.0, norm()),
+            (600.0, 20.0)
+        );
+    }
+
+    #[test]
+    fn the_lattice_bent_through_the_fitted_lens_lies_on_the_marks() {
+        let bent: Vec<(f64, f64)> = grid(7, 5, 70.0)
+            .into_iter()
+            .map(|p| bend(p, -0.07, 0.02))
+            .collect();
+        let l = fit_lens(&bent, 7, 5, CENTRE, norm(), 0.5).unwrap();
+        let mut shuffled = bent.clone();
+        shuffled.reverse();
+        let places = predicted_grid(&shuffled, 7, 5, CENTRE, norm(), l.k1, l.k2).unwrap();
+        assert_eq!(places.len(), 35);
+        // the marks come back in the order of the grid whatever order they were given in, and each lies on its place
+        let ordered = order(&bent, 7, 5).unwrap();
+        for (m, p) in ordered.iter().zip(&places) {
+            assert!(
+                (m.0 - p.0).abs() < 0.05 && (m.1 - p.1).abs() < 0.05,
+                "{m:?} {p:?}"
+            );
+        }
+        // with the correction on, the lattice is the one of the corrected marks, which lie on it as well
+        let straight = corrected_grid(&bent, 7, 5, CENTRE, norm(), l.k1, l.k2).unwrap();
+        for (m, p) in ordered.iter().zip(&straight) {
+            let c = undistort2(*m, CENTRE, l.k1, l.k2, norm());
+            assert!(
+                (c.0 - p.0).abs() < 0.05 && (c.1 - p.1).abs() < 0.05,
+                "{c:?} {p:?}"
+            );
+        }
+        assert!(corrected_grid(&bent, 7, 5, CENTRE, 0.0, 0.0, 0.0).is_err());
+        // a wrong number of marks or a size of 0 is refused
+        assert!(predicted_grid(&bent[..30], 7, 5, CENTRE, norm(), 0.0, 0.0).is_err());
+        assert!(predicted_grid(&bent, 7, 5, CENTRE, 0.0, 0.0, 0.0).is_err());
     }
 
     #[test]

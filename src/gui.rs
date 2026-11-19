@@ -401,6 +401,22 @@ impl App {
         if let Some(line) = self.win.distortion_line() {
             ui.label(egui::RichText::new(line).color(OK));
         }
+        let mut show = self.win.cfg.show_lens_grid;
+        if ui.checkbox(&mut show, Msg::ShowLensGrid.tr(lang)).changed() {
+            self.win.cfg.show_lens_grid = show;
+        }
+        if ui.button(Msg::UseConfiguredLens.tr(lang)).clicked() {
+            self.win.use_configured_lens();
+        }
+        if ui
+            .add_enabled(
+                self.win.distortion.is_some() && self.win.image.is_some(),
+                egui::Button::new(Msg::SaveLens.tr(lang)),
+            )
+            .clicked()
+        {
+            self.win.save_lens();
+        }
         let mut on = self.win.use_distortion;
         let changed = ui
             .add_enabled_ui(self.win.distortion.is_some(), |ui| {
@@ -583,6 +599,11 @@ impl App {
             );
             let uv = Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(1.0, 1.0));
             painter.image(tex.id(), area, uv, Color32::WHITE);
+        }
+        // the places where the fitted lens puts the lattice of the grid: small circles that the marks should lie in
+        for place in self.win.lens_grid_px() {
+            let at = self.screen(rect, place.0, place.1);
+            painter.circle_stroke(at, 7.0, Stroke::new(1.5, OK));
         }
         let in_mm = self.win.marks_mm();
         for (i, m) in self.win.marks.iter().enumerate() {

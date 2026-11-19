@@ -4,13 +4,13 @@
 use crate::align::{fit, isocam_args, pair_nearest, Transform};
 use crate::config::Config;
 use crate::fiducial::{find_with, refine, Fiducial, Polarity};
-use crate::grid::{fit_distortion, Distortion};
 use crate::image::{from_bytes, Gray};
 use crate::job::BatchJob;
 use crate::lang::{Lang, Msg};
+use crate::lens::{corrected_grid, fit_lens, predicted_grid, undistort2, Lens};
 use crate::measure::Part;
 use crate::points;
-use crate::scale::{undistort, Scale};
+use crate::scale::Scale;
 use crate::tools::ShapeMark;
 use crate::viewport::Viewport;
 use std::path::{Path, PathBuf};
@@ -52,7 +52,8 @@ pub enum Status {
     Opened { name: String, w: usize, h: usize },
     Found(usize),
     ScaleSet(f64),
-    DistortionSet(f64),
+    LensSet { k1: f64, k2: f64 },
+    NeedLens,
     DesignLoaded { name: String, points: usize },
     Aligned { dx: f64, dy: f64, turn: f64 },
     Exported(String),
@@ -93,7 +94,10 @@ impl Status {
             Status::Found(0) => Msg::NoMarks.tr(lang).to_string(),
             Status::Found(n) => Msg::Found.with(lang, &[&n.to_string()]),
             Status::ScaleSet(s) => Msg::ScaleSet.with(lang, &[&show(*s, 5)]),
-            Status::DistortionSet(k) => Msg::DistortionSet.with(lang, &[&show(*k, 5)]),
+            Status::LensSet { k1, k2 } => {
+                Msg::DistortionSet.with(lang, &[&show(*k1, 5), &show(*k2, 5)])
+            }
+            Status::NeedLens => Msg::NeedLens.tr(lang).to_string(),
             Status::DesignLoaded { name, points } => {
                 Msg::DesignLoaded.with(lang, &[name, &points.to_string()])
             }
@@ -147,6 +151,7 @@ impl Status {
                 | Status::NeedDesign
                 | Status::NeedAccepted
                 | Status::NeedPitch
+                | Status::NeedLens
                 | Status::GridCount { .. }
                 | Status::TooLarge { .. }
                 | Status::SameFile
@@ -237,6 +242,7 @@ fn field_text(cfg: &Config, key: &str) -> String {
         "report_low_score" => cfg.report_low_score.to_string(),
         "pitch_mm" => cfg.pitch_mm.to_string(),
         "pitch_tolerance" => cfg.pitch_tolerance.to_string(),
+        "lens_max_rms" => cfg.lens_max_rms.to_string(),
         _ => String::new(),
     }
 }
@@ -270,7 +276,7 @@ pub struct Window {
     pub parts: Vec<Part>,
     pub selected: Option<usize>,
     pub scale: Option<Scale>,
-    pub distortion: Option<Distortion>,
+    pub distortion: Option<Lens>,
     /// Whether the marks are corrected with the distortion before they are used.
     pub use_distortion: bool,
     pub design: Vec<(f64, f64)>,
@@ -321,6 +327,7 @@ impl Window {
             ("report_low_score", Msg::ReportLowScore, Section::Batch),
             ("pitch_mm", Msg::PitchMm, Section::Pitch),
             ("pitch_tolerance", Msg::PitchTolerance, Section::Pitch),
+            ("lens_max_rms", Msg::LensMaxRms, Section::Grid),
         ]
         .into_iter()
         .map(|(key, label, section)| FieldState {
@@ -485,7 +492,7 @@ impl Window {
     pub fn mark_px(&self, mark: &Fiducial) -> (f64, f64) {
         match (self.use_distortion, self.distortion, self.picture()) {
             (true, Some(d), Some((centre, norm))) => {
-                undistort((mark.x, mark.y), centre, d.k1, norm)
+                undistort2((mark.x, mark.y), centre, d.k1, d.k2, norm)
             }
             _ => (mark.x, mark.y),
         }
@@ -530,7 +537,8 @@ impl Window {
         }
     }
 
-    /// Works out the distortion of the lens from the marks, which must be the grid of the target (columns x rows marks).
+    /// Works out the two factors of the lens from the marks, which must be the grid of the target (columns x rows marks, at least 6). The fit is refused when the marks stay farther
+    /// than `lens_max_rms` from the lattice, or when a factor is above what a real lens has.
     pub fn fit_grid(&mut self) -> bool {
         let Some((centre, norm)) = self.picture() else {
             self.status = Status::NeedImage;
@@ -545,17 +553,57 @@ impl Window {
             return false;
         }
         let raw: Vec<(f64, f64)> = self.marks.iter().map(|m| (m.x, m.y)).collect();
-        match fit_distortion(&raw, columns, rows, centre, norm) {
+        match fit_lens(&raw, columns, rows, centre, norm, self.cfg.lens_max_rms) {
             Ok(d) => {
                 self.distortion = Some(d);
                 self.alignment = None;
-                self.status = Status::DistortionSet(d.k1);
+                self.status = Status::LensSet { k1: d.k1, k2: d.k2 };
                 true
             }
             Err(e) => {
                 self.status = Status::Failed(e);
                 false
             }
+        }
+    }
+
+    /// Takes the factors of the lens from `lens_k1` and `lens_k2` of the configuration (the ones `lens` worked out earlier), without a grid. Both at 0 mean that there are none.
+    pub fn use_configured_lens(&mut self) -> bool {
+        if self.cfg.lens_k1 == 0.0 && self.cfg.lens_k2 == 0.0 {
+            self.status = Status::NeedLens;
+            return false;
+        }
+        self.distortion = Some(Lens {
+            k1: self.cfg.lens_k1,
+            k2: self.cfg.lens_k2,
+            rms_before: 0.0,
+            rms_after: 0.0,
+            marks: 0,
+        });
+        self.alignment = None;
+        self.status = Status::LensSet {
+            k1: self.cfg.lens_k1,
+            k2: self.cfg.lens_k2,
+        };
+        true
+    }
+
+    /// The places in the picture, in pixels, where the fitted lens puts the lattice of the grid (the straight lattice itself when the marks are corrected): the marks lie on them when the fit is good, and one that does not is a wrong mark. Empty
+    /// until the lens is fitted from the marks that are there now, and when `show_lens_grid` is off.
+    pub fn lens_grid_px(&self) -> Vec<(f64, f64)> {
+        let (Some(d), Some((centre, norm))) = (self.distortion, self.picture()) else {
+            return Vec::new();
+        };
+        let (columns, rows) = (self.cfg.grid_columns, self.cfg.grid_rows);
+        if !self.cfg.show_lens_grid || d.marks == 0 || self.marks.len() != columns * rows {
+            return Vec::new();
+        }
+        let raw: Vec<(f64, f64)> = self.marks.iter().map(|m| (m.x, m.y)).collect();
+        // the marks are drawn corrected when the correction is on, and then the lattice they lie on is the straight one
+        if self.use_distortion {
+            corrected_grid(&raw, columns, rows, centre, norm, d.k1, d.k2).unwrap_or_default()
+        } else {
+            predicted_grid(&raw, columns, rows, centre, norm, d.k1, d.k2).unwrap_or_default()
         }
     }
 
@@ -646,10 +694,14 @@ impl Window {
     /// The line about the distortion, once it is worked out.
     pub fn distortion_line(&self) -> Option<String> {
         self.distortion.map(|d| {
+            if d.marks == 0 {
+                return Msg::LensConfigured.with(self.lang, &[&show(d.k1, 5), &show(d.k2, 5)]);
+            }
             Msg::DistortionLine.with(
                 self.lang,
                 &[
                     &show(d.k1, 5),
+                    &show(d.k2, 5),
                     &show(d.rms_before, 2),
                     &show(d.rms_after, 2),
                 ],
@@ -890,7 +942,7 @@ mod tests {
     fn a_new_window_waits_for_a_picture() {
         let w = window();
         assert_eq!(w.status, Status::Ready);
-        assert_eq!(w.fields.len(), 28);
+        assert_eq!(w.fields.len(), 29);
         assert_eq!(w.fields[0].text, "auto");
         assert_eq!(w.fields[1].text, "8");
         assert!(!w.light_marks());
@@ -1319,10 +1371,12 @@ mod tests {
     fn looking_for_the_marks_again_forgets_what_was_worked_out_from_the_old_ones() {
         let s = Scratch::new("forget");
         let mut w = calibrated(&s);
-        w.distortion = Some(Distortion {
+        w.distortion = Some(Lens {
             k1: 0.01,
+            k2: 0.0,
             rms_before: 1.0,
             rms_after: 0.5,
+            marks: 20,
         });
         w.use_distortion = true;
         assert!(w.detect());
@@ -1354,7 +1408,11 @@ mod tests {
             Status::Found(0),
             Status::Found(3),
             Status::ScaleSet(0.1),
-            Status::DistortionSet(0.01),
+            Status::LensSet {
+                k1: 0.01,
+                k2: -0.02,
+            },
+            Status::NeedLens,
             Status::DesignLoaded {
                 name: "d.csv".into(),
                 points: 4,

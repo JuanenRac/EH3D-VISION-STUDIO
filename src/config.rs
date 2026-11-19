@@ -11,7 +11,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 43] = [
+pub const KEYS: [&str; 44] = [
     "language",
     "polarity",
     "threshold",
@@ -55,6 +55,7 @@ pub const KEYS: [&str; 43] = [
     "square_min_size",
     "square_max_size",
     "square_max_elongation",
+    "show_lens_grid",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -131,6 +132,8 @@ pub struct Config {
     pub square_min_size: f64,
     pub square_max_size: f64,
     pub square_max_elongation: f64,
+    /// Whether the window draws, once the lens is fitted from a grid, the places where the fitted lens puts the lattice of the grid, to be compared with the marks that were found.
+    pub show_lens_grid: bool,
 }
 
 impl Default for Config {
@@ -180,6 +183,7 @@ impl Default for Config {
             square_min_size: 12.0,
             square_max_size: 200.0,
             square_max_elongation: 1.2,
+            show_lens_grid: true,
         }
     }
 }
@@ -266,6 +270,13 @@ impl Config {
                     "yes" | "true" | "on" => true,
                     "no" | "false" | "off" => false,
                     _ => return Err(format!("show_residuals '{value}' is not yes or no")),
+                }
+            }
+            "show_lens_grid" => {
+                self.show_lens_grid = match value {
+                    "yes" | "true" | "on" => true,
+                    "no" | "false" | "off" => false,
+                    _ => return Err(format!("show_lens_grid '{value}' is not yes or no")),
                 }
             }
             "refine_subpixel" => {
@@ -533,6 +544,10 @@ mod tests {
                 "line 2: max_rms is written twice",
             ),
             ("language = xx", "line 1: language 'xx'"),
+            (
+                "show_lens_grid = maybe",
+                "line 1: show_lens_grid 'maybe' is not yes or no",
+            ),
             (
                 "show_residuals = maybe",
                 "line 1: show_residuals 'maybe' is not yes or no",

@@ -219,7 +219,7 @@ impl Window {
     }
 
     /// The folder and the name of the picture without its extension, which name the files that are written beside it.
-    fn beside(&self) -> Option<(PathBuf, String)> {
+    pub(crate) fn beside(&self) -> Option<(PathBuf, String)> {
         let img = self.image.as_ref()?;
         let folder = img
             .path

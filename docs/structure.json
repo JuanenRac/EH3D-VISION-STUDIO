@@ -262,6 +262,19 @@
           }
         },
         {
+          "name": "panels.rs",
+          "desc": {
+            "en": "the panels of the window for the lens, the parts against packages and the plan of pictures",
+            "es": "los paneles de la ventana: objetivo, piezas frente a paquetes y plan de imágenes",
+            "de": "die Fensterbereiche für Objektiv, Teile gegen Gehäuse und den Bilderplan",
+            "fr": "les panneaux de la fenêtre : objectif, pièces face aux boîtiers et plan des images",
+            "it": "i pannelli della finestra: obiettivo, pezzi contro package e piano delle immagini",
+            "ja": "ウィンドウのパネル：レンズ・部品とパッケージの照合・撮影計画",
+            "zh": "窗口面板：镜头、零件与封装比对、拍摄计划",
+            "pt": "os painéis da janela: objetiva, peças face aos encapsulamentos e plano de imagens"
+          }
+        },
+        {
           "name": "scale.rs",
           "desc": {
             "en": "pixels to millimetres and the radial distortion of the lens",
