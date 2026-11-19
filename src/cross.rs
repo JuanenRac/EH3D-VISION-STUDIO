@@ -91,7 +91,7 @@ pub fn find_crosses(img: &Gray, s: &CrossSettings) -> Result<Vec<Cross>, String>
             continue;
         }
         let arm = side - rest.sqrt();
-        if arm < 1.0 || arm > 0.6 * side {
+        if arm < 1.0 || arm > 0.48 * side {
             continue;
         }
         let (mx, my) = (b.cx.round() as usize, b.cy.round() as usize);
@@ -127,6 +127,22 @@ pub fn find_crosses(img: &Gray, s: &CrossSettings) -> Result<Vec<Cross>, String>
             empty = empty.min(off as f64 / (side_px * side_px) as f64);
         }
         if empty < 0.95 {
+            continue;
+        }
+        // a disc works out to an arm about half the side and has pixels between the arms, so the arm may be at most 0.48 of the side (above) and nothing may lie beyond the arms
+        let beyond = arm / 2.0 + 1.0;
+        let mut stray = 0usize;
+        for y in b.y0..=b.y1 {
+            for x in b.x0..=b.x1 {
+                if on(img.data[y * w + x])
+                    && (x as f64 - b.cx).abs() > beyond
+                    && (y as f64 - b.cy).abs() > beyond
+                {
+                    stray += 1;
+                }
+            }
+        }
+        if stray as f64 > 1.0 + 0.005 * b.n as f64 {
             continue;
         }
         found.push(Cross {
@@ -232,6 +248,20 @@ mod tests {
         // the only cross that stays is the one at (100, 100), where one column of the left arm was taken away: it is still a cross
         assert_eq!(found.len(), 1, "{found:?}");
         assert!((found[0].x - 100.0).abs() < 0.6 && (found[0].y - 100.0).abs() < 0.6);
+    }
+
+    #[test]
+    fn a_disc_of_the_size_of_a_cross_is_not_a_cross_whatever_its_size() {
+        for (i, radius) in [8.0, 10.0, 12.0, 14.5, 18.0, 25.0].iter().enumerate() {
+            let mut g = Gray::blank(200, 200, 220).unwrap();
+            g.disc(100.0 + i as f64 * 0.4, 100.0, *radius, 30);
+            assert!(
+                find_crosses(&g, &CrossSettings::default())
+                    .unwrap()
+                    .is_empty(),
+                "radius {radius}"
+            );
+        }
     }
 
     #[test]

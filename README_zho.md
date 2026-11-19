@@ -17,7 +17,7 @@
 
 ---
 
-**诚实检查 - 当前真正能运行的内容：** 一个 Rust 库和一个命令行程序（`eh3d-vision`），有 191 个在电脑上运行的测试：在图像中找到圆形基准点，把像素转换为毫米，并计算使电路板回到设计位置所需的旋转和平移。有一个窗口（用 `--features gui` 构建，程序为 `eh3d-vision-gui`），可打开图像、显示带坐标的标记、设定比例、用网格拟合镜头畸变、与设计对齐并导出 ISOCAM 选项，但窗口尚未在屏幕上看过；没有在机器上试过，也没有用大量真实文件验证过。
+**诚实检查 - 当前真正能运行的内容：** 一个 Rust 库和一个命令行程序（`eh3d-vision`），有 203 个在电脑上运行的测试：在图像中找到圆形基准点，把像素转换为毫米，并计算使电路板回到设计位置所需的旋转和平移。有一个窗口（用 `--features gui` 构建，程序为 `eh3d-vision-gui`），可打开图像、显示带坐标的标记、设定比例、用网格拟合镜头畸变、与设计对齐并导出 ISOCAM 选项，但窗口尚未在屏幕上看过；没有在机器上试过，也没有用大量真实文件验证过。
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | 版本 | `0.0.5` |
 | 成熟度 | 可用 |
-| 测试 | 191 |
+| 测试 | 203 |
 | 技术栈 | Rust |
 | 真实硬件 | 未试过：这里的任何内容都没有在机器上运行过 |
 
@@ -46,7 +46,7 @@
 |---|---|---|
 | 核心 | 🟡 | 在图像中找到圆形基准点，把像素转换为毫米，并计算使电路板回到设计位置所需的旋转和平移；已在电脑上用正常和损坏的输入测试，未用大量真实文件验证。 |
 | 命令行 | 🟡 | `eh3d-vision` 运行与库相同的函数并打印结果；每个错误都以消息和非零退出码返回。 |
-| 测试 | 🟡 | 191 个测试通过（`cargo test`），包含正常情况、边界情况和损坏的输入，以及位于电路板上方的模拟相机：它会加入噪声、曝光错误、失效或缺失的画面、看起来像标记的灰尘或被截断的图像文件，并会被再次请求。 |
+| 测试 | 🟡 | 203 个测试通过（`cargo test`），包含正常情况、边界情况和损坏的输入，以及位于电路板上方的模拟相机：它会加入噪声、曝光错误、失效或缺失的画面、看起来像标记的灰尘或被截断的图像文件，并会被再次请求。 |
 | 安全 | 🟡 | 纯安全 Rust（`forbid(unsafe_code)`）：处理收到的文件时不会 panic，错误的值会返回带原因的错误；没有独立审查。 |
 | 窗口 | 🟠 | 已编写（egui，`--features gui`，程序 `eh3d-vision-gui`）：打开或拖入图像，查看带坐标的标记，用已知大小的标记设定比例，用网格拟合镜头畸变，与 CSV 设计对齐并导出 ISOCAM 选项；其逻辑已测试，但尚未构建，也未在屏幕上看过。 |
 | 真实硬件 | 🔴 | 未试过：这里的任何内容都没有在机器上运行过。 |
@@ -84,10 +84,11 @@ EH3D-VISION-STUDIO 是 EH3D Fabrication Suite 的一个程序。它以库和命�
 * **配置文件：** `vision.cfg` 保存每个调校过的数值（标记的样子、靶标的网格、可接受对齐的限度、读取的最大文件）；其中的错误会连同行号被拒绝，`examples/vision.cfg` 列出了全部。
 * **亚像素级中心与置信度：** `find --refine`（或 `vision.cfg` 中的 `refine_subpixel`）对每个标记边缘的灰色像素加权，使中心精确到像素的几分之一，并输出置信度；标记与电路板几乎没有反差时置信度会降低。
 * **不均匀光照：** `--flatten PX`（或 `flatten_window`）在搜索前用每个像素周围的亮度去除图像，这样板子一侧渐暗的灯光或阴影就不会遮住暗侧的标记。
-* **十字形标记：** `eh3d-vision crosses 图像` 查找臂沿图像坐标轴的加号（方形外框、两条等宽的臂、四角为空）；圆盘、正方形和旋转 45 度的十字会被排除。
+* **十字形标记：** `eh3d-vision crosses 图像` 查找臂沿图像坐标轴的加号（方形外框、两条等宽的臂、四角为空）；圆盘和正方形会被排除，加上 `--turned` 则可查找任意角度的十字（见下）。
 * **由靶标间距得到比例：** `eh3d-vision calibrate 图像 --pitch-mm D` 取网格中相邻标记距离的中位数，拒绝不是正对拍摄的靶标，并输出可写入 `vision.cfg` 的 `mm_per_px = ...` 行。
 * **给其他程序的零件，使用简单文件：** `eh3d-vision measure 图像 --mm-per-px V` 给出每个零件的中心（相对图像中心的毫米数，x 向右，y 向上）、角度（-90 不含到 90 度）、长度、宽度和面积，格式为 CSV（`index,x_mm,y_mm,angle_deg,length_mm,width_mm,area_mm2`）或 JSON（`--format json`：`format` 为 `eh3d-vision-parts`，`version` 为 1，另有 `unit`、`image_width_px`、`image_height_px`、`mm_per_px`、`parts`）；与读取它们的程序不共享其他任何东西。没有 `--replace` 时，`--output 文件` 绝不会覆盖已有文件，也不会写入链接。
 * **一次处理整个文件夹：** `eh3d-vision batch 文件夹 --report 文件.csv` 在大小限制内（最多 `batch_max_files` 张）读取每张 PNG 和 PGM 图片，每张写一行（`file,status,marks,mean_score,min_score,mean_diameter_px,detail`），状态为 `ok`、`no_marks`、`picture_unreadable` 或拒绝代码；电子表格会当作公式执行的文件名，前面会加上一个引号。
+* **任意角度的方形与十字：** `eh3d-vision squares 图像` 查找旋转任意角度的方形标记（中心、边长，以及机器所见的逆时针角度，从 -45 不含到 45 度），`eh3d-vision crosses 图像 --turned` 查找臂不沿坐标轴的十字；方形的最小填充率和十字的最低得分（`square_min_fill`、`cross_min_score`）写在 `vision.cfg` 中。
 
 ## 🔒 安全与防护
 
@@ -107,7 +108,8 @@ EH3D-VISION-STUDIO 是 EH3D Fabrication Suite 的一个程序。它以库和命�
 ```text
 eh3d-vision find IMAGE [--light] [--min-diam PX] [--max-diam PX] [--known-mm D] [--refine] [--flatten PX]   the round marks found (--known-mm gives millimetres, --refine the centre to a fraction of a pixel with a confidence, --flatten takes uneven light out first)
 eh3d-vision align DESIGN.csv MEASURED.csv [--scale] [--pair-nearest] [--isocam-args] [--max-rms 0.1] [--max-stretch 0.01]
-eh3d-vision crosses IMAGE [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the cross-shaped marks found (plus signs with their arms along the axes of the picture)
+eh3d-vision crosses IMAGE [--turned] [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the cross-shaped marks found (plus signs; with --turned the arms may have any angle and the angle is printed)
+eh3d-vision squares IMAGE [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the square marks found, turned by any angle (centre, side and angle)
 eh3d-vision calibrate IMAGE --pitch-mm D [--light] [--tolerance 0.05] [--flatten PX]   the millimetres of a pixel from a target whose neighbouring marks are D millimetres apart
 eh3d-vision measure IMAGE [--mm-per-px V] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   the parts of a picture: centre, turn, length, width and area in millimetres, as a CSV or JSON file
 eh3d-vision batch FOLDER [--light] [--flatten PX] [--report FILE.csv] [--replace]   every PNG and PGM picture of a folder: marks, scores and diameters, or the code of what went wrong, one line each
@@ -116,7 +118,7 @@ eh3d-vision-gui [IMAGE] [DESIGN.csv]   the window (a build with --features gui);
 
 ## ⚙️ 配置
 
-调校的数值保存在简单的 `键 = 值` 文件中，而不是代码里：程序启动所在文件夹或其旁边的 `vision.cfg`（变量 `EH3D_VISION_CONFIG` 可指定另一个文件）。它设定窗口语言、标记是深色还是浅色、阈值、直径范围、标记的填充率和伸长率、用来设定比例的标记大小、网格的列数和行数、对齐是否可以改变尺寸、对齐必须满足的限度以及读取的最大文件。`examples/vision.cfg` 列出每个键及其含义和程序启动时的值；文件不存在就使用这些值，有错误的文件会连同行号被拒绝。命令行中同样的内容以选项给出（见接口）。它还保存其他调好的值：置信度（`refine_subpixel`、`full_contrast`）、光照窗口（`flatten_window`）、比例与零件大小（`mm_per_px`、`part_min_area`、`part_max_area`、`max_parts`）、十字的范围（`cross_min_size`、`cross_max_size`、`cross_max_elongation`）、靶标的容差（`pitch_tolerance`）以及文件夹中图片的最大数量（`batch_max_files`）。
+调校的数值保存在简单的 `键 = 值` 文件中，而不是代码里：程序启动所在文件夹或其旁边的 `vision.cfg`（变量 `EH3D_VISION_CONFIG` 可指定另一个文件）。它设定窗口语言、标记是深色还是浅色、阈值、直径范围、标记的填充率和伸长率、用来设定比例的标记大小、网格的列数和行数、对齐是否可以改变尺寸、对齐必须满足的限度以及读取的最大文件。`examples/vision.cfg` 列出每个键及其含义和程序启动时的值；文件不存在就使用这些值，有错误的文件会连同行号被拒绝。命令行中同样的内容以选项给出（见接口）。它还保存其他调好的值：置信度（`refine_subpixel`、`full_contrast`）、光照窗口（`flatten_window`）、比例与零件大小（`mm_per_px`、`part_min_area`、`part_max_area`、`max_parts`）、十字的范围（`cross_min_size`、`cross_max_size`、`cross_max_elongation`）、靶标的容差（`pitch_tolerance`）以及文件夹中图片的最大数量（`batch_max_files`）。 方形的最小填充率和任意角度十字的最低得分是 `square_min_fill` 和 `cross_min_score`。
 
 ## 🚀 快速开始
 
@@ -134,7 +136,7 @@ cargo run --release --features gui --bin eh3d-vision-gui -- --shot screen.png --
 
 ## 🧪 测试
 
-测试套件有 191 个测试（`cargo test`，CI 在 Windows 和 Linux 上运行）。它们检查正常情况、边界情况和损坏的输入：空文件、乱码和被截断的文件绝不会 panic。CI 还运行 `cargo fmt --check`、把警告当作错误的 `cargo clippy` 以及 `python -I tools/ci_validate.py`。
+测试套件有 203 个测试（`cargo test`，CI 在 Windows 和 Linux 上运行）。它们检查正常情况、边界情况和损坏的输入：空文件、乱码和被截断的文件绝不会 panic。CI 还运行 `cargo fmt --check`、把警告当作错误的 `cargo clippy` 以及 `python -I tools/ci_validate.py`。
 
 ## 🏗️ 构建与发布
 
@@ -171,6 +173,7 @@ EH3D-VISION-STUDIO/
 │   ├── limit.rs                                 带大小上限的文件读取，每种拒绝都有代码
 │   ├── measure.rs                               以毫米测量零件，输出 CSV 和 JSON 文件
 │   ├── scale.rs                                 像素到毫米，以及镜头的径向畸变
+│   ├── square.rs                                方形标记与任意角度旋转的十字
 │   ├── shot.rs                                  窗口的截图模式（--shot）：无需屏幕即可读取和检查其参数
 │   ├── browse.rs                                打开文件窗口的文件列表
 │   ├── gui.rs                                   窗口（egui，gui 特性）：绘制状态并传递用户的操作
@@ -212,11 +215,11 @@ EH3D-VISION-STUDIO/
 
 * 窗口尚未在屏幕上看过；标记按位置与设计配对，因此旋转很大的电路板或缺失的标记会被拒绝，而不是被猜测。
 * 没有在机器上试过，也没有用大量真实文件验证过，也没有独立审查。
-* 它读取图像文件而不是实时摄像头，只能找圆形和十字形标记（不能找方块），只在测试绘制的图像上试过，没有用真实电路板的照片试过。零件的角度按矩形由其像素测得，因此不是矩形的零件得到的是其长轴的角度。
+* 它读取图像文件而不是实时摄像头，只能找圆形、方形和十字形标记，只在测试绘制的图像上试过，没有用真实电路板的照片试过。零件的角度按矩形由其像素测得，因此不是矩形的零件得到的是其长轴的角度。
 
 **下一步**
 
-* 读取机器的实时摄像头（EH3D-NODE-BUNGARD-AUX），识别方形，用真实电路板的照片试验，并在窗口中加入新标记的训练。
+* 读取机器的实时摄像头（EH3D-NODE-BUNGARD-AUX），用真实电路板的照片试验，并在窗口中加入新标记的训练。
 * 在屏幕上查看窗口并完善它。
 * 用真实文件和套件的其他程序进行试用。
 

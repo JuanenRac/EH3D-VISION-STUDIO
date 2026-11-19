@@ -497,3 +497,78 @@ fn batch_says_what_went_wrong_with_a_picture_and_refuses_what_is_too_big_or_too_
     );
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// A board of 240 by 140 with a dark square of 25 pixels turned by 30 degrees at (60, 60), a dark cross of 33 pixels turned by 20 degrees at (170, 70), and a dark disc at (120, 110).
+fn turned_picture() -> Vec<u8> {
+    let (w, h) = (240usize, 140usize);
+    let mut data = vec![220u8; w * h];
+    let (sq_sin, sq_cos) = 30f64.to_radians().sin_cos();
+    let (cr_sin, cr_cos) = 20f64.to_radians().sin_cos();
+    for y in 0..h {
+        for x in 0..w {
+            let (fx, fy) = (x as f64, y as f64);
+            let (dx, dy) = (fx - 60.0, 60.0 - fy);
+            let (u, v) = (
+                (dx * sq_cos + dy * sq_sin).abs(),
+                (-dx * sq_sin + dy * sq_cos).abs(),
+            );
+            let in_square = u <= 12.0 && v <= 12.0;
+            let (dx, dy) = (fx - 170.0, 70.0 - fy);
+            let (u, v) = (
+                (dx * cr_cos + dy * cr_sin).abs(),
+                (-dx * cr_sin + dy * cr_cos).abs(),
+            );
+            let in_cross = (u <= 16.0 && v <= 2.0) || (v <= 16.0 && u <= 2.0);
+            let in_disc = (fx - 120.0).powi(2) + (fy - 110.0).powi(2) <= 144.0;
+            if in_square || in_cross || in_disc {
+                data[y * w + x] = 30;
+            }
+        }
+    }
+    pgm(w, h, &data)
+}
+
+#[test]
+fn squares_and_turned_crosses_are_found_with_their_angle() {
+    let dir = scratch("turned");
+    fs::write(dir.join("turned.pgm"), turned_picture()).unwrap();
+    let squares = run(&dir, &["squares", "turned.pgm"]);
+    assert!(squares.status.success(), "{}", err(&squares));
+    let text = out(&squares);
+    assert_eq!(marks_in(&text), 1, "{text}");
+    assert!(text.starts_with("1: (60.0"), "{text}");
+    assert!(
+        text.contains("angle +30.") || text.contains("angle +29."),
+        "{text}"
+    );
+    let crosses = run(&dir, &["crosses", "turned.pgm", "--turned"]);
+    assert!(crosses.status.success(), "{}", err(&crosses));
+    let text = out(&crosses);
+    assert_eq!(marks_in(&text), 1, "{text}");
+    assert!(text.starts_with("1: (170.0"), "{text}");
+    assert!(
+        text.contains("angle +20.") || text.contains("angle +19."),
+        "{text}"
+    );
+    // the cross whose arms are along the axes is still the business of crosses without --turned: the turned one is left out
+    let plain = run(&dir, &["crosses", "turned.pgm"]);
+    assert!(out(&plain).contains("no crosses found"), "{}", out(&plain));
+    // the tolerances are in the configuration file
+    fs::write(
+        dir.join("vision.cfg"),
+        "square_min_fill = 1\ncross_min_size = 40\n",
+    )
+    .unwrap();
+    assert!(out(&run(&dir, &["squares", "turned.pgm"])).contains("no squares found"));
+    assert!(out(&run(&dir, &["crosses", "turned.pgm", "--turned"])).contains("no crosses found"));
+    fs::remove_file(dir.join("vision.cfg")).unwrap();
+    let bad = run(&dir, &["squares", "turned.pgm", "--min-size", "3"]);
+    assert!(
+        !bad.status.success() && err(&bad).contains("squares and crosses"),
+        "{}",
+        err(&bad)
+    );
+    let missing = run(&dir, &["squares"]);
+    assert!(!missing.status.success() && err(&missing).contains("squares needs an image"));
+    let _ = fs::remove_dir_all(&dir);
+}

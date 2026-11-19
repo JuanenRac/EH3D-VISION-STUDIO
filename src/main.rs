@@ -16,6 +16,7 @@ use eh3d_vision_studio::limit::{read_limited, read_text_limited, write_text};
 use eh3d_vision_studio::measure::{measure_parts, to_csv, to_json, PartSettings};
 use eh3d_vision_studio::points::parse as parse_points;
 use eh3d_vision_studio::scale::{from_pitch, Scale};
+use eh3d_vision_studio::square::{find_squares, find_turned_crosses, ShapeSettings};
 use std::env;
 use std::path::Path;
 use std::process::ExitCode;
@@ -25,7 +26,8 @@ const HELP: &str = "eh3d-vision: fiducials in a camera image
   eh3d-vision find IMAGE [--light] [--min-diam PX] [--max-diam PX] [--known-mm D] [--refine] [--flatten PX]   the round marks found (--known-mm gives millimetres, --refine the centre to a fraction of a pixel with a confidence, --flatten takes uneven light out first)
   eh3d-vision align DESIGN.csv MEASURED.csv [--scale] [--pair-nearest] [--isocam-args] [--max-rms 0.1] [--max-stretch 0.01]   the turn and the shift that put the board where it is
   eh3d-vision measure IMAGE [--mm-per-px V] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   the parts of a picture: centre, turn, length, width and area in millimetres, as a CSV or JSON file
-  eh3d-vision crosses IMAGE [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the cross-shaped marks found (plus signs with their arms along the axes of the picture)
+  eh3d-vision crosses IMAGE [--turned] [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the cross-shaped marks found (plus signs; with --turned the arms may have any angle and the angle is printed)
+  eh3d-vision squares IMAGE [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the square marks found, turned by any angle (centre, side and angle)
   eh3d-vision calibrate IMAGE --pitch-mm D [--light] [--tolerance 0.05] [--flatten PX]   the millimetres of a pixel from a target whose neighbouring marks are D millimetres apart
   eh3d-vision batch FOLDER [--light] [--flatten PX] [--report FILE.csv] [--replace]   every PNG and PGM picture of a folder: marks, scores and diameters, or the code of what went wrong, one line each
 
@@ -68,6 +70,17 @@ fn deliver(text: &str, output: Option<String>, replace: bool) -> Result<(), Stri
             Ok(())
         }
     }
+}
+
+/// The settings of the search for squares and turned crosses that the configuration file gives (the size range is the one of the crosses).
+fn shape_settings(s: &mut ShapeSettings, cfg: &Config) {
+    s.threshold = cfg.threshold;
+    s.min_size = cfg.cross_min_size;
+    s.max_size = cfg.cross_max_size;
+    s.max_elongation = cfg.cross_max_elongation;
+    s.min_fill = cfg.square_min_fill;
+    s.min_score = cfg.cross_min_score;
+    s.max_spots = cfg.max_parts;
 }
 
 /// A whole number, or an error that names what it is for.
@@ -271,7 +284,44 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
             println!("mm_per_px = {:.6}", p.scale.mm_per_px);
             Ok(())
         }
+        "squares" => {
+            let mut s = ShapeSettings::default();
+            if switch(&mut args, "--light") {
+                s.polarity = Polarity::Light;
+            }
+            let flatten_px = flag(&mut args, "--flatten")?
+                .map(|v| count(&v, "--flatten"))
+                .transpose()?;
+            let cfg = config();
+            shape_settings(&mut s, &cfg);
+            if let Some(v) = flag(&mut args, "--min-size")? {
+                s.min_size = num(&v, "--min-size")?;
+            }
+            if let Some(v) = flag(&mut args, "--max-size")? {
+                s.max_size = num(&v, "--max-size")?;
+            }
+            finish(&args, 1)?;
+            let path = args.first().ok_or("squares needs an image")?;
+            let img = picture(path, &cfg, flatten_px)?;
+            let found = find_squares(&img, &s)?;
+            for (i, q) in found.iter().enumerate() {
+                println!(
+                    "{}: ({:.2}, {:.2}) px, side {:.1} px, angle {:+.1} degrees, score {:.2}",
+                    i + 1,
+                    q.x,
+                    q.y,
+                    q.side,
+                    q.angle_deg,
+                    q.score
+                );
+            }
+            if found.is_empty() {
+                println!("no squares found");
+            }
+            Ok(())
+        }
         "crosses" => {
+            let turned = switch(&mut args, "--turned");
             let mut s = CrossSettings::default();
             if switch(&mut args, "--light") {
                 s.polarity = Polarity::Light;
@@ -294,6 +344,35 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
             finish(&args, 1)?;
             let path = args.first().ok_or("crosses needs an image")?;
             let img = picture(path, &cfg, flatten_px)?;
+            if turned {
+                let mut shape = ShapeSettings {
+                    polarity: s.polarity,
+                    min_size: s.min_size,
+                    max_size: s.max_size,
+                    ..ShapeSettings::default()
+                };
+                shape_settings(&mut shape, &cfg);
+                shape.polarity = s.polarity;
+                shape.min_size = s.min_size;
+                shape.max_size = s.max_size;
+                let found = find_turned_crosses(&img, &shape)?;
+                for (i, c) in found.iter().enumerate() {
+                    println!(
+                        "{}: ({:.2}, {:.2}) px, size {:.0} px, arm {:.1} px, angle {:+.1} degrees, score {:.2}",
+                        i + 1,
+                        c.x,
+                        c.y,
+                        c.size,
+                        c.arm,
+                        c.angle_deg,
+                        c.score
+                    );
+                }
+                if found.is_empty() {
+                    println!("no crosses found");
+                }
+                return Ok(());
+            }
             let found = find_crosses(&img, &s)?;
             for (i, c) in found.iter().enumerate() {
                 println!(

@@ -223,6 +223,19 @@
           }
         },
         {
+          "name": "square.rs",
+          "desc": {
+            "en": "square marks and cross marks turned by any angle",
+            "es": "marcas cuadradas y cruces girados con cualquier ángulo",
+            "de": "quadratische Marken und in jedem Winkel gedrehte Kreuze",
+            "fr": "marques carrées et croix tournées d'un angle quelconque",
+            "it": "segni quadrati e croci ruotate di un angolo qualsiasi",
+            "ja": "四角いマークと任意の角度に回った十字",
+            "zh": "方形标记与任意角度旋转的十字",
+            "pt": "marcas quadradas e cruzes rodadas de qualquer ângulo"
+          }
+        },
+        {
           "name": "shot.rs",
           "desc": {
             "en": "the picture mode of the window (--shot): its arguments, read and checked without a screen",

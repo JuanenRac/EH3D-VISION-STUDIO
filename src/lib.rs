@@ -21,6 +21,7 @@ pub mod measure;
 pub mod points;
 pub mod scale;
 pub mod shot;
+pub mod square;
 pub mod viewport;
 pub mod window;
 

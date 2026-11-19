@@ -17,7 +17,7 @@
 
 ---
 
-**Honesty check - what actually runs today:** a Rust library and a command line program (`eh3d-vision`) with 191 tests that run on a computer: finds round fiducial marks in an image, turns pixels into millimetres and works out the turn and the shift that put a board where its design says. It has a window (built with `--features gui`, the program `eh3d-vision-gui`) that opens a picture, shows the marks with their coordinates, sets the scale, fits the distortion of the lens from a grid, aligns with the design and exports the options of ISOCAM, but the window has not been looked at on a screen yet; it has not been tried on a machine and it has not been checked against a collection of real files.
+**Honesty check - what actually runs today:** a Rust library and a command line program (`eh3d-vision`) with 203 tests that run on a computer: finds round fiducial marks in an image, turns pixels into millimetres and works out the turn and the shift that put a board where its design says. It has a window (built with `--features gui`, the program `eh3d-vision-gui`) that opens a picture, shows the marks with their coordinates, sets the scale, fits the distortion of the lens from a grid, aligns with the design and exports the options of ISOCAM, but the window has not been looked at on a screen yet; it has not been tried on a machine and it has not been checked against a collection of real files.
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | Version | `0.0.5` |
 | Maturity | Functional |
-| Tests | 191 |
+| Tests | 203 |
 | Stack | Rust |
 | On real hardware | Not tried: nothing here has run on a machine |
 
@@ -46,7 +46,7 @@ Each line is one part of this repository and the light says how far it is today.
 |---|---|---|
 | Core | 🟡 | finds round fiducial marks in an image, turns pixels into millimetres and works out the turn and the shift that put a board where its design says; tested on a computer with normal and damaged input, not with a collection of real files. |
 | Command line | 🟡 | `eh3d-vision` runs the same functions as the library and prints the result; every error comes back as a message and a non-zero exit code. |
-| Tests | 🟡 | 191 tests pass (`cargo test`), with normal cases, edge cases and damaged input, and a simulated camera over a board that adds noise, wrong exposure, a dead or missing frame, dust that looks like a mark or a cut picture file, and is asked again. |
+| Tests | 🟡 | 203 tests pass (`cargo test`), with normal cases, edge cases and damaged input, and a simulated camera over a board that adds noise, wrong exposure, a dead or missing frame, dust that looks like a mark or a cut picture file, and is asked again. |
 | Security | 🟡 | Plain safe Rust (`forbid(unsafe_code)`): nothing panics on the files it is given and a bad value is an error with its reason; no independent review. |
 | Window | 🟠 | Written (egui, `--features gui`, the program `eh3d-vision-gui`): open or drop a picture, see the marks with their coordinates, set the scale from a mark of known size, fit the distortion of the lens from a grid, align with a CSV design and export the options of ISOCAM; its logic is tested, but it has not been built or looked at on a screen yet. |
 | Real hardware | 🔴 | Not tried: nothing here has been run on a machine. |
@@ -84,10 +84,11 @@ How the parts of this repository fit together: who uses it, what it holds and wh
 * **A configuration file:** `vision.cfg` holds every value that is tuned (what a mark looks like, the grid of the target, the limits of an accepted alignment, the largest file read); a mistake in it is refused with its line, and `examples/vision.cfg` lists them all.
 * **The centre to a fraction of a pixel, with a confidence:** `find --refine` (or `refine_subpixel` in `vision.cfg`) weighs the grey pixels at the edge of each mark, so its centre is found to a fraction of a pixel, and prints a confidence that falls when the mark hardly stands out from the board.
 * **Uneven light:** `--flatten PX` (or `flatten_window`) divides the picture by the light around each pixel before the search, so a lamp that fades across the board or a shadow does not hide the marks on the dark side.
-* **Cross-shaped marks:** `eh3d-vision crosses IMAGE` finds plus signs with their arms along the axes of the picture (a square box, two arms of one width, empty corners); discs, squares and crosses turned by 45 degrees are left out.
+* **Cross-shaped marks:** `eh3d-vision crosses IMAGE` finds plus signs with their arms along the axes of the picture (a square box, two arms of one width, empty corners); discs and squares are left out, and `--turned` finds crosses at any angle (see below).
 * **The scale from the pitch of a target:** `eh3d-vision calibrate IMAGE --pitch-mm D` takes the median distance between neighbouring marks of a grid, refuses a target that is not seen square-on, and prints the line `mm_per_px = ...` for `vision.cfg`.
 * **Parts for other programs, as plain files:** `eh3d-vision measure IMAGE --mm-per-px V` gives each part's centre (mm from the centre of the picture, x right, y up), turn (-90 excluded to 90 degrees), length, width and area as CSV (`index,x_mm,y_mm,angle_deg,length_mm,width_mm,area_mm2`) or as JSON (`--format json`: `format` `eh3d-vision-parts`, `version` 1, `unit`, `image_width_px`, `image_height_px`, `mm_per_px`, `parts`); nothing else is shared with the program that reads them. `--output FILE` never writes over a file without `--replace`, nor over a link.
 * **A folder at once:** `eh3d-vision batch FOLDER --report FILE.csv` reads every PNG and PGM picture within the size limit (at most `batch_max_files`) and writes one line each (`file,status,marks,mean_score,min_score,mean_diameter_px,detail`) with the status `ok`, `no_marks`, `picture_unreadable` or the code of the refusal; a file name that a spreadsheet would run as a formula is written with a quote in front.
+* **Squares and crosses at any angle:** `eh3d-vision squares IMAGE` finds square marks turned by any angle (centre, side and the angle counter-clockwise as the machine sees it, -45 excluded to 45 degrees) and `eh3d-vision crosses IMAGE --turned` finds crosses whose arms are not along the axes; the least fill of a square and the least score of a cross (`square_min_fill`, `cross_min_score`) are in `vision.cfg`.
 
 ## 🔒 Security & Safety
 
@@ -107,7 +108,8 @@ The library is `eh3d_vision_studio` (`use eh3d_vision_studio::...`); the command
 ```text
 eh3d-vision find IMAGE [--light] [--min-diam PX] [--max-diam PX] [--known-mm D] [--refine] [--flatten PX]   the round marks found (--known-mm gives millimetres, --refine the centre to a fraction of a pixel with a confidence, --flatten takes uneven light out first)
 eh3d-vision align DESIGN.csv MEASURED.csv [--scale] [--pair-nearest] [--isocam-args] [--max-rms 0.1] [--max-stretch 0.01]
-eh3d-vision crosses IMAGE [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the cross-shaped marks found (plus signs with their arms along the axes of the picture)
+eh3d-vision crosses IMAGE [--turned] [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the cross-shaped marks found (plus signs; with --turned the arms may have any angle and the angle is printed)
+eh3d-vision squares IMAGE [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the square marks found, turned by any angle (centre, side and angle)
 eh3d-vision calibrate IMAGE --pitch-mm D [--light] [--tolerance 0.05] [--flatten PX]   the millimetres of a pixel from a target whose neighbouring marks are D millimetres apart
 eh3d-vision measure IMAGE [--mm-per-px V] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   the parts of a picture: centre, turn, length, width and area in millimetres, as a CSV or JSON file
 eh3d-vision batch FOLDER [--light] [--flatten PX] [--report FILE.csv] [--replace]   every PNG and PGM picture of a folder: marks, scores and diameters, or the code of what went wrong, one line each
@@ -116,7 +118,7 @@ eh3d-vision-gui [IMAGE] [DESIGN.csv]   the window (a build with --features gui);
 
 ## ⚙️ Configuration
 
-The values that are tuned live in a plain `key = value` file, not in the code: `vision.cfg` in the folder where the program starts or beside it (the variable `EH3D_VISION_CONFIG` names another file). It sets the language of the window, whether the marks are dark or light, the threshold, the range of the diameter, the fill and the elongation of a mark, the size of the mark that sets the scale, the columns and rows of the grid, whether the alignment may change the size, the limits that an alignment must meet and the largest file read. `examples/vision.cfg` lists every key with its meaning and the value the program starts with; a missing file means those values and a file with a mistake is refused with its line. On the command line the same things are given as options (see Interfaces). It also holds the other tuned values: the confidence (`refine_subpixel`, `full_contrast`), the window of the light (`flatten_window`), the scale and the size of a part (`mm_per_px`, `part_min_area`, `part_max_area`, `max_parts`), the range of a cross (`cross_min_size`, `cross_max_size`, `cross_max_elongation`), the tolerance of a target (`pitch_tolerance`) and the most pictures of a folder (`batch_max_files`).
+The values that are tuned live in a plain `key = value` file, not in the code: `vision.cfg` in the folder where the program starts or beside it (the variable `EH3D_VISION_CONFIG` names another file). It sets the language of the window, whether the marks are dark or light, the threshold, the range of the diameter, the fill and the elongation of a mark, the size of the mark that sets the scale, the columns and rows of the grid, whether the alignment may change the size, the limits that an alignment must meet and the largest file read. `examples/vision.cfg` lists every key with its meaning and the value the program starts with; a missing file means those values and a file with a mistake is refused with its line. On the command line the same things are given as options (see Interfaces). It also holds the other tuned values: the confidence (`refine_subpixel`, `full_contrast`), the window of the light (`flatten_window`), the scale and the size of a part (`mm_per_px`, `part_min_area`, `part_max_area`, `max_parts`), the range of a cross (`cross_min_size`, `cross_max_size`, `cross_max_elongation`), the tolerance of a target (`pitch_tolerance`) and the most pictures of a folder (`batch_max_files`). The least fill of a square and the least score of a cross turned by any angle are `square_min_fill` and `cross_min_score`.
 
 ## 🚀 Quick start
 
@@ -134,7 +136,7 @@ To take a picture of the window without opening it by hand, run it with `--shot 
 
 ## 🧪 Testing
 
-The suite has 191 tests (`cargo test`, run on Windows and Linux in the CI). They check the normal cases, the edge cases and damaged input: empty files, garbage and cut files never panic. The CI also runs `cargo fmt --check`, `cargo clippy` with warnings as errors and `python -I tools/ci_validate.py`.
+The suite has 203 tests (`cargo test`, run on Windows and Linux in the CI). They check the normal cases, the edge cases and damaged input: empty files, garbage and cut files never panic. The CI also runs `cargo fmt --check`, `cargo clippy` with warnings as errors and `python -I tools/ci_validate.py`.
 
 ## 🏗️ Build & Release
 
@@ -171,6 +173,7 @@ EH3D-VISION-STUDIO/
 │   ├── limit.rs                                 reading a file with a size limit and a code for each refusal
 │   ├── measure.rs                               parts measured in millimetres, CSV and JSON files
 │   ├── scale.rs                                 pixels to millimetres and the radial distortion of the lens
+│   ├── square.rs                                square marks and cross marks turned by any angle
 │   ├── shot.rs                                  the picture mode of the window (--shot): its arguments, read and checked without a screen
 │   ├── browse.rs                                the list of files of the window that opens a file
 │   ├── gui.rs                                   the window (egui, with the gui feature): draws the state and passes on what the person does
@@ -212,11 +215,11 @@ EH3D-VISION-STUDIO/
 
 * The window has not been looked at on a screen yet; the marks are paired with the design by their places, so a board that is turned a lot or a mark that is missing is refused instead of guessed.
 * It has not been tried on a machine nor with a collection of real files, and it has had no independent review.
-* It reads a picture file, not a live camera, it finds round and cross-shaped marks only (no squares), and it has been tried on pictures drawn by the tests, not on photographs of real boards. The turn of a part is measured from its pixels as for a rectangle, so a part that is not a rectangle gets the turn of its long axis.
+* It reads a picture file, not a live camera, it finds round, cross-shaped and square marks only, and it has been tried on pictures drawn by the tests, not on photographs of real boards. The turn of a part is measured from its pixels as for a rectangle, so a part that is not a rectangle gets the turn of its long axis.
 
 **Next**
 
-* Read the live camera of the machine (EH3D-NODE-BUNGARD-AUX), find squares, try photographs of real boards and add the training of new marks to the window.
+* Read the live camera of the machine (EH3D-NODE-BUNGARD-AUX), try photographs of real boards and add the training of new marks to the window.
 * Look at the window on a screen and finish it.
 * Try it with real files and with the other programs of the suite.
 
