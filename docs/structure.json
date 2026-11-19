@@ -223,6 +223,19 @@
           }
         },
         {
+          "name": "quality.rs",
+          "desc": {
+            "en": "whether a picture is good enough to measure from: its sharpness, contrast and mean level",
+            "es": "si una imagen basta para medir: su nitidez, su contraste y su nivel medio",
+            "de": "ob ein Bild zum Messen taugt: Schärfe, Kontrast und mittlerer Pegel",
+            "fr": "si une image suffit pour mesurer : sa netteté, son contraste et son niveau moyen",
+            "it": "se un'immagine basta per misurare: nitidezza, contrasto e livello medio",
+            "ja": "測定に使える画像かどうか：シャープネス・コントラスト・平均レベル",
+            "zh": "图像是否足以用于测量：清晰度、对比度和平均灰度",
+            "pt": "se uma imagem chega para medir: a sua nitidez, contraste e nível médio"
+          }
+        },
+        {
           "name": "report.rs",
           "desc": {
             "en": "the report of a folder as one HTML page that stands alone, in eight languages",
@@ -277,27 +290,27 @@
         {
           "name": "offset.rs",
           "desc": {
-            "en": "where a picked part is held from a picture of it, with the correction that puts it right",
-            "es": "dónde se sostiene una pieza recogida, con la corrección que la deja bien",
-            "de": "wo ein aufgenommenes Teil gehalten wird, mit der Korrektur, die es richtet",
-            "fr": "où une pièce prise est tenue, avec la correction qui la remet bien",
-            "it": "dove è tenuto un pezzo prelevato, con la correzione che lo rimette a posto",
-            "ja": "ピックした部品の保持位置と、それを正す補正",
-            "zh": "被拾取零件的持放位置及其修正量",
-            "pt": "onde está seguida uma peça apanhada, com a correção que a põe bem"
+            "en": "where a picked part is held, with the correction, the table for a tray and the axis of the nozzle",
+            "es": "dónde se sostiene una pieza recogida, con la corrección, la tabla de una bandeja y el eje de la boquilla",
+            "de": "wie ein aufgenommenes Teil gehalten wird, mit Korrektur, Tabelle für ein Tablett und Düsenachse",
+            "fr": "comment une pièce prise est tenue, avec la correction, la table d'un plateau et l'axe de la buse",
+            "it": "come è tenuto un pezzo prelevato, con correzione, tabella di un vassoio e asse dell'ugello",
+            "ja": "ピックした部品の保持位置と補正、トレイの補正表、ノズル軸",
+            "zh": "被拾取零件的持放位置、修正量、托盘修正表和吸嘴轴线",
+            "pt": "onde está presa uma peça apanhada, com a correção, a tabela de um tabuleiro e o eixo do bico"
           }
         },
         {
           "name": "panels.rs",
           "desc": {
-            "en": "the panels of the window for the lens, the parts against packages and the plan of pictures",
-            "es": "los paneles de la ventana: objetivo, piezas frente a paquetes y plan de imágenes",
-            "de": "die Fensterbereiche für Objektiv, Teile gegen Gehäuse und den Bilderplan",
-            "fr": "les panneaux de la fenêtre : objectif, pièces face aux boîtiers et plan des images",
-            "it": "i pannelli della finestra: obiettivo, pezzi contro package e piano delle immagini",
-            "ja": "ウィンドウのパネル：レンズ・部品とパッケージの照合・撮影計画",
-            "zh": "窗口面板：镜头、零件与封装比对、拍摄计划",
-            "pt": "os painéis da janela: objetiva, peças face aos encapsulamentos e plano de imagens"
+            "en": "the panels of the window: lens, packages, plan of pictures, pick offsets and picture check",
+            "es": "los paneles de la ventana: objetivo, paquetes, plan de imágenes, desplazamientos y comprobación",
+            "de": "die Fensterbereiche: Objektiv, Gehäuse, Bilderplan, Aufnahmeversatz und Bildprüfung",
+            "fr": "les panneaux de la fenêtre : objectif, boîtiers, plan des images, décalages et contrôle de l'image",
+            "it": "i pannelli della finestra: obiettivo, package, piano immagini, scostamenti e controllo immagine",
+            "ja": "ウィンドウのパネル：レンズ・パッケージ・撮影計画・ピックのずれ・画像チェック",
+            "zh": "窗口面板：镜头、封装、拍摄计划、拾取偏移和图像检查",
+            "pt": "os painéis da janela: objetiva, encapsulamentos, plano de imagens, desvios e verificação da imagem"
           }
         },
         {
