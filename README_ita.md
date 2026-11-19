@@ -17,7 +17,7 @@
 
 ---
 
-**Verifica di onestà - cosa funziona oggi:** una libreria Rust e un programma a riga di comando (`eh3d-vision`) con 246 test eseguiti su un computer: trova segni fiduciali rotondi in un'immagine, converte i pixel in millimetri e calcola la rotazione e lo spostamento che portano una scheda dove dice il suo progetto. Ha una finestra (si compila con `--features gui`, il programma `eh3d-vision-gui`) che apre un'immagine, mostra i segni con le loro coordinate, imposta la scala, calcola la distorsione dell'obiettivo da una griglia, allinea al progetto ed esporta le opzioni di ISOCAM, ma la finestra non è ancora stata vista su uno schermo; non è stato provato su una macchina e non è stato verificato su una raccolta di file reali.
+**Verifica di onestà - cosa funziona oggi:** una libreria Rust e un programma a riga di comando (`eh3d-vision`) con 255 test eseguiti su un computer: trova segni fiduciali rotondi in un'immagine, converte i pixel in millimetri e calcola la rotazione e lo spostamento che portano una scheda dove dice il suo progetto. Ha una finestra (si compila con `--features gui`, il programma `eh3d-vision-gui`) che apre un'immagine, mostra i segni con le loro coordinate, imposta la scala, calcola la distorsione dell'obiettivo da una griglia, allinea al progetto ed esporta le opzioni di ISOCAM, ma la finestra non è ancora stata vista su uno schermo; non è stato provato su una macchina e non è stato verificato su una raccolta di file reali.
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | Versione | `0.0.6` |
 | Maturità | Funzionale |
-| Test | 246 |
+| Test | 255 |
 | Stack tecnologico | Rust |
 | Su hardware reale | Non provato: nulla di questo ha girato su una macchina |
 
@@ -46,7 +46,7 @@ Ogni riga è una parte di questo repository e il semaforo dice a che punto è og
 |---|---|---|
 | Nucleo | 🟡 | trova segni fiduciali rotondi in un'immagine, converte i pixel in millimetri e calcola la rotazione e lo spostamento che portano una scheda dove dice il suo progetto; provato su un computer con input normali e danneggiati, non con una raccolta di file reali. |
 | Riga di comando | 🟡 | `eh3d-vision` esegue le stesse funzioni della libreria e stampa il risultato; ogni errore torna come messaggio e codice di uscita diverso da zero. |
-| Test | 🟡 | 246 test passano (`cargo test`), con casi normali, casi limite e input danneggiati, e una telecamera simulata sopra una scheda che aggiunge rumore, esposizione sbagliata, un fotogramma morto o assente, polvere che somiglia a un segno o un file immagine tagliato, e viene interrogata di nuovo. |
+| Test | 🟡 | 255 test passano (`cargo test`), con casi normali, casi limite e input danneggiati, e una telecamera simulata sopra una scheda che aggiunge rumore, esposizione sbagliata, un fotogramma morto o assente, polvere che somiglia a un segno o un file immagine tagliato, e viene interrogata di nuovo. |
 | Sicurezza | 🟡 | Rust sicuro e semplice (`forbid(unsafe_code)`): nulla va in panico con i file ricevuti e un valore errato è un errore con il suo motivo; nessuna revisione indipendente. |
 | Finestra | 🟠 | Scritta (egui, `--features gui`, il programma `eh3d-vision-gui`): aprire o trascinare un'immagine, vedere i segni con le loro coordinate, impostare la scala con un segno di dimensione nota, calcolare la distorsione dell'obiettivo da una griglia, allineare a un disegno CSV ed esportare le opzioni di ISOCAM; la sua logica è testata, ma non è ancora stata compilata né vista su uno schermo. |
 | Hardware reale | 🔴 | Non provato: nulla di questo è stato eseguito su una macchina. |
@@ -92,7 +92,7 @@ Come si incastrano le parti di questo repository: chi lo usa, cosa contiene e da
 * **L'obiettivo con due fattori, rifiutato se non torna:** `eh3d-vision lens IMMAGINE` ricava `k1` e `k2` della distorsione radiale da una griglia di segni e scrive le righe `lens_k1 = ...` e `lens_k2 = ...` per `vision.cfg`; rifiuta un adattamento che lascia i segni a più di `lens_max_rms` pixel dal loro reticolo (`lens_residual_too_large`) o un fattore superiore a 0,5 (`lens_out_of_range`), e `find --undistort` raddrizza le posizioni con essi.
 * **Un verdetto per ogni pezzo:** `eh3d-vision inspect IMMAGINE --package NOME --table packages.csv` misura i pezzi di un'immagine e confronta ciascuno con il corpo del suo contenitore (`package`, `body_long_mm`, `body_short_mm` e, se serve, `tolerance_mm`, in un file CSV; `examples/packages.csv` ne ha alcuni): `pass` o `fail` con il motivo (`length`, `width`, `angle`) in CSV o JSON, e il codice di uscita 1 quando un pezzo non passa; la tolleranza e la rotazione massima (`inspect_tolerance`, `inspect_max_angle`) sono in `vision.cfg`.
 * **Un rapporto HTML della cartella:** `eh3d-vision batch CARTELLA --html rapporto.html` scrive una pagina che sta in piedi da sola (nessuno script, nessun collegamento, nessun altro file): una tabella delle immagini, un piccolo disegno di ciascuna con un cerchio su ogni segno trovato e gli avvisi (un'immagine non utilizzabile, senza segni o con un punteggio sotto `report_low_score`), nella lingua di `--lang` o di `vision.cfg`.
-* **I nuovi strumenti nella finestra:** il pannello laterale ha il centro a una frazione di pixel con la fiducia di ogni segno, la finestra della luce, quadrati e croci con qualsiasi rotazione (disegnati sull'immagine), i pezzi in millimetri (salvati come `<immagine>-parts.csv`), il rapporto della cartella (`eh3d-vision-report.html`, mai scritto sopra un file esistente senza `replace_output`) e la scala dal passo di una mira, con i testi nelle otto lingue e i valori in `vision.cfg`; non è ancora stata guardata su uno schermo.
+* **I nuovi strumenti nella finestra:** il pannello laterale ha il centro a una frazione di pixel con la fiducia di ogni segno, la finestra della luce, quadrati e croci con qualsiasi rotazione (disegnati sull'immagine), i pezzi in millimetri (salvati come `<immagine>-parts.csv`), il rapporto della cartella, letto in un thread con barra di avanzamento e pulsante di annullamento (`eh3d-vision-report.html`, mai scritto sopra un file esistente senza `replace_output`) e la scala dal passo di una mira, con i testi nelle otto lingue e i valori in `vision.cfg`; non è ancora stata guardata su uno schermo.
 * **Le immagini di un pezzo grande, pianificate:** `eh3d-vision shots --package NOME --fov-w MM --fov-h MM` (o `--body-long` e `--body-short`) elenca in CSV le posizioni della telecamera, in millimetri dal centro del pezzo, che vedono tutto un pezzo più grande del campo, con immagini vicine sovrapposte di `shots_overlap` e un margine di `shots_margin`; non serve nessuna telecamera.
 
 ## 🔒 Sicurezza e protezione
@@ -144,7 +144,7 @@ Per fare un'immagine della finestra senza aprirla a mano, eseguila con `--shot F
 
 ## 🧪 Test
 
-La suite ha 246 test (`cargo test`, eseguiti su Windows e Linux nella CI). Verificano i casi normali, i casi limite e gli input danneggiati: file vuoti, spazzatura e file tagliati non causano mai un panico. La CI esegue anche `cargo fmt --check`, `cargo clippy` con gli avvisi come errori e `python -I tools/ci_validate.py`.
+La suite ha 255 test (`cargo test`, eseguiti su Windows e Linux nella CI). Verificano i casi normali, i casi limite e gli input danneggiati: file vuoti, spazzatura e file tagliati non causano mai un panico. La CI esegue anche `cargo fmt --check`, `cargo clippy` con gli avvisi come errori e `python -I tools/ci_validate.py`.
 
 ## 🏗️ Compilazione e rilascio
 
@@ -178,6 +178,7 @@ EH3D-VISION-STUDIO/
 │   ├── flatten.rs                               la luce irregolare tolta da un'immagine
 │   ├── grid.rs                                  la distorsione dell'obiettivo da una griglia di riferimenti
 │   ├── inspect.rs                               ogni pezzo confrontato con il corpo del suo contenitore da una tabella, con verdetto
+│   ├── job.rs                                   il rapporto di una cartella letto in un thread, con avanzamento e annullamento
 │   ├── lens.rs                                  i due fattori dell'obiettivo da una griglia di segni, rifiutati se non tornano
 │   ├── points.rs                                i file di punti di un disegno
 │   ├── report.rs                                il rapporto di una cartella come una pagina HTML autonoma, in otto lingue

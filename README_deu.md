@@ -17,7 +17,7 @@
 
 ---
 
-**Ehrlichkeitscheck - was heute wirklich läuft:** eine Rust-Bibliothek und ein Kommandozeilenprogramm (`eh3d-vision`) mit 246 Tests, die auf einem Computer laufen: findet runde Passmarken in einem Bild, wandelt Pixel in Millimeter um und berechnet Drehung und Verschiebung, die eine Platine dorthin bringen, wo ihr Entwurf sie haben will. Es hat ein Fenster (mit `--features gui` gebaut, das Programm `eh3d-vision-gui`), das ein Bild öffnet, die Marken mit ihren Koordinaten zeigt, den Maßstab setzt, die Verzeichnung des Objektivs aus einem Raster bestimmt, am Entwurf ausrichtet und die Optionen für ISOCAM exportiert, aber das Fenster wurde noch nicht auf einem Bildschirm angesehen; es wurde an keiner Maschine ausprobiert und nicht an einer Sammlung echter Dateien geprüft.
+**Ehrlichkeitscheck - was heute wirklich läuft:** eine Rust-Bibliothek und ein Kommandozeilenprogramm (`eh3d-vision`) mit 255 Tests, die auf einem Computer laufen: findet runde Passmarken in einem Bild, wandelt Pixel in Millimeter um und berechnet Drehung und Verschiebung, die eine Platine dorthin bringen, wo ihr Entwurf sie haben will. Es hat ein Fenster (mit `--features gui` gebaut, das Programm `eh3d-vision-gui`), das ein Bild öffnet, die Marken mit ihren Koordinaten zeigt, den Maßstab setzt, die Verzeichnung des Objektivs aus einem Raster bestimmt, am Entwurf ausrichtet und die Optionen für ISOCAM exportiert, aber das Fenster wurde noch nicht auf einem Bildschirm angesehen; es wurde an keiner Maschine ausprobiert und nicht an einer Sammlung echter Dateien geprüft.
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | Version | `0.0.6` |
 | Reifegrad | Funktionsfähig |
-| Tests | 246 |
+| Tests | 255 |
 | Technologie-Stack | Rust |
 | Auf echter Hardware | Nicht erprobt: nichts davon lief an einer Maschine |
 
@@ -46,7 +46,7 @@ Jede Zeile ist ein Teil dieses Repositorys, und die Ampel sagt, wie weit er heut
 |---|---|---|
 | Kern | 🟡 | findet runde Passmarken in einem Bild, wandelt Pixel in Millimeter um und berechnet Drehung und Verschiebung, die eine Platine dorthin bringen, wo ihr Entwurf sie haben will; am Computer mit normalen und beschädigten Eingaben getestet, nicht mit einer Sammlung echter Dateien. |
 | Kommandozeile | 🟡 | `eh3d-vision` führt dieselben Funktionen wie die Bibliothek aus und gibt das Ergebnis aus; jeder Fehler kommt als Meldung mit einem Exit-Code ungleich null zurück. |
-| Tests | 🟡 | 246 Tests bestehen (`cargo test`), mit Normalfällen, Grenzfällen und beschädigten Eingaben sowie einer simulierten Kamera über einer Platine, die Rauschen, falsche Belichtung, ein totes oder fehlendes Bild, wie eine Marke aussehenden Staub oder eine abgeschnittene Bilddatei hinzufügt und erneut abgefragt wird. |
+| Tests | 🟡 | 255 Tests bestehen (`cargo test`), mit Normalfällen, Grenzfällen und beschädigten Eingaben sowie einer simulierten Kamera über einer Platine, die Rauschen, falsche Belichtung, ein totes oder fehlendes Bild, wie eine Marke aussehenden Staub oder eine abgeschnittene Bilddatei hinzufügt und erneut abgefragt wird. |
 | Sicherheit | 🟡 | Reines sicheres Rust (`forbid(unsafe_code)`): nichts gerät bei den übergebenen Dateien in Panik und ein schlechter Wert ist ein Fehler mit Begründung; keine unabhängige Prüfung. |
 | Fenster | 🟠 | Geschrieben (egui, `--features gui`, das Programm `eh3d-vision-gui`): ein Bild öffnen oder ablegen, die Marken mit ihren Koordinaten sehen, den Maßstab mit einer Marke bekannter Größe setzen, die Verzeichnung des Objektivs aus einem Raster bestimmen, an einem CSV-Entwurf ausrichten und die Optionen für ISOCAM exportieren; die Logik ist getestet, aber das Fenster wurde noch nicht gebaut oder auf einem Bildschirm angesehen. |
 | Echte Hardware | 🔴 | Nicht erprobt: nichts davon wurde an einer Maschine ausgeführt. |
@@ -92,7 +92,7 @@ Wie die Teile dieses Repositorys zusammenpassen: wer es nutzt, was es enthält u
 * **Das Objektiv mit zwei Faktoren, abgelehnt, wenn es nicht passt:** `eh3d-vision lens BILD` berechnet `k1` und `k2` der radialen Verzeichnung aus einem Raster von Marken und gibt die Zeilen `lens_k1 = ...` und `lens_k2 = ...` für `vision.cfg` aus; es lehnt eine Anpassung ab, die die Marken weiter als `lens_max_rms` Pixel von ihrem Gitter lässt (`lens_residual_too_large`), oder einen Faktor über 0,5 (`lens_out_of_range`), und `find --undistort` entzerrt die Orte damit.
 * **Ein Urteil für jedes Teil:** `eh3d-vision inspect BILD --package NAME --table packages.csv` misst die Teile eines Bildes und vergleicht jedes mit dem Körper seiner Bauform (`package`, `body_long_mm`, `body_short_mm`, auf Wunsch `tolerance_mm`, in einer CSV-Datei; `examples/packages.csv` enthält einige): `pass` oder `fail` mit dem Grund (`length`, `width`, `angle`) als CSV oder JSON, der Exit-Code ist 1, wenn ein Teil durchfällt; die Toleranz und die größte Drehung (`inspect_tolerance`, `inspect_max_angle`) stehen in `vision.cfg`.
 * **Ein HTML-Bericht über den Ordner:** `eh3d-vision batch ORDNER --html bericht.html` schreibt eine Seite, die für sich allein steht (kein Skript, kein Link, keine weitere Datei): eine Tabelle der Bilder, eine kleine Zeichnung jedes Bildes mit einem Kreis um jede gefundene Marke und die Warnungen (ein Bild, das nicht genutzt werden konnte, ohne Marken oder mit einer Punktzahl unter `report_low_score`), in der Sprache von `--lang` oder `vision.cfg`.
-* **Die neuen Werkzeuge im Fenster:** Die Seitenleiste bietet die Mitte auf einen Bruchteil eines Pixels mit dem Vertrauen jeder Marke, das Lichtfenster, Quadrate und Kreuze in jedem Winkel (auf das Bild gezeichnet), die Teile in Millimetern (gespeichert als `<Bild>-parts.csv`), den Bericht über den Ordner (`eh3d-vision-report.html`, nie ohne `replace_output` über eine vorhandene Datei geschrieben) und den Maßstab aus dem Abstand eines Rasters, mit den Texten in den acht Sprachen und den Werten in `vision.cfg`; auf einem Bildschirm wurde es noch nicht angesehen.
+* **Die neuen Werkzeuge im Fenster:** Die Seitenleiste bietet die Mitte auf einen Bruchteil eines Pixels mit dem Vertrauen jeder Marke, das Lichtfenster, Quadrate und Kreuze in jedem Winkel (auf das Bild gezeichnet), die Teile in Millimetern (gespeichert als `<Bild>-parts.csv`), den Bericht über den Ordner, in einem eigenen Thread mit Fortschrittsbalken und Abbrechen-Knopf gelesen (`eh3d-vision-report.html`, nie ohne `replace_output` über eine vorhandene Datei geschrieben) und den Maßstab aus dem Abstand eines Rasters, mit den Texten in den acht Sprachen und den Werten in `vision.cfg`; auf einem Bildschirm wurde es noch nicht angesehen.
 * **Die Bilder eines großen Teils, geplant:** `eh3d-vision shots --package NAME --fov-w MM --fov-h MM` (oder `--body-long` und `--body-short`) listet als CSV die Orte der Kamera auf, in Millimetern von der Mitte des Teils, die ein Teil sehen, das größer als das Feld ist, wobei benachbarte Bilder um `shots_overlap` überlappen und ein Rand von `shots_margin` bleibt; es braucht keine Kamera.
 
 ## 🔒 Sicherheit und Schutz
@@ -144,7 +144,7 @@ Um ein Bild des Fensters aufzunehmen, ohne es von Hand zu öffnen, starten Sie e
 
 ## 🧪 Tests
 
-Die Suite hat 246 Tests (`cargo test`, in der CI unter Windows und Linux). Sie prüfen Normalfälle, Grenzfälle und beschädigte Eingaben: leere Dateien, Datenmüll und abgeschnittene Dateien lösen nie eine Panik aus. Die CI führt außerdem `cargo fmt --check`, `cargo clippy` mit Warnungen als Fehlern und `python -I tools/ci_validate.py` aus.
+Die Suite hat 255 Tests (`cargo test`, in der CI unter Windows und Linux). Sie prüfen Normalfälle, Grenzfälle und beschädigte Eingaben: leere Dateien, Datenmüll und abgeschnittene Dateien lösen nie eine Panik aus. Die CI führt außerdem `cargo fmt --check`, `cargo clippy` mit Warnungen als Fehlern und `python -I tools/ci_validate.py` aus.
 
 ## 🏗️ Build und Veröffentlichung
 
@@ -178,6 +178,7 @@ EH3D-VISION-STUDIO/
 │   ├── flatten.rs                               ungleichmäßiges Licht aus einem Bild entfernt
 │   ├── grid.rs                                  die Verzeichnung des Objektivs aus einem Raster von Marken
 │   ├── inspect.rs                               jedes Teil mit dem Körper seiner Bauform aus einer Tabelle verglichen, mit Urteil
+│   ├── job.rs                                   der Ordnerbericht in einem eigenen Thread, mit Fortschritt und Abbruch
 │   ├── lens.rs                                  die zwei Faktoren des Objektivs aus einem Markenraster, abgelehnt, wenn sie nicht passen
 │   ├── points.rs                                die Punktdateien eines Entwurfs
 │   ├── report.rs                                der Bericht über einen Ordner als eigenständige HTML-Seite in acht Sprachen

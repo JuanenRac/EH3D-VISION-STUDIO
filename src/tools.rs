@@ -2,9 +2,10 @@
 //! the folder and the scale from the pitch of a target. Each one is a method of `Window` that sets the status and keeps its result, so that all that the window decides is tested without
 //! a screen; `gui.rs` only draws it.
 
-use crate::batch::{check_detailed, list_pictures};
+use crate::batch::{list_pictures, Checked};
 use crate::flatten::flatten;
 use crate::image::Gray;
+use crate::job::{run as run_batch, BatchJob, BatchParams, Poll};
 use crate::lang::Msg;
 use crate::limit::write_text;
 use crate::measure::{measure_parts, to_csv, PartSettings};
@@ -14,6 +15,7 @@ use crate::square::{find_squares, find_turned_crosses, ShapeSettings};
 use crate::window::{show, Status, Window};
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicUsize};
 
 /// The name of the report of a folder that the window writes in the folder of the picture.
 pub const REPORT_NAME: &str = "eh3d-vision-report.html";
@@ -247,8 +249,37 @@ impl Window {
         }
     }
 
-    /// Reads every picture of the folder of the open picture and writes the report as the HTML file `eh3d-vision-report.html` in that folder, in the language of the window. A file that
-    /// is there is written over only when `replace_output` is on, and a folder with more pictures than `batch_max_files` is refused.
+    /// The settings every picture of a folder is read with.
+    fn batch_params(&self) -> BatchParams {
+        BatchParams {
+            max_mib: self.cfg.max_file_mib,
+            settings: self.cfg.settings(),
+            threshold: self.cfg.threshold,
+            flatten_px: self.cfg.flatten_window,
+        }
+    }
+
+    /// Writes the report of the pictures that were read as the HTML file `eh3d-vision-report.html` in the folder, in the language of the window. A file that is there is written over only
+    /// when `replace_output` is on.
+    fn write_report(&mut self, folder: &Path, items: &[Checked]) -> bool {
+        let page = report::html(items, self.lang, self.cfg.report_low_score);
+        match write_text(&folder.join(REPORT_NAME), &page, self.cfg.replace_output) {
+            Ok(()) => {
+                self.status = Status::BatchDone {
+                    pictures: items.len(),
+                    name: REPORT_NAME.to_string(),
+                };
+                true
+            }
+            Err(e) => {
+                self.status = Status::Failed(e);
+                false
+            }
+        }
+    }
+
+    /// Reads every picture of the folder of the open picture and writes the report, all at once (the window uses `start_batch_report`, which does not wait). A folder with more pictures
+    /// than `batch_max_files` is refused.
     pub fn batch_report(&mut self) -> bool {
         let Some((folder, _)) = self.beside() else {
             self.status = Status::NeedImage;
@@ -261,30 +292,100 @@ impl Window {
                 return false;
             }
         };
-        let settings = self.cfg.settings();
-        let items: Vec<_> = files
-            .iter()
-            .map(|f| {
-                check_detailed(
-                    f,
-                    self.cfg.max_file_mib,
-                    &settings,
-                    self.cfg.threshold,
-                    self.cfg.flatten_window,
-                )
-            })
-            .collect();
-        let page = report::html(&items, self.lang, self.cfg.report_low_score);
-        match write_text(&folder.join(REPORT_NAME), &page, self.cfg.replace_output) {
-            Ok(()) => {
-                self.status = Status::BatchDone {
-                    pictures: items.len(),
-                    name: REPORT_NAME.to_string(),
-                };
+        let params = self.batch_params();
+        let done = AtomicUsize::new(0);
+        let items = run_batch(&files, &params, &done, &AtomicBool::new(false)).unwrap_or_default();
+        self.write_report(&folder, &items)
+    }
+
+    /// Starts the report of the folder of the open picture in a thread and returns at once: `poll_batch` says how far it is and writes the report when it is read, `cancel_batch` stops
+    /// it. A second report cannot start while one is running.
+    pub fn start_batch_report(&mut self) -> bool {
+        if self.batch_job.is_some() {
+            self.status = Status::BatchBusy;
+            return false;
+        }
+        let Some((folder, _)) = self.beside() else {
+            self.status = Status::NeedImage;
+            return false;
+        };
+        let files = match list_pictures(&folder, self.cfg.batch_max_files) {
+            Ok(f) => f,
+            Err(e) => {
+                self.status = Status::Failed(e);
+                return false;
+            }
+        };
+        let total = files.len();
+        match BatchJob::start(files, self.batch_params()) {
+            Ok(job) => {
+                self.batch_job = Some((job, folder));
+                self.status = Status::BatchRunning { done: 0, total };
                 true
             }
             Err(e) => {
                 self.status = Status::Failed(e);
+                false
+            }
+        }
+    }
+
+    /// Whether a report is being read.
+    pub fn batch_running(&self) -> bool {
+        self.batch_job.is_some()
+    }
+
+    /// The share (0 to 1) of the pictures of the running report that are read; 0 when there is none.
+    pub fn batch_fraction(&self) -> f32 {
+        match &self.batch_job {
+            Some((job, _)) => {
+                let (done, total) = job.progress();
+                if total == 0 {
+                    1.0
+                } else {
+                    done as f32 / total as f32
+                }
+            }
+            None => 0.0,
+        }
+    }
+
+    /// Asks the running report to stop before the next picture; nothing is written. The status changes when `poll_batch` sees it end.
+    pub fn cancel_batch(&mut self) {
+        if let Some((job, _)) = &self.batch_job {
+            job.cancel();
+        }
+    }
+
+    /// Looks at the running report without waiting: it sets the status to how far it is, and when it ended it writes the report (or says that it was cancelled or failed). Returns whether a
+    /// report is still running after the look.
+    pub fn poll_batch(&mut self) -> bool {
+        let Some((job, folder)) = self.batch_job.take() else {
+            return false;
+        };
+        match job.poll() {
+            Poll::Running { done, total } => {
+                self.status = Status::BatchRunning { done, total };
+                self.batch_job = Some((job, folder));
+                true
+            }
+            Poll::Finished(items) => {
+                if job.is_cancelled() {
+                    // the stop came after the last picture was read; the person asked for none
+                    self.status = Status::BatchCancelled;
+                } else {
+                    self.write_report(&folder, &items);
+                }
+                false
+            }
+            Poll::Cancelled => {
+                self.status = Status::BatchCancelled;
+                false
+            }
+            Poll::Lost => {
+                self.status = Status::Failed(
+                    "batch_failed: the reading of the folder ended without a result".to_string(),
+                );
                 false
             }
         }
@@ -657,9 +758,113 @@ mod tests {
         );
     }
 
+    /// Looks at the running report until it ends (it must in a minute).
+    fn wait_batch(w: &mut Window) {
+        let start = std::time::Instant::now();
+        while w.poll_batch() {
+            assert!(start.elapsed().as_secs() < 60, "the report never ended");
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn the_report_in_a_thread_writes_the_same_page_and_the_window_is_free_meanwhile() {
+        let s = Scratch::new("batch_thread");
+        let mut g = Gray::blank(200, 100, 220).unwrap();
+        g.disc(60.0, 50.0, 12.0, 30);
+        fs::write(s.path("one.pgm"), pgm(&g)).unwrap();
+        fs::write(s.path("bad.pgm"), b"not a picture").unwrap();
+        let mut w = window_with("");
+        assert!(!w.start_batch_report());
+        assert_eq!(w.status, Status::NeedImage);
+        assert!(!w.batch_running() && !w.poll_batch());
+        assert!(w.open_image(&s.path("one.pgm")));
+        assert!(w.start_batch_report());
+        assert!(w.batch_running());
+        assert!(matches!(w.status, Status::BatchRunning { total: 2, .. }));
+        // a second report cannot start while one is running
+        assert!(!w.start_batch_report());
+        assert_eq!(w.status, Status::BatchBusy);
+        wait_batch(&mut w);
+        assert!(!w.batch_running());
+        assert_eq!(
+            w.status,
+            Status::BatchDone {
+                pictures: 2,
+                name: REPORT_NAME.into()
+            }
+        );
+        let threaded = fs::read_to_string(s.path(REPORT_NAME)).unwrap();
+        assert_eq!(threaded.matches("<circle").count(), 1);
+        // the same page as the one that is made without waiting
+        w.cfg.replace_output = true;
+        assert!(w.batch_report());
+        assert_eq!(fs::read_to_string(s.path(REPORT_NAME)).unwrap(), threaded);
+        assert!((w.batch_fraction() - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn a_cancelled_report_writes_nothing() {
+        let s = Scratch::new("batch_cancel");
+        let mut g = Gray::blank(1200, 1200, 220).unwrap();
+        g.disc(60.0, 50.0, 12.0, 30);
+        for i in 0..6 {
+            fs::write(s.path(&format!("p{i}.pgm")), pgm(&g)).unwrap();
+        }
+        let mut w = window_with("");
+        assert!(w.open_image(&s.path("p0.pgm")));
+        assert!(w.start_batch_report());
+        w.cancel_batch();
+        wait_batch(&mut w);
+        // the stop was seen before the last picture, or after it: either way the person asked for none
+        assert_eq!(w.status, Status::BatchCancelled);
+        assert!(!s.path(REPORT_NAME).exists());
+        assert!(!w.batch_running());
+        // cancelling when nothing runs is nothing
+        w.cancel_batch();
+        // and a new report can start
+        assert!(w.start_batch_report());
+        wait_batch(&mut w);
+        assert!(matches!(w.status, Status::BatchDone { pictures: 6, .. }));
+    }
+
+    #[test]
+    fn the_report_in_a_thread_refuses_a_folder_with_too_many_pictures_or_a_page_that_is_there() {
+        let s = Scratch::new("batch_thread_refuse");
+        for i in 0..3 {
+            fs::write(
+                s.path(&format!("p{i}.pgm")),
+                pgm(&Gray::blank(30, 30, 100).unwrap()),
+            )
+            .unwrap();
+        }
+        let mut w = window_with(
+            "batch_max_files = 2
+",
+        );
+        assert!(w.open_image(&s.path("p0.pgm")));
+        assert!(!w.start_batch_report());
+        assert!(matches!(&w.status, Status::Failed(e) if e.starts_with("too_many_files")));
+        assert!(!w.batch_running());
+        let mut w = window_with("");
+        assert!(w.open_image(&s.path("p0.pgm")));
+        fs::write(s.path(REPORT_NAME), "old").unwrap();
+        assert!(w.start_batch_report());
+        wait_batch(&mut w);
+        assert!(
+            matches!(&w.status, Status::Failed(e) if e.starts_with("file_exists")),
+            "{:?}",
+            w.status
+        );
+        assert_eq!(fs::read_to_string(s.path(REPORT_NAME)).unwrap(), "old");
+    }
+
     #[test]
     fn every_new_sentence_of_the_status_is_spoken_in_each_language() {
         let statuses = [
+            Status::BatchRunning { done: 2, total: 5 },
+            Status::BatchCancelled,
+            Status::BatchBusy,
             Status::SquaresFound(2),
             Status::SquaresFound(0),
             Status::CrossesFound(3),

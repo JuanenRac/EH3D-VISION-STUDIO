@@ -1406,6 +1406,36 @@ messages! {
         "已读取 {0} 张图像，报告已写入 {1}",
         "{0} imagens lidas, relatório escrito em {1}",
     ],
+    BatchRunning => [
+        "Reading the pictures: {0} of {1}",
+        "Leyendo las imágenes: {0} de {1}",
+        "Bilder werden gelesen: {0} von {1}",
+        "Lecture des images : {0} sur {1}",
+        "Lettura delle immagini: {0} di {1}",
+        "画像を読み込み中：{0} / {1}",
+        "正在读取图像：{0} / {1}",
+        "A ler as imagens: {0} de {1}",
+    ],
+    BatchCancelled => [
+        "Report cancelled, nothing was written",
+        "Informe cancelado, no se escribió nada",
+        "Bericht abgebrochen, nichts geschrieben",
+        "Rapport annulé, rien n'a été écrit",
+        "Rapporto annullato, non è stato scritto nulla",
+        "レポートを中止しました。何も書き出していません",
+        "报告已取消，未写入任何内容",
+        "Relatório cancelado, nada foi escrito",
+    ],
+    BatchBusy => [
+        "A report is already being made",
+        "Ya se está haciendo un informe",
+        "Ein Bericht wird bereits erstellt",
+        "Un rapport est déjà en cours",
+        "Un rapporto è già in corso",
+        "レポートはすでに作成中です",
+        "报告正在生成中",
+        "Já está a ser feito um relatório",
+    ],
 }
 
 impl Msg {

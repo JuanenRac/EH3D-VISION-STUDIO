@@ -17,7 +17,7 @@
 
 ---
 
-**Comprobación de honestidad - lo que funciona hoy:** una biblioteca Rust y un programa de línea de comandos (`eh3d-vision`) con 246 pruebas que se ejecutan en un ordenador: encuentra marcas fiduciales redondas en una imagen, convierte píxeles en milímetros y calcula el giro y el desplazamiento que colocan una placa donde dice su diseño. Tiene una ventana (se compila con `--features gui`, el programa `eh3d-vision-gui`) que abre una imagen, muestra las marcas con sus coordenadas, fija la escala, ajusta la distorsión del objetivo con una rejilla, alinea con el diseño y exporta las opciones de ISOCAM, pero todavía no se ha visto en una pantalla; no se ha probado en una máquina y no se ha comprobado con una colección de ficheros reales.
+**Comprobación de honestidad - lo que funciona hoy:** una biblioteca Rust y un programa de línea de comandos (`eh3d-vision`) con 255 pruebas que se ejecutan en un ordenador: encuentra marcas fiduciales redondas en una imagen, convierte píxeles en milímetros y calcula el giro y el desplazamiento que colocan una placa donde dice su diseño. Tiene una ventana (se compila con `--features gui`, el programa `eh3d-vision-gui`) que abre una imagen, muestra las marcas con sus coordenadas, fija la escala, ajusta la distorsión del objetivo con una rejilla, alinea con el diseño y exporta las opciones de ISOCAM, pero todavía no se ha visto en una pantalla; no se ha probado en una máquina y no se ha comprobado con una colección de ficheros reales.
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | Versión | `0.0.6` |
 | Madurez | Funcional |
-| Pruebas | 246 |
+| Pruebas | 255 |
 | Pila tecnológica | Rust |
 | En hardware real | No probado: nada de esto se ha ejecutado en una máquina |
 
@@ -46,7 +46,7 @@ Cada línea es una parte de este repositorio y la luz dice hasta dónde llega ho
 |---|---|---|
 | Núcleo | 🟡 | encuentra marcas fiduciales redondas en una imagen, convierte píxeles en milímetros y calcula el giro y el desplazamiento que colocan una placa donde dice su diseño; probado en un ordenador con entradas normales y dañadas, no con una colección de ficheros reales. |
 | Línea de comandos | 🟡 | `eh3d-vision` ejecuta las mismas funciones que la biblioteca e imprime el resultado; cada error vuelve como mensaje y un código de salida distinto de cero. |
-| Pruebas | 🟡 | 246 pruebas pasan (`cargo test`), con casos normales, casos límite y entradas dañadas, y una cámara simulada sobre una placa que añade ruido, mala exposición, un fotograma muerto o ausente, polvo que parece una marca o un archivo de imagen cortado, y se vuelve a pedir. |
+| Pruebas | 🟡 | 255 pruebas pasan (`cargo test`), con casos normales, casos límite y entradas dañadas, y una cámara simulada sobre una placa que añade ruido, mala exposición, un fotograma muerto o ausente, polvo que parece una marca o un archivo de imagen cortado, y se vuelve a pedir. |
 | Seguridad | 🟡 | Rust seguro y simple (`forbid(unsafe_code)`): nada entra en pánico con los ficheros recibidos y un valor malo es un error con su motivo; sin revisión independiente. |
 | Ventana | 🟠 | Escrita (egui, `--features gui`, el programa `eh3d-vision-gui`): abrir o soltar una imagen, ver las marcas con sus coordenadas, fijar la escala con una marca de tamaño conocido, ajustar la distorsión del objetivo con una rejilla, alinear con un diseño CSV y exportar las opciones de ISOCAM; su lógica está probada, pero todavía no se ha compilado ni visto en una pantalla. |
 | Hardware real | 🔴 | No probado: nada de esto se ha ejecutado en una máquina. |
@@ -92,7 +92,7 @@ Cómo encajan las partes de este repositorio: quién lo usa, qué contiene y de 
 * **La lente con dos factores, rechazada si no encaja:** `eh3d-vision lens IMAGEN` calcula `k1` y `k2` de la distorsión radial desde una rejilla de marcas y escribe las líneas `lens_k1 = ...` y `lens_k2 = ...` para `vision.cfg`; rechaza un ajuste que deja las marcas a más de `lens_max_rms` píxeles de su retícula (`lens_residual_too_large`) o un factor mayor que 0,5 (`lens_out_of_range`), y `find --undistort` endereza las posiciones con ellos.
 * **Un veredicto para cada pieza:** `eh3d-vision inspect IMAGEN --package NOMBRE --table packages.csv` mide las piezas de una imagen y compara cada una con el cuerpo de su encapsulado (`package`, `body_long_mm`, `body_short_mm` y, si se quiere, `tolerance_mm`, en un fichero CSV; `examples/packages.csv` trae algunos): `pass` o `fail` con el motivo (`length`, `width`, `angle`) en CSV o JSON, y el código de salida 1 cuando una pieza falla; la tolerancia y el giro máximo (`inspect_tolerance`, `inspect_max_angle`) están en `vision.cfg`.
 * **Un informe HTML de la carpeta:** `eh3d-vision batch CARPETA --html informe.html` escribe una página que se basta sola (sin scripts, sin enlaces, sin otros ficheros): una tabla de las imágenes, un dibujo pequeño de cada una con un círculo en cada marca hallada y los avisos (una imagen que no se pudo usar, sin marcas o con una puntuación por debajo de `report_low_score`), en el idioma de `--lang` o de `vision.cfg`.
-* **Las herramientas nuevas en la ventana:** el panel lateral trae el centro con fracción de píxel con la confianza de cada marca, la ventana de la luz, cuadrados y cruces con cualquier giro (dibujados sobre la imagen), las piezas en milímetros (guardadas como `<imagen>-parts.csv`), el informe de la carpeta (`eh3d-vision-report.html`, que nunca se escribe sobre un fichero sin `replace_output`) y la escala desde el paso de un patrón, con los textos en los ocho idiomas y los valores en `vision.cfg`; todavía no se ha visto en una pantalla.
+* **Las herramientas nuevas en la ventana:** el panel lateral trae el centro con fracción de píxel con la confianza de cada marca, la ventana de la luz, cuadrados y cruces con cualquier giro (dibujados sobre la imagen), las piezas en milímetros (guardadas como `<imagen>-parts.csv`), el informe de la carpeta, leído en un hilo con barra de progreso y botón de cancelar (`eh3d-vision-report.html`, que nunca se escribe sobre un fichero sin `replace_output`) y la escala desde el paso de un patrón, con los textos en los ocho idiomas y los valores en `vision.cfg`; todavía no se ha visto en una pantalla.
 * **Las imágenes de una pieza grande, planificadas:** `eh3d-vision shots --package NOMBRE --fov-w MM --fov-h MM` (o `--body-long` y `--body-short`) lista en CSV los lugares de la cámara, en milímetros desde el centro de la pieza, que ven toda una pieza mayor que el campo, con las imágenes vecinas solapadas en `shots_overlap` y un margen de `shots_margin`; no necesita cámara.
 
 ## 🔒 Seguridad y protección
@@ -144,7 +144,7 @@ Para sacar una captura de la ventana sin abrirla a mano, ejecútelo con `--shot 
 
 ## 🧪 Pruebas
 
-El conjunto tiene 246 pruebas (`cargo test`, ejecutadas en Windows y Linux en el CI). Comprueban los casos normales, los casos límite y las entradas dañadas: ficheros vacíos, basura y ficheros cortados nunca provocan un pánico. El CI ejecuta además `cargo fmt --check`, `cargo clippy` con las advertencias como errores y `python -I tools/ci_validate.py`.
+El conjunto tiene 255 pruebas (`cargo test`, ejecutadas en Windows y Linux en el CI). Comprueban los casos normales, los casos límite y las entradas dañadas: ficheros vacíos, basura y ficheros cortados nunca provocan un pánico. El CI ejecuta además `cargo fmt --check`, `cargo clippy` con las advertencias como errores y `python -I tools/ci_validate.py`.
 
 ## 🏗️ Compilación y publicación
 
@@ -178,6 +178,7 @@ EH3D-VISION-STUDIO/
 │   ├── flatten.rs                               la luz desigual quitada de una imagen
 │   ├── grid.rs                                  la distorsión del objetivo a partir de una rejilla de marcas
 │   ├── inspect.rs                               cada pieza comparada con el cuerpo de su encapsulado desde una tabla, con veredicto
+│   ├── job.rs                                   el informe de una carpeta leído en un hilo, con progreso y cancelación
 │   ├── lens.rs                                  los dos factores de la lente desde una rejilla de marcas, rechazados si no encajan
 │   ├── points.rs                                los ficheros de puntos de un diseño
 │   ├── report.rs                                el informe de una carpeta como una página HTML autónoma, en ocho idiomas

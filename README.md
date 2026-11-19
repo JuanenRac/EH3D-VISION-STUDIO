@@ -17,7 +17,7 @@
 
 ---
 
-**Honesty check - what actually runs today:** a Rust library and a command line program (`eh3d-vision`) with 246 tests that run on a computer: finds round fiducial marks in an image, turns pixels into millimetres and works out the turn and the shift that put a board where its design says. It has a window (built with `--features gui`, the program `eh3d-vision-gui`) that opens a picture, shows the marks with their coordinates, sets the scale, fits the distortion of the lens from a grid, aligns with the design and exports the options of ISOCAM, but the window has not been looked at on a screen yet; it has not been tried on a machine and it has not been checked against a collection of real files.
+**Honesty check - what actually runs today:** a Rust library and a command line program (`eh3d-vision`) with 255 tests that run on a computer: finds round fiducial marks in an image, turns pixels into millimetres and works out the turn and the shift that put a board where its design says. It has a window (built with `--features gui`, the program `eh3d-vision-gui`) that opens a picture, shows the marks with their coordinates, sets the scale, fits the distortion of the lens from a grid, aligns with the design and exports the options of ISOCAM, but the window has not been looked at on a screen yet; it has not been tried on a machine and it has not been checked against a collection of real files.
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | Version | `0.0.6` |
 | Maturity | Functional |
-| Tests | 246 |
+| Tests | 255 |
 | Stack | Rust |
 | On real hardware | Not tried: nothing here has run on a machine |
 
@@ -46,7 +46,7 @@ Each line is one part of this repository and the light says how far it is today.
 |---|---|---|
 | Core | 🟡 | finds round fiducial marks in an image, turns pixels into millimetres and works out the turn and the shift that put a board where its design says; tested on a computer with normal and damaged input, not with a collection of real files. |
 | Command line | 🟡 | `eh3d-vision` runs the same functions as the library and prints the result; every error comes back as a message and a non-zero exit code. |
-| Tests | 🟡 | 246 tests pass (`cargo test`), with normal cases, edge cases and damaged input, and a simulated camera over a board that adds noise, wrong exposure, a dead or missing frame, dust that looks like a mark or a cut picture file, and is asked again. |
+| Tests | 🟡 | 255 tests pass (`cargo test`), with normal cases, edge cases and damaged input, and a simulated camera over a board that adds noise, wrong exposure, a dead or missing frame, dust that looks like a mark or a cut picture file, and is asked again. |
 | Security | 🟡 | Plain safe Rust (`forbid(unsafe_code)`): nothing panics on the files it is given and a bad value is an error with its reason; no independent review. |
 | Window | 🟠 | Written (egui, `--features gui`, the program `eh3d-vision-gui`): open or drop a picture, see the marks with their coordinates, set the scale from a mark of known size, fit the distortion of the lens from a grid, align with a CSV design and export the options of ISOCAM; its logic is tested, but it has not been built or looked at on a screen yet. |
 | Real hardware | 🔴 | Not tried: nothing here has been run on a machine. |
@@ -92,7 +92,7 @@ How the parts of this repository fit together: who uses it, what it holds and wh
 * **The lens with two factors, refused when it does not fit:** `eh3d-vision lens IMAGE` works out `k1` and `k2` of the radial distortion from a grid of marks and prints the lines `lens_k1 = ...` and `lens_k2 = ...` for `vision.cfg`; it refuses a fit that leaves the marks farther than `lens_max_rms` pixels from their lattice (`lens_residual_too_large`) or a factor above 0.5 (`lens_out_of_range`), and `find --undistort` straightens the places with them.
 * **A verdict for each part:** `eh3d-vision inspect IMAGE --package NAME --table packages.csv` measures the parts of a picture and compares each one with the body of its package (`package`, `body_long_mm`, `body_short_mm`, optionally `tolerance_mm`, in a CSV file; `examples/packages.csv` has some): `pass` or `fail` with the reason (`length`, `width`, `angle`) as CSV or JSON, the exit code 1 when a part fails; the tolerance and the largest turn (`inspect_tolerance`, `inspect_max_angle`) are in `vision.cfg`.
 * **An HTML report of the folder:** `eh3d-vision batch FOLDER --html report.html` writes one page that stands alone (no script, no link, no other file): a table of the pictures, a small drawing of each one with a circle on every mark found, and the warnings (a picture that could not be used, without marks, or with a score below `report_low_score`), in the language of `--lang` or `vision.cfg`.
-* **The new tools in the window:** the side panel has the centre to a fraction of a pixel with the confidence of each mark, the window of the light, squares and crosses at any angle (drawn on the picture), the parts in millimetres (saved as `<picture>-parts.csv`), the report of the folder (`eh3d-vision-report.html`, never written over a file without `replace_output`) and the scale from the pitch of a target, with the texts in the eight languages and the values in `vision.cfg`; it has not been looked at on a screen yet.
+* **The new tools in the window:** the side panel has the centre to a fraction of a pixel with the confidence of each mark, the window of the light, squares and crosses at any angle (drawn on the picture), the parts in millimetres (saved as `<picture>-parts.csv`), the report of the folder, read in a thread with a progress bar and a cancel button (`eh3d-vision-report.html`, never written over a file without `replace_output`) and the scale from the pitch of a target, with the texts in the eight languages and the values in `vision.cfg`; it has not been looked at on a screen yet.
 * **The pictures of a big part, planned:** `eh3d-vision shots --package NAME --fov-w MM --fov-h MM` (or `--body-long` and `--body-short`) lists as CSV the places of the camera, in millimetres from the centre of the part, that see all of a part bigger than the field, with neighbouring pictures overlapping by `shots_overlap` and a margin of `shots_margin`; it needs no camera.
 
 ## 🔒 Security & Safety
@@ -144,7 +144,7 @@ To take a picture of the window without opening it by hand, run it with `--shot 
 
 ## 🧪 Testing
 
-The suite has 246 tests (`cargo test`, run on Windows and Linux in the CI). They check the normal cases, the edge cases and damaged input: empty files, garbage and cut files never panic. The CI also runs `cargo fmt --check`, `cargo clippy` with warnings as errors and `python -I tools/ci_validate.py`.
+The suite has 255 tests (`cargo test`, run on Windows and Linux in the CI). They check the normal cases, the edge cases and damaged input: empty files, garbage and cut files never panic. The CI also runs `cargo fmt --check`, `cargo clippy` with warnings as errors and `python -I tools/ci_validate.py`.
 
 ## 🏗️ Build & Release
 
@@ -178,6 +178,7 @@ EH3D-VISION-STUDIO/
 │   ├── flatten.rs                               uneven light taken out of a picture
 │   ├── grid.rs                                  the distortion of the lens from a grid of marks
 │   ├── inspect.rs                               each part compared with the body of its package from a table, with a verdict
+│   ├── job.rs                                   the report of a folder read in a thread, with progress and cancel
 │   ├── lens.rs                                  the two factors of the lens from a grid of marks, refused when they do not fit
 │   ├── points.rs                                the files of points of a design
 │   ├── report.rs                                the report of a folder as one HTML page that stands alone, in eight languages

@@ -310,14 +310,21 @@ impl App {
         {
             self.win.cfg.replace_output = replace;
         }
-        if ui
+        if self.win.batch_running() {
+            // the pictures are read in a thread: the window keeps answering, shows how far it is and can stop it
+            let fraction = self.win.batch_fraction();
+            ui.add(egui::ProgressBar::new(fraction).text(format!("{:.0} %", fraction * 100.0)));
+            if ui.button(Msg::Cancel.tr(lang)).clicked() {
+                self.win.cancel_batch();
+            }
+        } else if ui
             .add_enabled(
                 self.win.image.is_some(),
                 egui::Button::new(Msg::BatchRun.tr(lang)),
             )
             .clicked()
         {
-            self.win.batch_report();
+            self.win.start_batch_report();
         }
     }
 
@@ -823,6 +830,10 @@ impl eframe::App for App {
         }
         if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::O)) {
             self.open_dialog(Kind::Image);
+        }
+        // the report of a folder that is being read in a thread: its progress, and the page when it is done
+        if self.win.poll_batch() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
         self.top_bar(ui);
         self.status_bar(ui);

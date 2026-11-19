@@ -184,6 +184,19 @@
           }
         },
         {
+          "name": "job.rs",
+          "desc": {
+            "en": "the report of a folder read in a thread, with progress and cancel",
+            "es": "el informe de una carpeta leído en un hilo, con progreso y cancelación",
+            "de": "der Ordnerbericht in einem eigenen Thread, mit Fortschritt und Abbruch",
+            "fr": "le rapport d'un dossier lu dans un fil, avec progression et annulation",
+            "it": "il rapporto di una cartella letto in un thread, con avanzamento e annullamento",
+            "ja": "スレッドで読み込むフォルダレポート：進捗表示と中止つき",
+            "zh": "在独立线程中读取文件夹报告，带进度与取消",
+            "pt": "o relatório de uma pasta lido num fio, com progresso e cancelamento"
+          }
+        },
+        {
           "name": "lens.rs",
           "desc": {
             "en": "the two factors of the lens from a grid of marks, refused when they do not fit",

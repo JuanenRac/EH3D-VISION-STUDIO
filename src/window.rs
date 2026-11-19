@@ -6,6 +6,7 @@ use crate::config::Config;
 use crate::fiducial::{find_with, refine, Fiducial, Polarity};
 use crate::grid::{fit_distortion, Distortion};
 use crate::image::{from_bytes, Gray};
+use crate::job::BatchJob;
 use crate::lang::{Lang, Msg};
 use crate::measure::Part;
 use crate::points;
@@ -69,6 +70,9 @@ pub enum Status {
     PitchScaleSet { mm_per_px: f64, marks: usize },
     NeedPitch,
     BatchDone { pictures: usize, name: String },
+    BatchRunning { done: usize, total: usize },
+    BatchCancelled,
+    BatchBusy,
     TooLarge { name: String, mib: u64 },
     SameFile,
     ConfigProblem(String),
@@ -121,6 +125,11 @@ impl Status {
             Status::BatchDone { pictures, name } => {
                 Msg::BatchDone.with(lang, &[&pictures.to_string(), name])
             }
+            Status::BatchRunning { done, total } => {
+                Msg::BatchRunning.with(lang, &[&done.to_string(), &total.to_string()])
+            }
+            Status::BatchCancelled => Msg::BatchCancelled.tr(lang).to_string(),
+            Status::BatchBusy => Msg::BatchBusy.tr(lang).to_string(),
             Status::SameFile => Msg::SameFile.tr(lang).to_string(),
             Status::ConfigProblem(e) => Msg::ConfigProblem.with(lang, &[e]),
         }
@@ -266,6 +275,8 @@ pub struct Window {
     pub alignment: Option<Alignment>,
     pub viewport: Viewport,
     pub status: Status,
+    /// The report of a folder that is being read in a thread, with the folder it is written in.
+    pub batch_job: Option<(BatchJob, PathBuf)>,
 }
 
 impl Window {
@@ -328,6 +339,7 @@ impl Window {
             alignment: None,
             viewport: Viewport::default(),
             status: config_problem.map_or(Status::Ready, Status::ConfigProblem),
+            batch_job: None,
         }
     }
 

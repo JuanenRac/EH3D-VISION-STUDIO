@@ -17,7 +17,7 @@
 
 ---
 
-**Verificação de honestidade - o que funciona hoje:** uma biblioteca Rust e um programa de linha de comandos (`eh3d-vision`) com 246 testes que correm num computador: encontra marcas fiduciais redondas numa imagem, converte píxeis em milímetros e calcula a rotação e o deslocamento que põem uma placa onde diz o seu desenho. Tem uma janela (compila-se com `--features gui`, o programa `eh3d-vision-gui`) que abre uma imagem, mostra as marcas com as suas coordenadas, define a escala, ajusta a distorção da objetiva com uma grelha, alinha com o desenho e exporta as opções do ISOCAM, mas a janela ainda não foi vista num ecrã; não foi experimentado numa máquina e não foi verificado com uma coleção de ficheiros reais.
+**Verificação de honestidade - o que funciona hoje:** uma biblioteca Rust e um programa de linha de comandos (`eh3d-vision`) com 255 testes que correm num computador: encontra marcas fiduciais redondas numa imagem, converte píxeis em milímetros e calcula a rotação e o deslocamento que põem uma placa onde diz o seu desenho. Tem uma janela (compila-se com `--features gui`, o programa `eh3d-vision-gui`) que abre uma imagem, mostra as marcas com as suas coordenadas, define a escala, ajusta a distorção da objetiva com uma grelha, alinha com o desenho e exporta as opções do ISOCAM, mas a janela ainda não foi vista num ecrã; não foi experimentado numa máquina e não foi verificado com uma coleção de ficheiros reais.
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | Versão | `0.0.6` |
 | Maturidade | Funcional |
-| Testes | 246 |
+| Testes | 255 |
 | Tecnologias | Rust |
 | Em hardware real | Não experimentado: nada disto correu numa máquina |
 
@@ -46,7 +46,7 @@ Cada linha é uma parte deste repositório e a luz diz até onde chega hoje. É 
 |---|---|---|
 | Núcleo | 🟡 | encontra marcas fiduciais redondas numa imagem, converte píxeis em milímetros e calcula a rotação e o deslocamento que põem uma placa onde diz o seu desenho; testado num computador com entradas normais e danificadas, não com uma coleção de ficheiros reais. |
 | Linha de comandos | 🟡 | `eh3d-vision` executa as mesmas funções da biblioteca e imprime o resultado; cada erro volta como mensagem e código de saída diferente de zero. |
-| Testes | 🟡 | 246 testes passam (`cargo test`), com casos normais, casos-limite e entradas danificadas, e uma câmara simulada sobre uma placa que acrescenta ruído, má exposição, um fotograma morto ou em falta, pó que parece uma marca ou um ficheiro de imagem cortado, e é pedida de novo. |
+| Testes | 🟡 | 255 testes passam (`cargo test`), com casos normais, casos-limite e entradas danificadas, e uma câmara simulada sobre uma placa que acrescenta ruído, má exposição, um fotograma morto ou em falta, pó que parece uma marca ou um ficheiro de imagem cortado, e é pedida de novo. |
 | Segurança | 🟡 | Rust seguro e simples (`forbid(unsafe_code)`): nada entra em pânico com os ficheiros recebidos e um valor mau é um erro com o seu motivo; sem revisão independente. |
 | Janela | 🟠 | Escrita (egui, `--features gui`, o programa `eh3d-vision-gui`): abrir ou largar uma imagem, ver as marcas com as suas coordenadas, definir a escala com uma marca de tamanho conhecido, ajustar a distorção da objetiva com uma grelha, alinhar com um desenho CSV e exportar as opções do ISOCAM; a sua lógica está testada, mas ainda não foi compilada nem vista num ecrã. |
 | Hardware real | 🔴 | Não experimentado: nada disto foi executado numa máquina. |
@@ -92,7 +92,7 @@ Como as partes deste repositório se encaixam: quem o usa, o que contém e de qu
 * **A lente com dois fatores, recusada se não encaixar:** `eh3d-vision lens IMAGEM` calcula `k1` e `k2` da distorção radial a partir de uma grelha de marcas e escreve as linhas `lens_k1 = ...` e `lens_k2 = ...` para o `vision.cfg`; recusa um ajuste que deixe as marcas a mais de `lens_max_rms` píxeis da sua rede (`lens_residual_too_large`) ou um fator acima de 0,5 (`lens_out_of_range`), e `find --undistort` endireita as posições com eles.
 * **Um veredicto para cada peça:** `eh3d-vision inspect IMAGEM --package NOME --table packages.csv` mede as peças de uma imagem e compara cada uma com o corpo do seu encapsulamento (`package`, `body_long_mm`, `body_short_mm` e, se for preciso, `tolerance_mm`, num ficheiro CSV; `examples/packages.csv` traz alguns): `pass` ou `fail` com o motivo (`length`, `width`, `angle`) em CSV ou JSON, e o código de saída 1 quando uma peça falha; a tolerância e a rotação máxima (`inspect_tolerance`, `inspect_max_angle`) estão no `vision.cfg`.
 * **Um relatório HTML da pasta:** `eh3d-vision batch PASTA --html relatorio.html` escreve uma página que se basta a si própria (sem scripts, sem ligações, sem outros ficheiros): uma tabela das imagens, um desenho pequeno de cada uma com um círculo em cada marca encontrada e os avisos (uma imagem que não pôde ser usada, sem marcas ou com uma pontuação abaixo de `report_low_score`), na língua de `--lang` ou do `vision.cfg`.
-* **As novas ferramentas na janela:** o painel lateral traz o centro com fração de píxel com a confiança de cada marca, a janela da luz, quadrados e cruzes com qualquer rotação (desenhados na imagem), as peças em milímetros (guardadas como `<imagem>-parts.csv`), o relatório da pasta (`eh3d-vision-report.html`, nunca escrito sobre um ficheiro existente sem `replace_output`) e a escala a partir do passo de um padrão, com os textos nas oito línguas e os valores no `vision.cfg`; ainda não foi visto num ecrã.
+* **As novas ferramentas na janela:** o painel lateral traz o centro com fração de píxel com a confiança de cada marca, a janela da luz, quadrados e cruzes com qualquer rotação (desenhados na imagem), as peças em milímetros (guardadas como `<imagem>-parts.csv`), o relatório da pasta, lido num fio com barra de progresso e botão de cancelar (`eh3d-vision-report.html`, nunca escrito sobre um ficheiro existente sem `replace_output`) e a escala a partir do passo de um padrão, com os textos nas oito línguas e os valores no `vision.cfg`; ainda não foi visto num ecrã.
 * **As imagens de uma peça grande, planeadas:** `eh3d-vision shots --package NOME --fov-w MM --fov-h MM` (ou `--body-long` e `--body-short`) lista em CSV as posições da câmara, em milímetros desde o centro da peça, que veem toda uma peça maior do que o campo, com imagens vizinhas sobrepostas em `shots_overlap` e uma margem de `shots_margin`; não precisa de câmara.
 
 ## 🔒 Segurança e proteção
@@ -144,7 +144,7 @@ Para tirar uma captura da janela sem a abrir à mão, execute-o com `--shot FICH
 
 ## 🧪 Testes
 
-O conjunto tem 246 testes (`cargo test`, executados em Windows e Linux no CI). Verificam os casos normais, os casos-limite e as entradas danificadas: ficheiros vazios, lixo e ficheiros cortados nunca provocam pânico. O CI executa ainda `cargo fmt --check`, `cargo clippy` com avisos como erros e `python -I tools/ci_validate.py`.
+O conjunto tem 255 testes (`cargo test`, executados em Windows e Linux no CI). Verificam os casos normais, os casos-limite e as entradas danificadas: ficheiros vazios, lixo e ficheiros cortados nunca provocam pânico. O CI executa ainda `cargo fmt --check`, `cargo clippy` com avisos como erros e `python -I tools/ci_validate.py`.
 
 ## 🏗️ Compilação e publicação
 
@@ -178,6 +178,7 @@ EH3D-VISION-STUDIO/
 │   ├── flatten.rs                               a luz irregular retirada de uma imagem
 │   ├── grid.rs                                  a distorção da objetiva a partir de uma grelha de marcas
 │   ├── inspect.rs                               cada peça comparada com o corpo do seu encapsulamento a partir de uma tabela, com veredicto
+│   ├── job.rs                                   o relatório de uma pasta lido num fio, com progresso e cancelamento
 │   ├── lens.rs                                  os dois fatores da lente a partir de uma grelha de marcas, recusados se não encaixarem
 │   ├── points.rs                                os ficheiros de pontos de um desenho
 │   ├── report.rs                                o relatório de uma pasta como uma página HTML autónoma, em oito línguas
