@@ -50,14 +50,26 @@ impl Window {
         }
     }
 
-    /// The settings of the search for squares and crosses that the values of the window make.
-    pub fn shape_settings(&self) -> ShapeSettings {
+    /// The settings of the search for squares or for crosses that the values of the window make: each shape has its own range of size and its own elongation.
+    pub fn shape_settings(&self, kind: ShapeKind) -> ShapeSettings {
+        let (min_size, max_size, max_elongation) = match kind {
+            ShapeKind::Square => (
+                self.cfg.square_min_size,
+                self.cfg.square_max_size,
+                self.cfg.square_max_elongation,
+            ),
+            ShapeKind::Cross => (
+                self.cfg.cross_min_size,
+                self.cfg.cross_max_size,
+                self.cfg.cross_max_elongation,
+            ),
+        };
         ShapeSettings {
             polarity: self.cfg.polarity,
             threshold: self.cfg.threshold,
-            min_size: self.cfg.cross_min_size,
-            max_size: self.cfg.cross_max_size,
-            max_elongation: self.cfg.cross_max_elongation,
+            min_size,
+            max_size,
+            max_elongation,
             min_fill: self.cfg.square_min_fill,
             min_score: self.cfg.cross_min_score,
             max_spots: self.cfg.max_parts,
@@ -70,7 +82,7 @@ impl Window {
             self.status = Status::NeedImage;
             return false;
         }
-        let settings = self.shape_settings();
+        let settings = self.shape_settings(kind);
         let result = self.working().and_then(|gray| match kind {
             ShapeKind::Square => find_squares(&gray, &settings).map(|found| {
                 found
@@ -548,6 +560,47 @@ mod tests {
             .position(|f| f.key == "cross_min_size")
             .unwrap();
         assert!(!w.set_field(i, "3".into()));
+        assert!(w.status.is_problem());
+    }
+
+    #[test]
+    fn a_square_and_a_cross_each_have_their_own_range_of_size() {
+        let s = Scratch::new("shapes_own");
+        // the square is 29 pixels wide and the cross 33: a range that leaves out only one of them
+        let mut w = window_with(
+            "square_min_size = 60
+",
+        );
+        assert!(w.open_image(&shapes_picture(&s)));
+        assert!(w.find_shapes(ShapeKind::Square));
+        assert_eq!(w.status, Status::SquaresFound(0));
+        assert!(w.find_shapes(ShapeKind::Cross));
+        assert_eq!(w.status, Status::CrossesFound(1));
+        let mut w = window_with(
+            "cross_max_size = 20
+",
+        );
+        assert!(w.open_image(&shapes_picture(&s)));
+        assert!(w.find_shapes(ShapeKind::Cross));
+        assert_eq!(w.status, Status::CrossesFound(0));
+        assert!(w.find_shapes(ShapeKind::Square));
+        assert_eq!(w.status, Status::SquaresFound(1));
+        // the elongation too
+        let w = window_with(
+            "square_max_elongation = 1.5
+cross_max_elongation = 3
+",
+        );
+        assert_eq!(w.shape_settings(ShapeKind::Square).max_elongation, 1.5);
+        assert_eq!(w.shape_settings(ShapeKind::Cross).max_elongation, 3.0);
+        // a value that makes no sense is the status of the failure
+        let mut w = window_with("");
+        let i = w
+            .fields
+            .iter()
+            .position(|f| f.key == "square_max_size")
+            .unwrap();
+        assert!(!w.set_field(i, "5".into()));
         assert!(w.status.is_problem());
     }
 

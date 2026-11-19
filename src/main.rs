@@ -83,12 +83,18 @@ fn deliver(text: &str, output: Option<String>, replace: bool) -> Result<(), Stri
     }
 }
 
-/// The settings of the search for squares and turned crosses that the configuration file gives (the size range is the one of the crosses).
-fn shape_settings(s: &mut ShapeSettings, cfg: &Config) {
+/// The settings of the search for squares or for turned crosses that the configuration file gives: each shape has its own range of size and its own elongation.
+fn shape_settings(s: &mut ShapeSettings, cfg: &Config, squares: bool) {
     s.threshold = cfg.threshold;
-    s.min_size = cfg.cross_min_size;
-    s.max_size = cfg.cross_max_size;
-    s.max_elongation = cfg.cross_max_elongation;
+    if squares {
+        s.min_size = cfg.square_min_size;
+        s.max_size = cfg.square_max_size;
+        s.max_elongation = cfg.square_max_elongation;
+    } else {
+        s.min_size = cfg.cross_min_size;
+        s.max_size = cfg.cross_max_size;
+        s.max_elongation = cfg.cross_max_elongation;
+    }
     s.min_fill = cfg.square_min_fill;
     s.min_score = cfg.cross_min_score;
     s.max_spots = cfg.max_parts;
@@ -520,7 +526,7 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 .map(|v| count(&v, "--flatten"))
                 .transpose()?;
             let cfg = config();
-            shape_settings(&mut s, &cfg);
+            shape_settings(&mut s, &cfg, true);
             if let Some(v) = flag(&mut args, "--min-size")? {
                 s.min_size = num(&v, "--min-size")?;
             }
@@ -578,7 +584,7 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                     max_size: s.max_size,
                     ..ShapeSettings::default()
                 };
-                shape_settings(&mut shape, &cfg);
+                shape_settings(&mut shape, &cfg, false);
                 shape.polarity = s.polarity;
                 shape.min_size = s.min_size;
                 shape.max_size = s.max_size;

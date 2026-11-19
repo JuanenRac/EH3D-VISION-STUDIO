@@ -11,7 +11,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 40] = [
+pub const KEYS: [&str; 43] = [
     "language",
     "polarity",
     "threshold",
@@ -52,6 +52,9 @@ pub const KEYS: [&str; 40] = [
     "replace_output",
     "shots_overlap",
     "shots_margin",
+    "square_min_size",
+    "square_max_size",
+    "square_max_elongation",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -124,6 +127,10 @@ pub struct Config {
     /// The share of the field (0 to 0.9) by which neighbouring pictures of the plan of `shots` overlap, and the margin around the part that the pictures must also cover, in millimetres.
     pub shots_overlap: f64,
     pub shots_margin: f64,
+    /// The range of the side of a square mark, in pixels, and how much longer than wide its box may be (the crosses have their own, `cross_min_size` and the rest).
+    pub square_min_size: f64,
+    pub square_max_size: f64,
+    pub square_max_elongation: f64,
 }
 
 impl Default for Config {
@@ -170,6 +177,9 @@ impl Default for Config {
             replace_output: false,
             shots_overlap: 0.1,
             shots_margin: 0.5,
+            square_min_size: 12.0,
+            square_max_size: 200.0,
+            square_max_elongation: 1.2,
         }
     }
 }
@@ -274,6 +284,9 @@ impl Config {
             "cross_min_size" => self.cross_min_size = number(value, key)?,
             "cross_max_size" => self.cross_max_size = number(value, key)?,
             "cross_max_elongation" => self.cross_max_elongation = number(value, key)?,
+            "square_min_size" => self.square_min_size = number(value, key)?,
+            "square_max_size" => self.square_max_size = number(value, key)?,
+            "square_max_elongation" => self.square_max_elongation = number(value, key)?,
             "pitch_tolerance" => self.pitch_tolerance = number(value, key)?,
             "batch_max_files" => self.batch_max_files = count(value, key)?,
             "square_min_fill" => self.square_min_fill = number(value, key)?,
@@ -352,6 +365,15 @@ impl Config {
                 "the side of a cross must be from 7 pixels up and the largest not below the smallest"
                     .into(),
             );
+        }
+        if !(self.square_min_size >= 7.0 && self.square_max_size >= self.square_min_size) {
+            return Err(
+                "the side of a square must be from 7 pixels up and the largest not below the smallest"
+                    .into(),
+            );
+        }
+        if self.square_max_elongation < 1.0 {
+            return Err("square_max_elongation must be 1 or more".into());
         }
         if self.cross_max_elongation < 1.0 {
             return Err("cross_max_elongation must be 1 or more".into());
@@ -553,6 +575,10 @@ part_max_area = 100",
             "cross_min_size = 50
 cross_max_size = 20",
             "cross_max_elongation = 0.9",
+            "square_min_size = 5",
+            "square_min_size = 50
+square_max_size = 20",
+            "square_max_elongation = 0.9",
             "pitch_tolerance = -0.1",
             "pitch_tolerance = 2",
             "batch_max_files = 0",

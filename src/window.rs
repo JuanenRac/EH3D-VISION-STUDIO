@@ -224,6 +224,9 @@ fn field_text(cfg: &Config, key: &str) -> String {
         "cross_min_size" => cfg.cross_min_size.to_string(),
         "cross_max_size" => cfg.cross_max_size.to_string(),
         "cross_max_elongation" => cfg.cross_max_elongation.to_string(),
+        "square_min_size" => cfg.square_min_size.to_string(),
+        "square_max_size" => cfg.square_max_size.to_string(),
+        "square_max_elongation" => cfg.square_max_elongation.to_string(),
         "square_min_fill" => cfg.square_min_fill.to_string(),
         "cross_min_score" => cfg.cross_min_score.to_string(),
         "mm_per_px" => cfg.mm_per_px.to_string(),
@@ -294,6 +297,13 @@ impl Window {
             ("max_stretch", Msg::MaxStretch, Section::Align),
             ("flatten_window", Msg::FlattenWindow, Section::Search),
             ("full_contrast", Msg::FullContrast, Section::Refine),
+            ("square_min_size", Msg::SquareMinSize, Section::Shapes),
+            ("square_max_size", Msg::SquareMaxSize, Section::Shapes),
+            (
+                "square_max_elongation",
+                Msg::SquareMaxElongation,
+                Section::Shapes,
+            ),
             ("cross_min_size", Msg::CrossMinSize, Section::Shapes),
             ("cross_max_size", Msg::CrossMaxSize, Section::Shapes),
             (
@@ -880,7 +890,7 @@ mod tests {
     fn a_new_window_waits_for_a_picture() {
         let w = window();
         assert_eq!(w.status, Status::Ready);
-        assert_eq!(w.fields.len(), 25);
+        assert_eq!(w.fields.len(), 28);
         assert_eq!(w.fields[0].text, "auto");
         assert_eq!(w.fields[1].text, "8");
         assert!(!w.light_marks());

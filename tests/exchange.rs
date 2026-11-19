@@ -600,6 +600,26 @@ fn squares_and_turned_crosses_are_found_with_their_angle() {
     .unwrap();
     assert!(out(&run(&dir, &["squares", "turned.pgm"])).contains("no squares found"));
     assert!(out(&run(&dir, &["crosses", "turned.pgm", "--turned"])).contains("no crosses found"));
+    // the square and the cross each have their own range of size: a square range that leaves out the square does not touch the cross, and the other way round
+    fs::write(
+        dir.join("vision.cfg"),
+        "square_min_size = 40
+",
+    )
+    .unwrap();
+    assert!(out(&run(&dir, &["squares", "turned.pgm"])).contains("no squares found"));
+    assert_eq!(
+        marks_in(&out(&run(&dir, &["crosses", "turned.pgm", "--turned"]))),
+        1
+    );
+    fs::write(
+        dir.join("vision.cfg"),
+        "cross_max_size = 20
+",
+    )
+    .unwrap();
+    assert!(out(&run(&dir, &["crosses", "turned.pgm", "--turned"])).contains("no crosses found"));
+    assert_eq!(marks_in(&out(&run(&dir, &["squares", "turned.pgm"]))), 1);
     fs::remove_file(dir.join("vision.cfg")).unwrap();
     let bad = run(&dir, &["squares", "turned.pgm", "--min-size", "3"]);
     assert!(
