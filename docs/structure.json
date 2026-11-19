@@ -275,6 +275,19 @@
           }
         },
         {
+          "name": "tools.rs",
+          "desc": {
+            "en": "the tools of the side panel on the picture: shapes, parts, folder report, pitch scale",
+            "es": "las herramientas del panel lateral sobre la imagen: formas, piezas, informe y paso",
+            "de": "die Werkzeuge der Seitenleiste am Bild: Formen, Teile, Ordnerbericht, Abstandsmaßstab",
+            "fr": "les outils du panneau latéral sur l'image : formes, pièces, rapport, échelle par le pas",
+            "it": "gli strumenti del pannello laterale sull'immagine: forme, pezzi, rapporto, scala dal passo",
+            "ja": "サイドパネルの画像ツール：図形・部品・フォルダレポート・間隔によるスケール",
+            "zh": "侧边栏中针对图像的工具：形状、零件、文件夹报告、由间距求比例",
+            "pt": "as ferramentas do painel lateral sobre a imagem: formas, peças, relatório e passo"
+          }
+        },
+        {
           "name": "shot.rs",
           "desc": {
             "en": "the picture mode of the window (--shot): its arguments, read and checked without a screen",

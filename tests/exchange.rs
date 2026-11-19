@@ -354,6 +354,45 @@ fn calibrate_gives_the_scale_from_the_pitch_of_a_target() {
     // the line it prints is a line the configuration file reads, and measure then needs no option
     fs::write(dir.join("vision.cfg"), "mm_per_px = 0.05\n").unwrap();
     assert!(run(&dir, &["measure", "target.pgm"]).status.success());
+    // the pitch can be written in the file too, and the option wins over it
+    fs::write(
+        dir.join("vision.cfg"),
+        "pitch_mm = 2
+",
+    )
+    .unwrap();
+    let from_file = run(&dir, &["calibrate", "target.pgm"]);
+    assert!(from_file.status.success(), "{}", err(&from_file));
+    assert!(
+        out(&from_file).starts_with("20 marks, 2 mm apart"),
+        "{}",
+        out(&from_file)
+    );
+    let option = run(&dir, &["calibrate", "target.pgm", "--pitch-mm", "4"]);
+    assert!(
+        out(&option).starts_with("20 marks, 4 mm apart"),
+        "{}",
+        out(&option)
+    );
+    // the files are written over the ones that are there only when replace_output says so
+    let args = [
+        "measure",
+        "target.pgm",
+        "--mm-per-px",
+        "0.05",
+        "--output",
+        "p.csv",
+    ];
+    assert!(run(&dir, &args).status.success());
+    let again = run(&dir, &args);
+    assert!(err(&again).contains("file_exists"), "{}", err(&again));
+    fs::write(
+        dir.join("vision.cfg"),
+        "replace_output = yes
+",
+    )
+    .unwrap();
+    assert!(run(&dir, &args).status.success());
     let _ = fs::remove_dir_all(&dir);
 }
 

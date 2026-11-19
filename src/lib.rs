@@ -25,6 +25,7 @@ pub mod report;
 pub mod scale;
 pub mod shot;
 pub mod square;
+pub mod tools;
 pub mod viewport;
 pub mod window;
 

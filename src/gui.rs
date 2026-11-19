@@ -6,6 +6,7 @@ use crate::config::Config;
 use crate::image::Gray;
 use crate::lang::{Lang, Msg};
 use crate::shot::{ShotRequest, ShotTheme, PATIENCE_FRAMES};
+use crate::tools::ShapeKind;
 use crate::window::{Section, Window, DESIGN_EXTENSIONS, IMAGE_EXTENSIONS, OUTPUT_EXTENSIONS};
 use eframe::egui::{
     self, Color32, FontData, FontDefinitions, FontFamily, Pos2, Rect, Stroke, TextureOptions,
@@ -209,6 +210,117 @@ impl App {
         }
     }
 
+    /// The centres to a fraction of a pixel, with the confidence of each mark.
+    fn refine_section(&mut self, ui: &mut egui::Ui) {
+        let lang = self.win.lang;
+        Self::heading(ui, Msg::RefineTitle.tr(lang));
+        let mut on = self.win.cfg.refine_subpixel;
+        let changed = ui.checkbox(&mut on, Msg::RefineSubpixel.tr(lang)).changed();
+        if changed {
+            self.win.cfg.refine_subpixel = on;
+        }
+        let left = self.fields(ui, Section::Refine);
+        if (changed || left) && self.win.image.is_some() {
+            self.win.detect();
+        }
+    }
+
+    fn pitch_section(&mut self, ui: &mut egui::Ui) {
+        let lang = self.win.lang;
+        Self::heading(ui, Msg::PitchTitle.tr(lang));
+        self.fields(ui, Section::Pitch);
+        let ready = self.win.image.is_some() && !self.win.marks.is_empty();
+        if ui
+            .add_enabled(ready, egui::Button::new(Msg::ScaleFromPitch.tr(lang)))
+            .clicked()
+        {
+            self.win.calibrate_pitch();
+        }
+    }
+
+    fn shapes_section(&mut self, ui: &mut egui::Ui) {
+        let lang = self.win.lang;
+        Self::heading(ui, Msg::ShapesTitle.tr(lang));
+        self.fields(ui, Section::Shapes);
+        let has_image = self.win.image.is_some();
+        ui.horizontal(|ui| {
+            if ui
+                .add_enabled(has_image, egui::Button::new(Msg::FindSquares.tr(lang)))
+                .clicked()
+            {
+                self.win.find_shapes(ShapeKind::Square);
+            }
+            if ui
+                .add_enabled(has_image, egui::Button::new(Msg::FindCrosses.tr(lang)))
+                .clicked()
+            {
+                self.win.find_shapes(ShapeKind::Cross);
+            }
+        });
+        let lines = self.win.shape_lines();
+        egui::ScrollArea::vertical()
+            .id_salt("shapes")
+            .max_height(120.0)
+            .show(ui, |ui| {
+                for line in lines {
+                    ui.label(egui::RichText::new(line).color(DIM));
+                }
+            });
+    }
+
+    fn measure_section(&mut self, ui: &mut egui::Ui) {
+        let lang = self.win.lang;
+        Self::heading(ui, Msg::PartsTitle.tr(lang));
+        self.fields(ui, Section::Measure);
+        let has_image = self.win.image.is_some();
+        let has_parts = !self.win.parts.is_empty();
+        ui.horizontal(|ui| {
+            if ui
+                .add_enabled(has_image, egui::Button::new(Msg::MeasureParts.tr(lang)))
+                .clicked()
+            {
+                self.win.measure();
+            }
+            if ui
+                .add_enabled(has_parts, egui::Button::new(Msg::SaveParts.tr(lang)))
+                .clicked()
+            {
+                self.win.save_parts();
+            }
+        });
+        let lines = self.win.part_lines();
+        egui::ScrollArea::vertical()
+            .id_salt("parts")
+            .max_height(140.0)
+            .show(ui, |ui| {
+                for line in lines {
+                    ui.label(egui::RichText::new(line).color(DIM));
+                }
+            });
+    }
+
+    fn batch_section(&mut self, ui: &mut egui::Ui) {
+        let lang = self.win.lang;
+        Self::heading(ui, Msg::BatchTitle.tr(lang));
+        self.fields(ui, Section::Batch);
+        let mut replace = self.win.cfg.replace_output;
+        if ui
+            .checkbox(&mut replace, Msg::ReplaceOutput.tr(lang))
+            .changed()
+        {
+            self.win.cfg.replace_output = replace;
+        }
+        if ui
+            .add_enabled(
+                self.win.image.is_some(),
+                egui::Button::new(Msg::BatchRun.tr(lang)),
+            )
+            .clicked()
+        {
+            self.win.batch_report();
+        }
+    }
+
     fn marks_section(&mut self, ui: &mut egui::Ui) {
         let lang = self.win.lang;
         Self::heading(ui, Msg::Marks.tr(lang));
@@ -235,6 +347,9 @@ impl App {
                     );
                     if let Some(mm) = in_mm.as_ref().and_then(|v| v.get(i)) {
                         line.push_str(&format!("  ->  ({:.3}, {:.3}) mm", mm.0, mm.1));
+                    }
+                    if let Some(c) = self.win.confidence.get(i) {
+                        line.push_str(&format!("  {} {c:.2}", Msg::Confidence.tr(lang)));
                     }
                     if ui
                         .selectable_label(self.win.selected == Some(i), line)
@@ -326,10 +441,15 @@ impl App {
                     .id_salt("tools")
                     .show(ui, |ui| {
                         self.search_section(ui);
+                        self.refine_section(ui);
                         self.marks_section(ui);
                         self.scale_section(ui);
+                        self.pitch_section(ui);
                         self.distortion_section(ui);
+                        self.shapes_section(ui);
+                        self.measure_section(ui);
                         self.align_section(ui);
+                        self.batch_section(ui);
                     });
             });
     }
@@ -489,6 +609,40 @@ impl App {
                 egui::FontId::proportional(13.0),
                 colour,
             );
+        }
+        for s in &self.win.shapes {
+            let at = self.screen(rect, s.x, s.y);
+            let half = ((s.size / 2.0 * zoom) as f32).max(4.0);
+            // the turn is counter-clockwise as the machine sees it, and the screen goes down
+            let (sin, cos) = (
+                s.angle_deg.to_radians().sin() as f32,
+                s.angle_deg.to_radians().cos() as f32,
+            );
+            let at_local =
+                |x: f32, y: f32| at + egui::vec2(x * cos - y * sin, -(x * sin + y * cos));
+            match s.kind {
+                ShapeKind::Square => {
+                    let corners = [
+                        at_local(-half, -half),
+                        at_local(half, -half),
+                        at_local(half, half),
+                        at_local(-half, half),
+                    ];
+                    for (a, b) in corners.iter().zip(corners.iter().cycle().skip(1)) {
+                        painter.line_segment([*a, *b], Stroke::new(2.0, OK));
+                    }
+                }
+                ShapeKind::Cross => {
+                    painter.line_segment(
+                        [at_local(-half, 0.0), at_local(half, 0.0)],
+                        Stroke::new(2.0, ACCENT),
+                    );
+                    painter.line_segment(
+                        [at_local(0.0, -half), at_local(0.0, half)],
+                        Stroke::new(2.0, ACCENT),
+                    );
+                }
+            }
         }
         if self.win.cfg.show_residuals {
             for r in self.win.residuals() {

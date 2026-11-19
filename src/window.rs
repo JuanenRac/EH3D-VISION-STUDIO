@@ -3,12 +3,14 @@
 
 use crate::align::{fit, isocam_args, pair_nearest, Transform};
 use crate::config::Config;
-use crate::fiducial::{find_with, Fiducial, Polarity};
+use crate::fiducial::{find_with, refine, Fiducial, Polarity};
 use crate::grid::{fit_distortion, Distortion};
 use crate::image::{from_bytes, Gray};
 use crate::lang::{Lang, Msg};
+use crate::measure::Part;
 use crate::points;
 use crate::scale::{undistort, Scale};
+use crate::tools::ShapeMark;
 use crate::viewport::Viewport;
 use std::path::{Path, PathBuf};
 
@@ -24,6 +26,11 @@ pub enum Section {
     Scale,
     Grid,
     Align,
+    Refine,
+    Shapes,
+    Measure,
+    Batch,
+    Pitch,
 }
 
 /// A value of the configuration that the person can edit in the window.
@@ -56,13 +63,19 @@ pub enum Status {
     NeedDesign,
     NeedAccepted,
     GridCount { need: usize, found: usize },
+    SquaresFound(usize),
+    CrossesFound(usize),
+    PartsFound(usize),
+    PitchScaleSet { mm_per_px: f64, marks: usize },
+    NeedPitch,
+    BatchDone { pictures: usize, name: String },
     TooLarge { name: String, mib: u64 },
     SameFile,
     ConfigProblem(String),
 }
 
 /// A number for the screen with `decimals` decimals.
-fn show(value: f64, decimals: usize) -> String {
+pub(crate) fn show(value: f64, decimals: usize) -> String {
     format!("{value:.decimals$}")
 }
 
@@ -95,6 +108,19 @@ impl Status {
                 Msg::GridCount.with(lang, &[&need.to_string(), &found.to_string()])
             }
             Status::TooLarge { name, mib } => Msg::TooLarge.with(lang, &[name, &mib.to_string()]),
+            Status::SquaresFound(0) => Msg::NoSquaresFound.tr(lang).to_string(),
+            Status::SquaresFound(n) => Msg::SquaresFound.with(lang, &[&n.to_string()]),
+            Status::CrossesFound(0) => Msg::NoCrossesFound.tr(lang).to_string(),
+            Status::CrossesFound(n) => Msg::CrossesFound.with(lang, &[&n.to_string()]),
+            Status::PartsFound(0) => Msg::NoPartsFound.tr(lang).to_string(),
+            Status::PartsFound(n) => Msg::PartsFound.with(lang, &[&n.to_string()]),
+            Status::PitchScaleSet { mm_per_px, marks } => {
+                Msg::PitchScaleSet.with(lang, &[&show(*mm_per_px, 6), &marks.to_string()])
+            }
+            Status::NeedPitch => Msg::NeedPitch.tr(lang).to_string(),
+            Status::BatchDone { pictures, name } => {
+                Msg::BatchDone.with(lang, &[&pictures.to_string(), name])
+            }
             Status::SameFile => Msg::SameFile.tr(lang).to_string(),
             Status::ConfigProblem(e) => Msg::ConfigProblem.with(lang, &[e]),
         }
@@ -111,6 +137,7 @@ impl Status {
                 | Status::NeedScale
                 | Status::NeedDesign
                 | Status::NeedAccepted
+                | Status::NeedPitch
                 | Status::GridCount { .. }
                 | Status::TooLarge { .. }
                 | Status::SameFile
@@ -183,6 +210,21 @@ fn field_text(cfg: &Config, key: &str) -> String {
         "grid_rows" => cfg.grid_rows.to_string(),
         "max_rms" => cfg.max_rms.to_string(),
         "max_stretch" => cfg.max_stretch.to_string(),
+        "flatten_window" => cfg.flatten_window.to_string(),
+        "full_contrast" => cfg.full_contrast.to_string(),
+        "cross_min_size" => cfg.cross_min_size.to_string(),
+        "cross_max_size" => cfg.cross_max_size.to_string(),
+        "cross_max_elongation" => cfg.cross_max_elongation.to_string(),
+        "square_min_fill" => cfg.square_min_fill.to_string(),
+        "cross_min_score" => cfg.cross_min_score.to_string(),
+        "mm_per_px" => cfg.mm_per_px.to_string(),
+        "part_min_area" => cfg.part_min_area.to_string(),
+        "part_max_area" => cfg.part_max_area.to_string(),
+        "max_parts" => cfg.max_parts.to_string(),
+        "batch_max_files" => cfg.batch_max_files.to_string(),
+        "report_low_score" => cfg.report_low_score.to_string(),
+        "pitch_mm" => cfg.pitch_mm.to_string(),
+        "pitch_tolerance" => cfg.pitch_tolerance.to_string(),
         _ => String::new(),
     }
 }
@@ -209,6 +251,11 @@ pub struct Window {
     /// Raised each time a picture is opened, so that the window knows to make its texture again.
     pub image_serial: u64,
     pub marks: Vec<Fiducial>,
+    /// How sure each mark is (0 to 1), when the centres are worked out to a fraction of a pixel (`refine_subpixel`); empty otherwise.
+    pub confidence: Vec<f64>,
+    /// The squares and the crosses that were found, and the parts that were measured.
+    pub shapes: Vec<ShapeMark>,
+    pub parts: Vec<Part>,
     pub selected: Option<usize>,
     pub scale: Option<Scale>,
     pub distortion: Option<Distortion>,
@@ -234,6 +281,25 @@ impl Window {
             ("grid_rows", Msg::GridRows, Section::Grid),
             ("max_rms", Msg::MaxRms, Section::Align),
             ("max_stretch", Msg::MaxStretch, Section::Align),
+            ("flatten_window", Msg::FlattenWindow, Section::Search),
+            ("full_contrast", Msg::FullContrast, Section::Refine),
+            ("cross_min_size", Msg::CrossMinSize, Section::Shapes),
+            ("cross_max_size", Msg::CrossMaxSize, Section::Shapes),
+            (
+                "cross_max_elongation",
+                Msg::CrossMaxElongation,
+                Section::Shapes,
+            ),
+            ("square_min_fill", Msg::SquareMinFill, Section::Shapes),
+            ("cross_min_score", Msg::CrossMinScore, Section::Shapes),
+            ("mm_per_px", Msg::MmPerPx, Section::Measure),
+            ("part_min_area", Msg::PartMinArea, Section::Measure),
+            ("part_max_area", Msg::PartMaxArea, Section::Measure),
+            ("max_parts", Msg::MaxParts, Section::Measure),
+            ("batch_max_files", Msg::BatchMaxFiles, Section::Batch),
+            ("report_low_score", Msg::ReportLowScore, Section::Batch),
+            ("pitch_mm", Msg::PitchMm, Section::Pitch),
+            ("pitch_tolerance", Msg::PitchTolerance, Section::Pitch),
         ]
         .into_iter()
         .map(|(key, label, section)| FieldState {
@@ -250,6 +316,9 @@ impl Window {
             image: None,
             image_serial: 0,
             marks: Vec::new(),
+            confidence: Vec::new(),
+            shapes: Vec::new(),
+            parts: Vec::new(),
             selected: None,
             scale: None,
             distortion: None,
@@ -353,17 +422,30 @@ impl Window {
 
     /// Looks for the marks again with the values of the fields. What was worked out from the old marks (the distortion and the alignment) is forgotten; the scale stays.
     pub fn detect(&mut self) -> bool {
-        let result = match &self.image {
-            Some(img) => find_with(&img.gray, &self.cfg.settings(), self.cfg.threshold),
-            None => {
-                self.status = Status::NeedImage;
-                return false;
+        if self.image.is_none() {
+            self.status = Status::NeedImage;
+            return false;
+        }
+        let result = self.working().and_then(|gray| {
+            let mut marks = find_with(&gray, &self.cfg.settings(), self.cfg.threshold)?;
+            // the centres to a fraction of a pixel, with how sure each one is, when the configuration asks for it
+            let mut confidence = Vec::new();
+            if self.cfg.refine_subpixel {
+                for m in &mut marks {
+                    let r = refine(&gray, m, self.cfg.polarity, self.cfg.full_contrast);
+                    (m.x, m.y) = (r.x, r.y);
+                    confidence.push(r.confidence);
+                }
             }
-        };
+            Ok((marks, confidence))
+        });
         match result {
-            Ok(marks) => {
+            Ok((marks, confidence)) => {
                 self.status = Status::Found(marks.len());
                 self.marks = marks;
+                self.confidence = confidence;
+                self.shapes.clear();
+                self.parts.clear();
                 self.selected = None;
                 self.distortion = None;
                 self.use_distortion = false;
@@ -786,7 +868,7 @@ mod tests {
     fn a_new_window_waits_for_a_picture() {
         let w = window();
         assert_eq!(w.status, Status::Ready);
-        assert_eq!(w.fields.len(), 10);
+        assert_eq!(w.fields.len(), 25);
         assert_eq!(w.fields[0].text, "auto");
         assert_eq!(w.fields[1].text, "8");
         assert!(!w.light_marks());

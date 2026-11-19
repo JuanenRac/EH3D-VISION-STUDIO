@@ -239,6 +239,7 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
             finish(&args, 1)?;
             let folder = args.first().ok_or("batch needs a folder")?;
             let cfg = config();
+            let replace = replace || cfg.replace_output;
             let lang = match lang_code {
                 Some(code) => Lang::from_code(&code).ok_or_else(|| {
                     format!("--lang '{code}' is not en, es, de, fr, it, ja, zh or pt")
@@ -292,11 +293,14 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
             let flatten_px = flag(&mut args, "--flatten")?
                 .map(|v| count(&v, "--flatten"))
                 .transpose()?;
-            let pitch = flag(&mut args, "--pitch-mm")?
-                .map(|v| num(&v, "--pitch-mm"))
-                .transpose()?
-                .ok_or("calibrate needs --pitch-mm, the distance in millimetres between neighbouring marks")?;
             let cfg = config();
+            let pitch = match flag(&mut args, "--pitch-mm")? {
+                Some(v) => num(&v, "--pitch-mm")?,
+                None if cfg.pitch_mm > 0.0 => cfg.pitch_mm,
+                None => {
+                    return Err("calibrate needs --pitch-mm (or pitch_mm in vision.cfg), the distance in millimetres between neighbouring marks".into())
+                }
+            };
             let tolerance = flag(&mut args, "--tolerance")?
                 .map(|v| num(&v, "--tolerance"))
                 .transpose()?
@@ -336,6 +340,7 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 .ok_or("inspect needs --package, the name of the package in the table")?;
             let table_path = flag(&mut args, "--table")?;
             let cfg = config();
+            let replace = replace || cfg.replace_output;
             let tolerance = flag(&mut args, "--tolerance")?
                 .map(|v| num(&v, "--tolerance"))
                 .transpose()?
@@ -570,6 +575,7 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
             }
             let path = args.first().ok_or("measure needs an image")?;
             let cfg = config();
+            let replace = replace || cfg.replace_output;
             let mm = mm_per_px.unwrap_or(cfg.mm_per_px);
             if mm <= 0.0 {
                 return Err(

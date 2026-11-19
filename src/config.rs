@@ -11,7 +11,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 36] = [
+pub const KEYS: [&str; 38] = [
     "language",
     "polarity",
     "threshold",
@@ -48,6 +48,8 @@ pub const KEYS: [&str; 36] = [
     "inspect_tolerance",
     "inspect_max_angle",
     "report_low_score",
+    "pitch_mm",
+    "replace_output",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -113,6 +115,10 @@ pub struct Config {
     pub inspect_max_angle: f64,
     /// The score below which a picture of the HTML report of `batch` gets a warning (0 to 1).
     pub report_low_score: f64,
+    /// The distance in millimetres between neighbouring marks of the target that sets the scale (`calibrate`); 0 means that it is not known.
+    pub pitch_mm: f64,
+    /// Whether the files that the window writes (the parts, the report of a folder) may be written over a file that is there; the command line does so with `--replace`.
+    pub replace_output: bool,
 }
 
 impl Default for Config {
@@ -155,6 +161,8 @@ impl Default for Config {
             inspect_tolerance: 0.2,
             inspect_max_angle: 0.0,
             report_low_score: 0.6,
+            pitch_mm: 0.0,
+            replace_output: false,
         }
     }
 }
@@ -270,6 +278,14 @@ impl Config {
             "inspect_tolerance" => self.inspect_tolerance = number(value, key)?,
             "inspect_max_angle" => self.inspect_max_angle = number(value, key)?,
             "report_low_score" => self.report_low_score = number(value, key)?,
+            "pitch_mm" => self.pitch_mm = number(value, key)?,
+            "replace_output" => {
+                self.replace_output = match value {
+                    "yes" | "true" | "on" => true,
+                    "no" | "false" | "off" => false,
+                    _ => return Err(format!("replace_output '{value}' is not yes or no")),
+                }
+            }
             other => return Err(format!("{other}: unknown key")),
         }
         Ok(())
@@ -363,6 +379,9 @@ impl Config {
         }
         if !(0.0..=1.0).contains(&self.report_low_score) {
             return Err("report_low_score must be from 0 to 1".into());
+        }
+        if self.pitch_mm < 0.0 {
+            return Err("pitch_mm must be 0 (not known) or more".into());
         }
         Ok(())
     }
@@ -533,6 +552,8 @@ cross_max_size = 20",
             "inspect_max_angle = -1",
             "report_low_score = 1.5",
             "report_low_score = -0.1",
+            "pitch_mm = -1",
+            "replace_output = maybe",
         ] {
             assert!(Config::parse(text).is_err(), "{text:?} was accepted");
         }
