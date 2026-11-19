@@ -1082,3 +1082,180 @@ fn batch_html_writes_a_page_that_stands_alone_in_the_language_asked() {
     assert!(!dir.join("x.html").exists());
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn shots_plans_the_pictures_of_a_part_bigger_than_the_field() {
+    let dir = scratch("shots");
+    let long = run(
+        &dir,
+        &[
+            "shots",
+            "--body-long",
+            "10",
+            "--body-short",
+            "4",
+            "--fov-w",
+            "6",
+            "--fov-h",
+            "6",
+        ],
+    );
+    assert!(long.status.success(), "{}", err(&long));
+    assert_eq!(
+        out(&long),
+        "shot,x_mm,y_mm\n1,-2.5000,0.0000\n2,2.5000,0.0000\n"
+    );
+    assert!(err(&long).contains("2 pictures (2 x 1)"), "{}", err(&long));
+    // the body can come from the table of packages, and the overlap and the margin from the configuration file
+    fs::write(
+        dir.join("packages.csv"),
+        "package,body_long_mm,body_short_mm\nBIG,10,4\n",
+    )
+    .unwrap();
+    let args = [
+        "shots",
+        "--package",
+        "big",
+        "--table",
+        "packages.csv",
+        "--fov-w",
+        "6",
+        "--fov-h",
+        "6",
+    ];
+    assert_eq!(out(&run(&dir, &args)), out(&long));
+    fs::write(
+        dir.join("vision.cfg"),
+        "shots_overlap = 0.5\nshots_margin = 0\nreplace_output = no\n",
+    )
+    .unwrap();
+    // 10 mm for a field of 6 with half of it shared: a step of 3 at most, so 3 pictures
+    assert!(
+        err(&run(&dir, &args)).contains("3 pictures"),
+        "{}",
+        err(&run(&dir, &args))
+    );
+    // the plan goes to a file that is not written over without --replace
+    let mut file = args.to_vec();
+    file.extend(["--output", "plan.csv"]);
+    assert!(run(&dir, &file).status.success());
+    let again = run(&dir, &file);
+    assert!(err(&again).contains("file_exists"), "{}", err(&again));
+    file.push("--replace");
+    assert!(run(&dir, &file).status.success());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn shots_needs_the_field_and_one_way_to_say_the_size_of_the_part() {
+    let dir = scratch("shots_refused");
+    let cases: Vec<(Vec<&str>, &str)> = vec![
+        (
+            vec![
+                "shots",
+                "--body-long",
+                "10",
+                "--body-short",
+                "4",
+                "--fov-h",
+                "6",
+            ],
+            "needs --fov-w",
+        ),
+        (
+            vec![
+                "shots",
+                "--body-long",
+                "10",
+                "--body-short",
+                "4",
+                "--fov-w",
+                "6",
+            ],
+            "needs --fov-h",
+        ),
+        (
+            vec!["shots", "--body-long", "10", "--fov-w", "6", "--fov-h", "6"],
+            "either --package",
+        ),
+        (
+            vec!["shots", "--fov-w", "6", "--fov-h", "6"],
+            "either --package",
+        ),
+        (
+            vec!["shots", "--package", "BIG", "--fov-w", "6", "--fov-h", "6"],
+            "needs the table of packages",
+        ),
+        (
+            vec![
+                "shots",
+                "--body-long",
+                "10",
+                "--body-short",
+                "4",
+                "--fov-w",
+                "0",
+                "--fov-h",
+                "6",
+            ],
+            "more than 0",
+        ),
+        (
+            vec![
+                "shots",
+                "--body-long",
+                "10",
+                "--body-short",
+                "4",
+                "--fov-w",
+                "6",
+                "--fov-h",
+                "6",
+                "--overlap",
+                "0.95",
+            ],
+            "overlap",
+        ),
+        (
+            vec![
+                "shots",
+                "--body-long",
+                "1000",
+                "--body-short",
+                "1000",
+                "--fov-w",
+                "1",
+                "--fov-h",
+                "1",
+                "--overlap",
+                "0.5",
+            ],
+            "too_many_shots",
+        ),
+        (
+            vec![
+                "shots",
+                "--body-long",
+                "10",
+                "--body-short",
+                "4",
+                "--fov-w",
+                "6",
+                "--fov-h",
+                "6",
+                "extra",
+            ],
+            "unexpected argument",
+        ),
+    ];
+    for (args, expected) in cases {
+        let o = run(&dir, &args);
+        assert!(
+            !o.status.success() && err(&o).contains(expected),
+            "{args:?}: {}",
+            err(&o)
+        );
+        assert!(out(&o).is_empty(), "{args:?}");
+    }
+    let _ = fs::remove_dir_all(&dir);
+}

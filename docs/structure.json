@@ -301,6 +301,19 @@
           }
         },
         {
+          "name": "shots.rs",
+          "desc": {
+            "en": "the places of the camera that cover a part bigger than its field, from the sizes alone",
+            "es": "los lugares de la cámara que cubren una pieza mayor que su campo, solo con los tamaños",
+            "de": "die Kameraorte, die ein Teil größer als das Feld abdecken, allein aus den Größen",
+            "fr": "les positions de la caméra qui couvrent une pièce plus grande que son champ, par les tailles",
+            "it": "le posizioni della telecamera che coprono un pezzo più grande del campo, dalle sole misure",
+            "ja": "視野より大きな部品を覆うカメラ位置を、寸法だけから求める",
+            "zh": "仅由尺寸求出覆盖超出视场的零件所需的相机位置",
+            "pt": "as posições da câmara que cobrem uma peça maior do que o campo, só com os tamanhos"
+          }
+        },
+        {
           "name": "browse.rs",
           "desc": {
             "en": "the list of files of the window that opens a file",

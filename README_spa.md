@@ -8,7 +8,7 @@
 ### Fiduciales en una imagen de cámara: marcas, escala y corrección de una placa
 
 <p align="center">
-  <img src="https://img.shields.io/badge/License-GPL%238.0--or--later-blue.svg" alt="GPL 3.0 or later">
+  <img src="https://img.shields.io/badge/License-GPL%246.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Stack-Rust-DEA584.svg" alt="Rust">
   <img src="https://img.shields.io/badge/Languages-8-00E5FF.svg" alt="Languages">
   <img src="https://img.shields.io/badge/Version-0.0.5-0f6cbd.svg" alt="Version">
@@ -17,7 +17,7 @@
 
 ---
 
-**Comprobación de honestidad - lo que funciona hoy:** una biblioteca Rust y un programa de línea de comandos (`eh3d-vision`) con 238 pruebas que se ejecutan en un ordenador: encuentra marcas fiduciales redondas en una imagen, convierte píxeles en milímetros y calcula el giro y el desplazamiento que colocan una placa donde dice su diseño. Tiene una ventana (se compila con `--features gui`, el programa `eh3d-vision-gui`) que abre una imagen, muestra las marcas con sus coordenadas, fija la escala, ajusta la distorsión del objetivo con una rejilla, alinea con el diseño y exporta las opciones de ISOCAM, pero todavía no se ha visto en una pantalla; no se ha probado en una máquina y no se ha comprobado con una colección de ficheros reales.
+**Comprobación de honestidad - lo que funciona hoy:** una biblioteca Rust y un programa de línea de comandos (`eh3d-vision`) con 246 pruebas que se ejecutan en un ordenador: encuentra marcas fiduciales redondas en una imagen, convierte píxeles en milímetros y calcula el giro y el desplazamiento que colocan una placa donde dice su diseño. Tiene una ventana (se compila con `--features gui`, el programa `eh3d-vision-gui`) que abre una imagen, muestra las marcas con sus coordenadas, fija la escala, ajusta la distorsión del objetivo con una rejilla, alinea con el diseño y exporta las opciones de ISOCAM, pero todavía no se ha visto en una pantalla; no se ha probado en una máquina y no se ha comprobado con una colección de ficheros reales.
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | Versión | `0.0.5` |
 | Madurez | Funcional |
-| Pruebas | 238 |
+| Pruebas | 246 |
 | Pila tecnológica | Rust |
 | En hardware real | No probado: nada de esto se ha ejecutado en una máquina |
 
@@ -46,7 +46,7 @@ Cada línea es una parte de este repositorio y la luz dice hasta dónde llega ho
 |---|---|---|
 | Núcleo | 🟡 | encuentra marcas fiduciales redondas en una imagen, convierte píxeles en milímetros y calcula el giro y el desplazamiento que colocan una placa donde dice su diseño; probado en un ordenador con entradas normales y dañadas, no con una colección de ficheros reales. |
 | Línea de comandos | 🟡 | `eh3d-vision` ejecuta las mismas funciones que la biblioteca e imprime el resultado; cada error vuelve como mensaje y un código de salida distinto de cero. |
-| Pruebas | 🟡 | 238 pruebas pasan (`cargo test`), con casos normales, casos límite y entradas dañadas, y una cámara simulada sobre una placa que añade ruido, mala exposición, un fotograma muerto o ausente, polvo que parece una marca o un archivo de imagen cortado, y se vuelve a pedir. |
+| Pruebas | 🟡 | 246 pruebas pasan (`cargo test`), con casos normales, casos límite y entradas dañadas, y una cámara simulada sobre una placa que añade ruido, mala exposición, un fotograma muerto o ausente, polvo que parece una marca o un archivo de imagen cortado, y se vuelve a pedir. |
 | Seguridad | 🟡 | Rust seguro y simple (`forbid(unsafe_code)`): nada entra en pánico con los ficheros recibidos y un valor malo es un error con su motivo; sin revisión independiente. |
 | Ventana | 🟠 | Escrita (egui, `--features gui`, el programa `eh3d-vision-gui`): abrir o soltar una imagen, ver las marcas con sus coordenadas, fijar la escala con una marca de tamaño conocido, ajustar la distorsión del objetivo con una rejilla, alinear con un diseño CSV y exportar las opciones de ISOCAM; su lógica está probada, pero todavía no se ha compilado ni visto en una pantalla. |
 | Hardware real | 🔴 | No probado: nada de esto se ha ejecutado en una máquina. |
@@ -93,6 +93,7 @@ Cómo encajan las partes de este repositorio: quién lo usa, qué contiene y de 
 * **Un veredicto para cada pieza:** `eh3d-vision inspect IMAGEN --package NOMBRE --table packages.csv` mide las piezas de una imagen y compara cada una con el cuerpo de su encapsulado (`package`, `body_long_mm`, `body_short_mm` y, si se quiere, `tolerance_mm`, en un fichero CSV; `examples/packages.csv` trae algunos): `pass` o `fail` con el motivo (`length`, `width`, `angle`) en CSV o JSON, y el código de salida 1 cuando una pieza falla; la tolerancia y el giro máximo (`inspect_tolerance`, `inspect_max_angle`) están en `vision.cfg`.
 * **Un informe HTML de la carpeta:** `eh3d-vision batch CARPETA --html informe.html` escribe una página que se basta sola (sin scripts, sin enlaces, sin otros ficheros): una tabla de las imágenes, un dibujo pequeño de cada una con un círculo en cada marca hallada y los avisos (una imagen que no se pudo usar, sin marcas o con una puntuación por debajo de `report_low_score`), en el idioma de `--lang` o de `vision.cfg`.
 * **Las herramientas nuevas en la ventana:** el panel lateral trae el centro con fracción de píxel con la confianza de cada marca, la ventana de la luz, cuadrados y cruces con cualquier giro (dibujados sobre la imagen), las piezas en milímetros (guardadas como `<imagen>-parts.csv`), el informe de la carpeta (`eh3d-vision-report.html`, que nunca se escribe sobre un fichero sin `replace_output`) y la escala desde el paso de un patrón, con los textos en los ocho idiomas y los valores en `vision.cfg`; todavía no se ha visto en una pantalla.
+* **Las imágenes de una pieza grande, planificadas:** `eh3d-vision shots --package NOMBRE --fov-w MM --fov-h MM` (o `--body-long` y `--body-short`) lista en CSV los lugares de la cámara, en milímetros desde el centro de la pieza, que ven toda una pieza mayor que el campo, con las imágenes vecinas solapadas en `shots_overlap` y un margen de `shots_margin`; no necesita cámara.
 
 ## 🔒 Seguridad y protección
 
@@ -114,6 +115,7 @@ eh3d-vision find IMAGE [--light] [--min-diam PX] [--max-diam PX] [--known-mm D] 
 eh3d-vision align DESIGN.csv MEASURED.csv [--scale] [--pair-nearest] [--isocam-args] [--max-rms 0.1] [--max-stretch 0.01]
 eh3d-vision crosses IMAGE [--turned] [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the cross-shaped marks found (plus signs; with --turned the arms may have any angle and the angle is printed)
 eh3d-vision inspect IMAGE --package NAME [--table FILE] [--mm-per-px V] [--tolerance MM] [--max-angle DEG] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   each part of a picture compared with the body of its package from a table (CSV with package, body_long_mm, body_short_mm), one verdict per part; exit 1 when a part fails
+eh3d-vision shots (--package NAME [--table FILE] | --body-long MM --body-short MM) --fov-w MM --fov-h MM [--overlap F] [--margin MM] [--output FILE] [--replace]   the places of the camera that cover a part bigger than its field (millimetres from the centre of the part), row after row, as CSV; no camera is needed
 eh3d-vision lens IMAGE [--columns C] [--rows R] [--max-rms PX] [--light] [--flatten PX]   the two radial factors of the lens from a grid of marks (columns and rows as grid_columns and grid_rows), refused when the marks stay farther than --max-rms pixels from their lattice
 eh3d-vision squares IMAGE [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the square marks found, turned by any angle (centre, side and angle)
 eh3d-vision calibrate IMAGE --pitch-mm D [--light] [--tolerance 0.05] [--flatten PX]   the millimetres of a pixel from a target whose neighbouring marks are D millimetres apart
@@ -124,7 +126,7 @@ eh3d-vision-gui [IMAGE] [DESIGN.csv]   the window (a build with --features gui);
 
 ## ⚙️ Configuración
 
-Los valores que se afinan viven en un fichero simple de `clave = valor`, no en el código: `vision.cfg` en la carpeta donde arranca el programa o junto a él (la variable `EH3D_VISION_CONFIG` nombra otro fichero). Fija el idioma de la ventana, si las marcas son oscuras o claras, el umbral, el rango del diámetro, el relleno y la elongación de una marca, el tamaño de la marca que fija la escala, las columnas y filas de la rejilla, si la alineación puede cambiar el tamaño, los límites que debe cumplir una alineación y el mayor fichero que se lee. `examples/vision.cfg` enumera cada clave con su significado y el valor con el que arranca el programa; si falta el fichero se usan esos valores y un fichero con un error se rechaza con su línea. En la línea de comandos lo mismo se da como opciones (véase Interfaces). También guarda los demás valores afinados: la confianza (`refine_subpixel`, `full_contrast`), la ventana de la luz (`flatten_window`), la escala y el tamaño de una pieza (`mm_per_px`, `part_min_area`, `part_max_area`, `max_parts`), el rango de una cruz (`cross_min_size`, `cross_max_size`, `cross_max_elongation`), la tolerancia de un patrón (`pitch_tolerance`) y el máximo de imágenes de una carpeta (`batch_max_files`). El relleno mínimo de un cuadrado y la puntuación mínima de una cruz con cualquier giro son `square_min_fill` y `cross_min_score`. La lente son `lens_k1` y `lens_k2` (como los calcula `lens`) y lo máximo que una rejilla puede separarse de su retícula tras la corrección es `lens_max_rms`. La tabla de encapsulados que lee `inspect` es `package_table`, y lo máximo que una pieza puede diferir de su encapsulado y girarse son `inspect_tolerance` e `inspect_max_angle`. La puntuación por debajo de la cual el informe HTML avisa de una imagen es `report_low_score`. La distancia entre las marcas del patrón que fija la escala es `pitch_mm`, y `replace_output` dice si los ficheros que se escriben pueden escribirse sobre uno que ya existe (no por defecto).
+Los valores que se afinan viven en un fichero simple de `clave = valor`, no en el código: `vision.cfg` en la carpeta donde arranca el programa o junto a él (la variable `EH3D_VISION_CONFIG` nombra otro fichero). Fija el idioma de la ventana, si las marcas son oscuras o claras, el umbral, el rango del diámetro, el relleno y la elongación de una marca, el tamaño de la marca que fija la escala, las columnas y filas de la rejilla, si la alineación puede cambiar el tamaño, los límites que debe cumplir una alineación y el mayor fichero que se lee. `examples/vision.cfg` enumera cada clave con su significado y el valor con el que arranca el programa; si falta el fichero se usan esos valores y un fichero con un error se rechaza con su línea. En la línea de comandos lo mismo se da como opciones (véase Interfaces). También guarda los demás valores afinados: la confianza (`refine_subpixel`, `full_contrast`), la ventana de la luz (`flatten_window`), la escala y el tamaño de una pieza (`mm_per_px`, `part_min_area`, `part_max_area`, `max_parts`), el rango de una cruz (`cross_min_size`, `cross_max_size`, `cross_max_elongation`), la tolerancia de un patrón (`pitch_tolerance`) y el máximo de imágenes de una carpeta (`batch_max_files`). El relleno mínimo de un cuadrado y la puntuación mínima de una cruz con cualquier giro son `square_min_fill` y `cross_min_score`. La lente son `lens_k1` y `lens_k2` (como los calcula `lens`) y lo máximo que una rejilla puede separarse de su retícula tras la corrección es `lens_max_rms`. La tabla de encapsulados que lee `inspect` es `package_table`, y lo máximo que una pieza puede diferir de su encapsulado y girarse son `inspect_tolerance` e `inspect_max_angle`. La puntuación por debajo de la cual el informe HTML avisa de una imagen es `report_low_score`. La distancia entre las marcas del patrón que fija la escala es `pitch_mm`, y `replace_output` dice si los ficheros que se escriben pueden escribirse sobre uno que ya existe (no por defecto). El solapamiento de las imágenes vecinas de un plan de `shots` y el margen alrededor de la pieza son `shots_overlap` y `shots_margin`.
 
 ## 🚀 Inicio rápido
 
@@ -142,7 +144,7 @@ Para sacar una captura de la ventana sin abrirla a mano, ejecútelo con `--shot 
 
 ## 🧪 Pruebas
 
-El conjunto tiene 238 pruebas (`cargo test`, ejecutadas en Windows y Linux en el CI). Comprueban los casos normales, los casos límite y las entradas dañadas: ficheros vacíos, basura y ficheros cortados nunca provocan un pánico. El CI ejecuta además `cargo fmt --check`, `cargo clippy` con las advertencias como errores y `python -I tools/ci_validate.py`.
+El conjunto tiene 246 pruebas (`cargo test`, ejecutadas en Windows y Linux en el CI). Comprueban los casos normales, los casos límite y las entradas dañadas: ficheros vacíos, basura y ficheros cortados nunca provocan un pánico. El CI ejecuta además `cargo fmt --check`, `cargo clippy` con las advertencias como errores y `python -I tools/ci_validate.py`.
 
 ## 🏗️ Compilación y publicación
 
@@ -185,6 +187,7 @@ EH3D-VISION-STUDIO/
 │   ├── square.rs                                marcas cuadradas y cruces girados con cualquier ángulo
 │   ├── tools.rs                                 las herramientas del panel lateral sobre la imagen: formas, piezas, informe y paso
 │   ├── shot.rs                                  el modo de captura de la ventana (--shot): sus argumentos, leídos y comprobados sin pantalla
+│   ├── shots.rs                                 los lugares de la cámara que cubren una pieza mayor que su campo, solo con los tamaños
 │   ├── browse.rs                                la lista de ficheros de la ventana que abre un fichero
 │   ├── gui.rs                                   la ventana (egui, con la característica gui): dibuja el estado y transmite lo que hace la persona
 │   ├── lang.rs                                  las palabras de la ventana en los ocho idiomas

@@ -8,7 +8,7 @@
 ### Passmarken in einem Kamerabild: Marken, Maßstab und Korrektur einer Platine
 
 <p align="center">
-  <img src="https://img.shields.io/badge/License-GPL%238.0--or--later-blue.svg" alt="GPL 3.0 or later">
+  <img src="https://img.shields.io/badge/License-GPL%246.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Stack-Rust-DEA584.svg" alt="Rust">
   <img src="https://img.shields.io/badge/Languages-8-00E5FF.svg" alt="Languages">
   <img src="https://img.shields.io/badge/Version-0.0.5-0f6cbd.svg" alt="Version">
@@ -17,7 +17,7 @@
 
 ---
 
-**Ehrlichkeitscheck - was heute wirklich läuft:** eine Rust-Bibliothek und ein Kommandozeilenprogramm (`eh3d-vision`) mit 238 Tests, die auf einem Computer laufen: findet runde Passmarken in einem Bild, wandelt Pixel in Millimeter um und berechnet Drehung und Verschiebung, die eine Platine dorthin bringen, wo ihr Entwurf sie haben will. Es hat ein Fenster (mit `--features gui` gebaut, das Programm `eh3d-vision-gui`), das ein Bild öffnet, die Marken mit ihren Koordinaten zeigt, den Maßstab setzt, die Verzeichnung des Objektivs aus einem Raster bestimmt, am Entwurf ausrichtet und die Optionen für ISOCAM exportiert, aber das Fenster wurde noch nicht auf einem Bildschirm angesehen; es wurde an keiner Maschine ausprobiert und nicht an einer Sammlung echter Dateien geprüft.
+**Ehrlichkeitscheck - was heute wirklich läuft:** eine Rust-Bibliothek und ein Kommandozeilenprogramm (`eh3d-vision`) mit 246 Tests, die auf einem Computer laufen: findet runde Passmarken in einem Bild, wandelt Pixel in Millimeter um und berechnet Drehung und Verschiebung, die eine Platine dorthin bringen, wo ihr Entwurf sie haben will. Es hat ein Fenster (mit `--features gui` gebaut, das Programm `eh3d-vision-gui`), das ein Bild öffnet, die Marken mit ihren Koordinaten zeigt, den Maßstab setzt, die Verzeichnung des Objektivs aus einem Raster bestimmt, am Entwurf ausrichtet und die Optionen für ISOCAM exportiert, aber das Fenster wurde noch nicht auf einem Bildschirm angesehen; es wurde an keiner Maschine ausprobiert und nicht an einer Sammlung echter Dateien geprüft.
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | Version | `0.0.5` |
 | Reifegrad | Funktionsfähig |
-| Tests | 238 |
+| Tests | 246 |
 | Technologie-Stack | Rust |
 | Auf echter Hardware | Nicht erprobt: nichts davon lief an einer Maschine |
 
@@ -46,7 +46,7 @@ Jede Zeile ist ein Teil dieses Repositorys, und die Ampel sagt, wie weit er heut
 |---|---|---|
 | Kern | 🟡 | findet runde Passmarken in einem Bild, wandelt Pixel in Millimeter um und berechnet Drehung und Verschiebung, die eine Platine dorthin bringen, wo ihr Entwurf sie haben will; am Computer mit normalen und beschädigten Eingaben getestet, nicht mit einer Sammlung echter Dateien. |
 | Kommandozeile | 🟡 | `eh3d-vision` führt dieselben Funktionen wie die Bibliothek aus und gibt das Ergebnis aus; jeder Fehler kommt als Meldung mit einem Exit-Code ungleich null zurück. |
-| Tests | 🟡 | 238 Tests bestehen (`cargo test`), mit Normalfällen, Grenzfällen und beschädigten Eingaben sowie einer simulierten Kamera über einer Platine, die Rauschen, falsche Belichtung, ein totes oder fehlendes Bild, wie eine Marke aussehenden Staub oder eine abgeschnittene Bilddatei hinzufügt und erneut abgefragt wird. |
+| Tests | 🟡 | 246 Tests bestehen (`cargo test`), mit Normalfällen, Grenzfällen und beschädigten Eingaben sowie einer simulierten Kamera über einer Platine, die Rauschen, falsche Belichtung, ein totes oder fehlendes Bild, wie eine Marke aussehenden Staub oder eine abgeschnittene Bilddatei hinzufügt und erneut abgefragt wird. |
 | Sicherheit | 🟡 | Reines sicheres Rust (`forbid(unsafe_code)`): nichts gerät bei den übergebenen Dateien in Panik und ein schlechter Wert ist ein Fehler mit Begründung; keine unabhängige Prüfung. |
 | Fenster | 🟠 | Geschrieben (egui, `--features gui`, das Programm `eh3d-vision-gui`): ein Bild öffnen oder ablegen, die Marken mit ihren Koordinaten sehen, den Maßstab mit einer Marke bekannter Größe setzen, die Verzeichnung des Objektivs aus einem Raster bestimmen, an einem CSV-Entwurf ausrichten und die Optionen für ISOCAM exportieren; die Logik ist getestet, aber das Fenster wurde noch nicht gebaut oder auf einem Bildschirm angesehen. |
 | Echte Hardware | 🔴 | Nicht erprobt: nichts davon wurde an einer Maschine ausgeführt. |
@@ -93,6 +93,7 @@ Wie die Teile dieses Repositorys zusammenpassen: wer es nutzt, was es enthält u
 * **Ein Urteil für jedes Teil:** `eh3d-vision inspect BILD --package NAME --table packages.csv` misst die Teile eines Bildes und vergleicht jedes mit dem Körper seiner Bauform (`package`, `body_long_mm`, `body_short_mm`, auf Wunsch `tolerance_mm`, in einer CSV-Datei; `examples/packages.csv` enthält einige): `pass` oder `fail` mit dem Grund (`length`, `width`, `angle`) als CSV oder JSON, der Exit-Code ist 1, wenn ein Teil durchfällt; die Toleranz und die größte Drehung (`inspect_tolerance`, `inspect_max_angle`) stehen in `vision.cfg`.
 * **Ein HTML-Bericht über den Ordner:** `eh3d-vision batch ORDNER --html bericht.html` schreibt eine Seite, die für sich allein steht (kein Skript, kein Link, keine weitere Datei): eine Tabelle der Bilder, eine kleine Zeichnung jedes Bildes mit einem Kreis um jede gefundene Marke und die Warnungen (ein Bild, das nicht genutzt werden konnte, ohne Marken oder mit einer Punktzahl unter `report_low_score`), in der Sprache von `--lang` oder `vision.cfg`.
 * **Die neuen Werkzeuge im Fenster:** Die Seitenleiste bietet die Mitte auf einen Bruchteil eines Pixels mit dem Vertrauen jeder Marke, das Lichtfenster, Quadrate und Kreuze in jedem Winkel (auf das Bild gezeichnet), die Teile in Millimetern (gespeichert als `<Bild>-parts.csv`), den Bericht über den Ordner (`eh3d-vision-report.html`, nie ohne `replace_output` über eine vorhandene Datei geschrieben) und den Maßstab aus dem Abstand eines Rasters, mit den Texten in den acht Sprachen und den Werten in `vision.cfg`; auf einem Bildschirm wurde es noch nicht angesehen.
+* **Die Bilder eines großen Teils, geplant:** `eh3d-vision shots --package NAME --fov-w MM --fov-h MM` (oder `--body-long` und `--body-short`) listet als CSV die Orte der Kamera auf, in Millimetern von der Mitte des Teils, die ein Teil sehen, das größer als das Feld ist, wobei benachbarte Bilder um `shots_overlap` überlappen und ein Rand von `shots_margin` bleibt; es braucht keine Kamera.
 
 ## 🔒 Sicherheit und Schutz
 
@@ -114,6 +115,7 @@ eh3d-vision find IMAGE [--light] [--min-diam PX] [--max-diam PX] [--known-mm D] 
 eh3d-vision align DESIGN.csv MEASURED.csv [--scale] [--pair-nearest] [--isocam-args] [--max-rms 0.1] [--max-stretch 0.01]
 eh3d-vision crosses IMAGE [--turned] [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the cross-shaped marks found (plus signs; with --turned the arms may have any angle and the angle is printed)
 eh3d-vision inspect IMAGE --package NAME [--table FILE] [--mm-per-px V] [--tolerance MM] [--max-angle DEG] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   each part of a picture compared with the body of its package from a table (CSV with package, body_long_mm, body_short_mm), one verdict per part; exit 1 when a part fails
+eh3d-vision shots (--package NAME [--table FILE] | --body-long MM --body-short MM) --fov-w MM --fov-h MM [--overlap F] [--margin MM] [--output FILE] [--replace]   the places of the camera that cover a part bigger than its field (millimetres from the centre of the part), row after row, as CSV; no camera is needed
 eh3d-vision lens IMAGE [--columns C] [--rows R] [--max-rms PX] [--light] [--flatten PX]   the two radial factors of the lens from a grid of marks (columns and rows as grid_columns and grid_rows), refused when the marks stay farther than --max-rms pixels from their lattice
 eh3d-vision squares IMAGE [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the square marks found, turned by any angle (centre, side and angle)
 eh3d-vision calibrate IMAGE --pitch-mm D [--light] [--tolerance 0.05] [--flatten PX]   the millimetres of a pixel from a target whose neighbouring marks are D millimetres apart
@@ -124,7 +126,7 @@ eh3d-vision-gui [IMAGE] [DESIGN.csv]   the window (a build with --features gui);
 
 ## ⚙️ Konfiguration
 
-Die abgestimmten Werte stehen in einer einfachen Datei mit `Schlüssel = Wert`, nicht im Code: `vision.cfg` im Ordner, in dem das Programm startet, oder neben ihm (die Variable `EH3D_VISION_CONFIG` nennt eine andere Datei). Sie legt die Sprache des Fensters fest, ob die Marken dunkel oder hell sind, den Schwellwert, den Bereich des Durchmessers, die Füllung und die Streckung einer Marke, die Größe der Marke, die den Maßstab setzt, die Spalten und Zeilen des Rasters, ob die Ausrichtung die Größe ändern darf, die Grenzen, die eine Ausrichtung einhalten muss, und die größte gelesene Datei. `examples/vision.cfg` listet jeden Schlüssel mit seiner Bedeutung und dem Wert auf, mit dem das Programm startet; fehlt die Datei, gelten diese Werte, und eine Datei mit einem Fehler wird mit ihrer Zeile abgelehnt. In der Kommandozeile werden dieselben Dinge als Optionen angegeben (siehe Schnittstellen). Sie enthält auch die weiteren abgestimmten Werte: die Zuverlässigkeit (`refine_subpixel`, `full_contrast`), das Fenster des Lichts (`flatten_window`), den Maßstab und die Größe eines Teils (`mm_per_px`, `part_min_area`, `part_max_area`, `max_parts`), den Bereich eines Kreuzes (`cross_min_size`, `cross_max_size`, `cross_max_elongation`), die Toleranz eines Targets (`pitch_tolerance`) und die höchste Zahl von Bildern eines Ordners (`batch_max_files`). Die Mindestfüllung eines Quadrats und die Mindestpunktzahl eines in jedem Winkel gedrehten Kreuzes sind `square_min_fill` und `cross_min_score`. Das Objektiv sind `lens_k1` und `lens_k2` (wie `lens` sie berechnet), und der größte Abstand eines Rasters von seinem Gitter nach der Korrektur ist `lens_max_rms`. Die Tabelle der Bauformen, die `inspect` liest, ist `package_table`, und wie weit ein Teil von seiner Bauform abweichen und gedreht sein darf, sind `inspect_tolerance` und `inspect_max_angle`. Die Punktzahl, unter der der HTML-Bericht vor einem Bild warnt, ist `report_low_score`. Der Abstand der Marken des Rasters, das den Maßstab setzt, ist `pitch_mm`, und `replace_output` sagt, ob geschriebene Dateien eine vorhandene Datei überschreiben dürfen (standardmäßig nein).
+Die abgestimmten Werte stehen in einer einfachen Datei mit `Schlüssel = Wert`, nicht im Code: `vision.cfg` im Ordner, in dem das Programm startet, oder neben ihm (die Variable `EH3D_VISION_CONFIG` nennt eine andere Datei). Sie legt die Sprache des Fensters fest, ob die Marken dunkel oder hell sind, den Schwellwert, den Bereich des Durchmessers, die Füllung und die Streckung einer Marke, die Größe der Marke, die den Maßstab setzt, die Spalten und Zeilen des Rasters, ob die Ausrichtung die Größe ändern darf, die Grenzen, die eine Ausrichtung einhalten muss, und die größte gelesene Datei. `examples/vision.cfg` listet jeden Schlüssel mit seiner Bedeutung und dem Wert auf, mit dem das Programm startet; fehlt die Datei, gelten diese Werte, und eine Datei mit einem Fehler wird mit ihrer Zeile abgelehnt. In der Kommandozeile werden dieselben Dinge als Optionen angegeben (siehe Schnittstellen). Sie enthält auch die weiteren abgestimmten Werte: die Zuverlässigkeit (`refine_subpixel`, `full_contrast`), das Fenster des Lichts (`flatten_window`), den Maßstab und die Größe eines Teils (`mm_per_px`, `part_min_area`, `part_max_area`, `max_parts`), den Bereich eines Kreuzes (`cross_min_size`, `cross_max_size`, `cross_max_elongation`), die Toleranz eines Targets (`pitch_tolerance`) und die höchste Zahl von Bildern eines Ordners (`batch_max_files`). Die Mindestfüllung eines Quadrats und die Mindestpunktzahl eines in jedem Winkel gedrehten Kreuzes sind `square_min_fill` und `cross_min_score`. Das Objektiv sind `lens_k1` und `lens_k2` (wie `lens` sie berechnet), und der größte Abstand eines Rasters von seinem Gitter nach der Korrektur ist `lens_max_rms`. Die Tabelle der Bauformen, die `inspect` liest, ist `package_table`, und wie weit ein Teil von seiner Bauform abweichen und gedreht sein darf, sind `inspect_tolerance` und `inspect_max_angle`. Die Punktzahl, unter der der HTML-Bericht vor einem Bild warnt, ist `report_low_score`. Der Abstand der Marken des Rasters, das den Maßstab setzt, ist `pitch_mm`, und `replace_output` sagt, ob geschriebene Dateien eine vorhandene Datei überschreiben dürfen (standardmäßig nein). Die Überlappung benachbarter Bilder eines Plans von `shots` und der Rand um das Teil sind `shots_overlap` und `shots_margin`.
 
 ## 🚀 Schnellstart
 
@@ -142,7 +144,7 @@ Um ein Bild des Fensters aufzunehmen, ohne es von Hand zu öffnen, starten Sie e
 
 ## 🧪 Tests
 
-Die Suite hat 238 Tests (`cargo test`, in der CI unter Windows und Linux). Sie prüfen Normalfälle, Grenzfälle und beschädigte Eingaben: leere Dateien, Datenmüll und abgeschnittene Dateien lösen nie eine Panik aus. Die CI führt außerdem `cargo fmt --check`, `cargo clippy` mit Warnungen als Fehlern und `python -I tools/ci_validate.py` aus.
+Die Suite hat 246 Tests (`cargo test`, in der CI unter Windows und Linux). Sie prüfen Normalfälle, Grenzfälle und beschädigte Eingaben: leere Dateien, Datenmüll und abgeschnittene Dateien lösen nie eine Panik aus. Die CI führt außerdem `cargo fmt --check`, `cargo clippy` mit Warnungen als Fehlern und `python -I tools/ci_validate.py` aus.
 
 ## 🏗️ Build und Veröffentlichung
 
@@ -185,6 +187,7 @@ EH3D-VISION-STUDIO/
 │   ├── square.rs                                quadratische Marken und in jedem Winkel gedrehte Kreuze
 │   ├── tools.rs                                 die Werkzeuge der Seitenleiste am Bild: Formen, Teile, Ordnerbericht, Abstandsmaßstab
 │   ├── shot.rs                                  der Bildmodus des Fensters (--shot): seine Argumente, ohne Bildschirm gelesen und geprüft
+│   ├── shots.rs                                 die Kameraorte, die ein Teil größer als das Feld abdecken, allein aus den Größen
 │   ├── browse.rs                                die Dateiliste des Fensters zum Öffnen einer Datei
 │   ├── gui.rs                                   das Fenster (egui, mit dem Feature gui): zeichnet den Zustand und gibt weiter, was die Person tut
 │   ├── lang.rs                                  die Wörter des Fensters in den acht Sprachen

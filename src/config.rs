@@ -11,7 +11,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 38] = [
+pub const KEYS: [&str; 40] = [
     "language",
     "polarity",
     "threshold",
@@ -50,6 +50,8 @@ pub const KEYS: [&str; 38] = [
     "report_low_score",
     "pitch_mm",
     "replace_output",
+    "shots_overlap",
+    "shots_margin",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -119,6 +121,9 @@ pub struct Config {
     pub pitch_mm: f64,
     /// Whether the files that the window writes (the parts, the report of a folder) may be written over a file that is there; the command line does so with `--replace`.
     pub replace_output: bool,
+    /// The share of the field (0 to 0.9) by which neighbouring pictures of the plan of `shots` overlap, and the margin around the part that the pictures must also cover, in millimetres.
+    pub shots_overlap: f64,
+    pub shots_margin: f64,
 }
 
 impl Default for Config {
@@ -163,6 +168,8 @@ impl Default for Config {
             report_low_score: 0.6,
             pitch_mm: 0.0,
             replace_output: false,
+            shots_overlap: 0.1,
+            shots_margin: 0.5,
         }
     }
 }
@@ -279,6 +286,8 @@ impl Config {
             "inspect_max_angle" => self.inspect_max_angle = number(value, key)?,
             "report_low_score" => self.report_low_score = number(value, key)?,
             "pitch_mm" => self.pitch_mm = number(value, key)?,
+            "shots_overlap" => self.shots_overlap = number(value, key)?,
+            "shots_margin" => self.shots_margin = number(value, key)?,
             "replace_output" => {
                 self.replace_output = match value {
                     "yes" | "true" | "on" => true,
@@ -382,6 +391,15 @@ impl Config {
         }
         if self.pitch_mm < 0.0 {
             return Err("pitch_mm must be 0 (not known) or more".into());
+        }
+        if !(0.0..=crate::shots::MAX_OVERLAP).contains(&self.shots_overlap) {
+            return Err(format!(
+                "shots_overlap must be from 0 to {}",
+                crate::shots::MAX_OVERLAP
+            ));
+        }
+        if self.shots_margin < 0.0 {
+            return Err("shots_margin must be 0 or more".into());
         }
         Ok(())
     }
@@ -554,6 +572,9 @@ cross_max_size = 20",
             "report_low_score = -0.1",
             "pitch_mm = -1",
             "replace_output = maybe",
+            "shots_overlap = 0.95",
+            "shots_overlap = -0.1",
+            "shots_margin = -1",
         ] {
             assert!(Config::parse(text).is_err(), "{text:?} was accepted");
         }

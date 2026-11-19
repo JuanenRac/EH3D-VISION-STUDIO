@@ -23,6 +23,7 @@ use eh3d_vision_studio::measure::{measure_parts, to_csv, to_json, PartSettings};
 use eh3d_vision_studio::points::parse as parse_points;
 use eh3d_vision_studio::report::html as report_html;
 use eh3d_vision_studio::scale::{from_pitch, Scale};
+use eh3d_vision_studio::shots::{plan as shots_plan, to_csv as shots_csv};
 use eh3d_vision_studio::square::{find_squares, find_turned_crosses, ShapeSettings};
 use std::env;
 use std::path::Path;
@@ -35,6 +36,7 @@ const HELP: &str = "eh3d-vision: fiducials in a camera image
   eh3d-vision measure IMAGE [--mm-per-px V] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   the parts of a picture: centre, turn, length, width and area in millimetres, as a CSV or JSON file
   eh3d-vision crosses IMAGE [--turned] [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the cross-shaped marks found (plus signs; with --turned the arms may have any angle and the angle is printed)
   eh3d-vision inspect IMAGE --package NAME [--table FILE] [--mm-per-px V] [--tolerance MM] [--max-angle DEG] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   each part of a picture compared with the body of its package from a table (CSV with package, body_long_mm, body_short_mm), one verdict per part; exit 1 when a part fails
+  eh3d-vision shots (--package NAME [--table FILE] | --body-long MM --body-short MM) --fov-w MM --fov-h MM [--overlap F] [--margin MM] [--output FILE] [--replace]   the places of the camera that cover a part bigger than its field (millimetres from the centre of the part), row after row, as CSV; no camera is needed
   eh3d-vision lens IMAGE [--columns C] [--rows R] [--max-rms PX] [--light] [--flatten PX]   the two radial factors of the lens from a grid of marks (columns and rows as grid_columns and grid_rows), refused when the marks stay farther than --max-rms pixels from their lattice
   eh3d-vision squares IMAGE [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the square marks found, turned by any angle (centre, side and angle)
   eh3d-vision calibrate IMAGE --pitch-mm D [--light] [--tolerance 0.05] [--flatten PX]   the millimetres of a pixel from a target whose neighbouring marks are D millimetres apart
@@ -322,6 +324,66 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 p.spread * 100.0
             );
             println!("mm_per_px = {:.6}", p.scale.mm_per_px);
+            Ok(())
+        }
+        "shots" => {
+            let replace = switch(&mut args, "--replace");
+            let package = flag(&mut args, "--package")?;
+            let table_path = flag(&mut args, "--table")?;
+            let long = flag(&mut args, "--body-long")?
+                .map(|v| num(&v, "--body-long"))
+                .transpose()?;
+            let short = flag(&mut args, "--body-short")?
+                .map(|v| num(&v, "--body-short"))
+                .transpose()?;
+            let fov_w = flag(&mut args, "--fov-w")?
+                .map(|v| num(&v, "--fov-w"))
+                .transpose()?
+                .ok_or(
+                    "shots needs --fov-w, the width of the field of the camera in millimetres",
+                )?;
+            let fov_h = flag(&mut args, "--fov-h")?
+                .map(|v| num(&v, "--fov-h"))
+                .transpose()?
+                .ok_or(
+                    "shots needs --fov-h, the height of the field of the camera in millimetres",
+                )?;
+            let cfg = config();
+            let overlap = flag(&mut args, "--overlap")?
+                .map(|v| num(&v, "--overlap"))
+                .transpose()?
+                .unwrap_or(cfg.shots_overlap);
+            let margin = flag(&mut args, "--margin")?
+                .map(|v| num(&v, "--margin"))
+                .transpose()?
+                .unwrap_or(cfg.shots_margin);
+            let output = flag(&mut args, "--output")?;
+            finish(&args, 0)?;
+            let (width, height) = match (package, long, short) {
+                (Some(name), None, None) => {
+                    let file = table_path.unwrap_or_else(|| cfg.package_table.clone());
+                    if file.is_empty() {
+                        return Err("shots with --package needs the table of packages: --table, or package_table in vision.cfg".into());
+                    }
+                    let table =
+                        parse_table(&read_text_limited(Path::new(&file), cfg.max_file_mib)?)
+                            .map_err(|e| format!("{file}: {e}"))?;
+                    let body = find_package(&table, &name)?;
+                    (body.long_mm, body.short_mm)
+                }
+                (None, Some(l), Some(s)) => (l, s),
+                _ => {
+                    return Err("shots needs either --package (with a table) or both --body-long and --body-short".into())
+                }
+            };
+            let plan = shots_plan(width, height, fov_w, fov_h, overlap, margin)?;
+            deliver(&shots_csv(&plan), output, replace || cfg.replace_output)?;
+            eprintln!(
+                "{} pictures ({} x {})",
+                plan.shots.len(),
+                plan.columns,
+                plan.rows
+            );
             Ok(())
         }
         "inspect" => {
