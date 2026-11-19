@@ -38,7 +38,7 @@ dependencies = [
 
 [[package]]
 name = "eh3d-vision-studio"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "eh3d-image",
  "png",
