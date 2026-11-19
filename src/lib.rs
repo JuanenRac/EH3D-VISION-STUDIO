@@ -21,6 +21,7 @@ pub mod lang;
 pub mod lens;
 pub mod limit;
 pub mod measure;
+pub mod offset;
 pub mod panels;
 pub mod points;
 pub mod report;

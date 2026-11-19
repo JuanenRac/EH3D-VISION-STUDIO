@@ -237,7 +237,7 @@ pub fn to_csv(judged: &[Judged], package: &Package) -> String {
 }
 
 /// A text as a JSON string.
-fn json_string(text: &str) -> String {
+pub(crate) fn json_string(text: &str) -> String {
     let mut out = String::from("\"");
     for c in text.chars() {
         match c {

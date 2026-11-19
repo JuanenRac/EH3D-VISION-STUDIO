@@ -3,6 +3,7 @@
 //! the program (`examples/vision.cfg`) holds all of them with their meaning. A file that is not there means the defaults; a file with a mistake is refused with the line and the reason.
 
 use crate::fiducial::{Polarity, Settings};
+use crate::offset::OffsetSettings;
 use crate::ring::RingSettings;
 use std::path::{Path, PathBuf};
 
@@ -12,7 +13,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 55] = [
+pub const KEYS: [&str; 59] = [
     "language",
     "polarity",
     "threshold",
@@ -68,6 +69,10 @@ pub const KEYS: [&str; 55] = [
     "ring_max_elongation",
     "ring_split",
     "ring_size_gap",
+    "nozzle_x_mm",
+    "nozzle_y_mm",
+    "pick_max_offset_mm",
+    "pick_max_turn_deg",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -162,6 +167,12 @@ pub struct Config {
     /// The outer diameter in pixels that tells small rings from large ones (0 finds it from the diameters), and how much larger the large ones must be than the small ones for the two sizes to be told apart then.
     pub ring_split: f64,
     pub ring_size_gap: f64,
+    /// Where the axis of the nozzle is in the picture of a picked part, in millimetres from the centre of the picture (x to the right, y up), the farthest from it that the part may be held
+    /// (0 does not check it) and the most that it may be turned from the way it should be held, in degrees (0 does not check it, 90 at most): what `offset` works with.
+    pub nozzle_x_mm: f64,
+    pub nozzle_y_mm: f64,
+    pub pick_max_offset_mm: f64,
+    pub pick_max_turn_deg: f64,
 }
 
 impl Default for Config {
@@ -223,6 +234,10 @@ impl Default for Config {
             ring_max_elongation: 1.25,
             ring_split: 0.0,
             ring_size_gap: 1.25,
+            nozzle_x_mm: 0.0,
+            nozzle_y_mm: 0.0,
+            pick_max_offset_mm: 0.0,
+            pick_max_turn_deg: 0.0,
         }
     }
 }
@@ -248,6 +263,18 @@ impl Config {
             max_diameter: self.max_diameter,
             min_fill: self.min_fill,
             max_elongation: self.max_elongation,
+        }
+    }
+
+    /// The settings of the offset of a picked part that the values make.
+    pub fn offset_settings(&self) -> OffsetSettings {
+        OffsetSettings {
+            nozzle_x_mm: self.nozzle_x_mm,
+            nozzle_y_mm: self.nozzle_y_mm,
+            nominal_angle_deg: 0.0,
+            tolerance_mm: self.inspect_tolerance,
+            max_offset_mm: self.pick_max_offset_mm,
+            max_turn_deg: self.pick_max_turn_deg,
         }
     }
 
@@ -380,6 +407,10 @@ impl Config {
             "ring_max_elongation" => self.ring_max_elongation = number(value, key)?,
             "ring_split" => self.ring_split = number(value, key)?,
             "ring_size_gap" => self.ring_size_gap = number(value, key)?,
+            "nozzle_x_mm" => self.nozzle_x_mm = number(value, key)?,
+            "nozzle_y_mm" => self.nozzle_y_mm = number(value, key)?,
+            "pick_max_offset_mm" => self.pick_max_offset_mm = number(value, key)?,
+            "pick_max_turn_deg" => self.pick_max_turn_deg = number(value, key)?,
             "replace_output" => {
                 self.replace_output = match value {
                     "yes" | "true" | "on" => true,
@@ -522,6 +553,12 @@ impl Config {
         }
         if self.ring_split < 0.0 {
             return Err("ring_split must be 0 (found from the diameters) or more".into());
+        }
+        if self.pick_max_offset_mm < 0.0 {
+            return Err("pick_max_offset_mm must be 0 (not checked) or more".into());
+        }
+        if !(0.0..=90.0).contains(&self.pick_max_turn_deg) {
+            return Err("pick_max_turn_deg must be from 0 (not checked) to 90".into());
         }
         if self.ring_size_gap <= 1.0 {
             return Err("ring_size_gap must be above 1".into());
@@ -728,6 +765,9 @@ square_max_size = 20",
             "ring_max_elongation = 0.9",
             "ring_split = -1",
             "ring_size_gap = 1",
+            "pick_max_offset_mm = -1",
+            "pick_max_turn_deg = 91",
+            "pick_max_turn_deg = -1",
             "shots_part_height = -0.5",
             "inspect_package = a b",
         ] {

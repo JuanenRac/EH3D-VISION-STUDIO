@@ -842,6 +842,200 @@ fn lens_refuses_a_wrong_mark_and_a_tolerance_that_is_not_met() {
 }
 
 #[test]
+fn offset_gives_where_a_picked_part_is_held_and_the_correction_for_it() {
+    let dir = scratch("offset");
+    fs::write(dir.join("part.pgm"), part_picture()).unwrap();
+    fs::write(
+        dir.join("packages.csv"),
+        "package,body_long_mm,body_short_mm,tolerance_mm\nBIG,30.5,15.5,\nSMALL,20,10,\n",
+    )
+    .unwrap();
+    let base = [
+        "offset",
+        "part.pgm",
+        "--mm-per-px",
+        "0.5",
+        "--table",
+        "packages.csv",
+        "--package",
+        "BIG",
+    ];
+    let with = |extra: &[&str]| {
+        let mut args = base.to_vec();
+        args.extend_from_slice(extra);
+        run(&dir, &args)
+    };
+    // the part is at (-10, 10) millimetres and not turned: that is the offset from an axis in the centre, and the correction is the opposite
+    let held = with(&[]);
+    assert!(held.status.success(), "{}", err(&held));
+    let text = out(&held);
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.len(), 2, "{text}");
+    assert!(
+        lines[0].starts_with("x_offset_mm,y_offset_mm,rot_offset_deg,x_correction_mm,"),
+        "{text}"
+    );
+    assert_eq!(
+        lines[1],
+        "-10.0000,10.0000,0.000,10.0000,-10.0000,0.000,30.5000,15.5000,BIG,0.0000,0.0000,pass,"
+    );
+    assert!(
+        err(&held).contains("offset (-10.000, +10.000) mm"),
+        "{}",
+        err(&held)
+    );
+    // an axis of the nozzle where the part is leaves no offset
+    let centred = with(&["--nozzle-x", "-10", "--nozzle-y", "10"]);
+    assert!(
+        out(&centred).contains("\n0.0000,0.0000,0.000,0.0000,0.0000,0.000,"),
+        "{}",
+        out(&centred)
+    );
+    // too far off, or turned too much: the file is written and the exit code is 1
+    let far = with(&["--max-offset", "5"]);
+    assert!(!far.status.success());
+    assert!(
+        out(&far).trim_end().ends_with(",fail,offset"),
+        "{}",
+        out(&far)
+    );
+    assert!(err(&far).contains("offset"), "{}", err(&far));
+    let turned = with(&["--nominal-angle", "30", "--max-turn", "10"]);
+    assert!(!turned.status.success());
+    assert!(
+        out(&turned).contains(",-30.000,") && out(&turned).trim_end().ends_with(",fail,turn"),
+        "{}",
+        out(&turned)
+    );
+    // the size of the package decides too, and the values can come from the configuration file
+    let small = run(
+        &dir,
+        &[
+            "offset",
+            "part.pgm",
+            "--mm-per-px",
+            "0.5",
+            "--table",
+            "packages.csv",
+            "--package",
+            "small",
+        ],
+    );
+    assert!(!small.status.success());
+    assert!(
+        out(&small).trim_end().ends_with(",fail,length+width"),
+        "{}",
+        out(&small)
+    );
+    fs::write(
+        dir.join("vision.cfg"),
+        "pick_max_offset_mm = 5\nnozzle_x_mm = -10\nnozzle_y_mm = 10\ninspect_package = big\npackage_table = packages.csv\n",
+    )
+    .unwrap();
+    let cfg = run(&dir, &["offset", "part.pgm", "--mm-per-px", "0.5"]);
+    assert!(cfg.status.success(), "{}", err(&cfg));
+    assert!(
+        out(&cfg).contains("\n0.0000,0.0000,0.000,"),
+        "{}",
+        out(&cfg)
+    );
+    fs::remove_file(dir.join("vision.cfg")).unwrap();
+    // JSON, a file that is not written over without --replace, and the refusals
+    let json = with(&["--format", "json", "--output", "held.json"]);
+    assert!(json.status.success(), "{}", err(&json));
+    let text = fs::read_to_string(dir.join("held.json")).unwrap();
+    assert!(
+        text.contains("\"format\": \"eh3d-vision-offset\"")
+            && text.contains("\"verdict\": \"pass\""),
+        "{text}"
+    );
+    let again = with(&["--format", "json", "--output", "held.json"]);
+    assert!(err(&again).contains("file_exists"), "{}", err(&again));
+    assert!(
+        with(&["--format", "json", "--output", "held.json", "--replace"])
+            .status
+            .success()
+    );
+    for (extra, want) in [
+        (vec!["--format", "xml"], "not csv or json"),
+        (vec!["--max-turn", "95"], "make no sense"),
+        (vec!["--tolerance", "0"], "make no sense"),
+    ] {
+        let bad = with(&extra);
+        assert!(
+            !bad.status.success() && err(&bad).contains(want),
+            "{}",
+            err(&bad)
+        );
+    }
+    let noscale = run(
+        &dir,
+        &[
+            "offset",
+            "part.pgm",
+            "--table",
+            "packages.csv",
+            "--package",
+            "BIG",
+        ],
+    );
+    assert!(
+        err(&noscale).contains("needs the scale"),
+        "{}",
+        err(&noscale)
+    );
+    let nopackage = run(
+        &dir,
+        &[
+            "offset",
+            "part.pgm",
+            "--mm-per-px",
+            "0.5",
+            "--table",
+            "packages.csv",
+        ],
+    );
+    assert!(
+        err(&nopackage).contains("offset needs --package"),
+        "{}",
+        err(&nopackage)
+    );
+    let notable = run(
+        &dir,
+        &[
+            "offset",
+            "part.pgm",
+            "--mm-per-px",
+            "0.5",
+            "--package",
+            "BIG",
+        ],
+    );
+    assert!(
+        err(&notable).contains("needs the table of packages"),
+        "{}",
+        err(&notable)
+    );
+    // a picture with more than one part, or none, is not the part under the nozzle
+    fs::write(dir.join("turned.pgm"), turned_picture()).unwrap();
+    let many = run(
+        &dir,
+        &[
+            "offset",
+            "turned.pgm",
+            "--mm-per-px",
+            "0.5",
+            "--table",
+            "packages.csv",
+            "--package",
+            "BIG",
+        ],
+    );
+    assert!(err(&many).contains("parts_count"), "{}", err(&many));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn inspect_gives_a_verdict_for_each_part_from_the_table_of_packages() {
     let dir = scratch("inspect");
     fs::write(dir.join("part.pgm"), part_picture()).unwrap();

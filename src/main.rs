@@ -20,6 +20,7 @@ use eh3d_vision_studio::lang::Lang;
 use eh3d_vision_studio::lens::{fit_lens, undistort2};
 use eh3d_vision_studio::limit::{read_limited, read_text_limited, write_text};
 use eh3d_vision_studio::measure::{measure_parts, to_csv, to_json, PartSettings};
+use eh3d_vision_studio::offset::{pick_offset, to_csv as offset_csv, to_json as offset_json};
 use eh3d_vision_studio::points::parse as parse_points;
 use eh3d_vision_studio::report::html as report_html;
 use eh3d_vision_studio::ring::find_rings;
@@ -36,6 +37,7 @@ const HELP: &str = "eh3d-vision: fiducials in a camera image
   eh3d-vision align DESIGN.csv MEASURED.csv [--scale] [--pair-nearest] [--isocam-args] [--max-rms 0.1] [--max-stretch 0.01]   the turn and the shift that put the board where it is
   eh3d-vision measure IMAGE [--mm-per-px V] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   the parts of a picture: centre, turn, length, width and area in millimetres, as a CSV or JSON file
   eh3d-vision crosses IMAGE [--turned] [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the cross-shaped marks found (plus signs; with --turned the arms may have any angle and the angle is printed)
+  eh3d-vision offset IMAGE --package NAME [--table FILE] [--mm-per-px V] [--nozzle-x MM] [--nozzle-y MM] [--nominal-angle DEG] [--tolerance MM] [--max-offset MM] [--max-turn DEG] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   where a picked part is held, from a picture of it taken from below (one part in it): its offset from the axis of the nozzle and its turn from the way it should be held, the correction that puts it right, its size against the body of the package; exit 1 when it is the wrong size, too far off or turned too much
   eh3d-vision inspect IMAGE --package NAME [--table FILE] [--mm-per-px V] [--tolerance MM] [--max-angle DEG] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   each part of a picture compared with the body of its package from a table (CSV with package, body_long_mm, body_short_mm), one verdict per part; exit 1 when a part fails
   eh3d-vision shots (--package NAME [--table FILE] | --body-long MM --body-short MM) --fov-w MM --fov-h MM [--overlap F] [--margin MM] [--output FILE] [--replace]   the places of the camera that cover a part bigger than its field (millimetres from the centre of the part), row after row, as CSV; no camera is needed
   eh3d-vision lens IMAGE [--columns C] [--rows R] [--max-rms PX] [--light] [--flatten PX]   the two radial factors of the lens from a grid of marks (columns and rows as grid_columns and grid_rows), refused when the marks stay farther than --max-rms pixels from their lattice
@@ -408,6 +410,93 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 plan.columns,
                 plan.rows
             );
+            Ok(())
+        }
+        "offset" => {
+            let mut s = PartSettings::default();
+            if switch(&mut args, "--light") {
+                s.polarity = Polarity::Light;
+            }
+            let replace = switch(&mut args, "--replace");
+            let flatten_px = flag(&mut args, "--flatten")?
+                .map(|v| count(&v, "--flatten"))
+                .transpose()?;
+            let mm_per_px = flag(&mut args, "--mm-per-px")?
+                .map(|v| num(&v, "--mm-per-px"))
+                .transpose()?;
+            let package = flag(&mut args, "--package")?;
+            let table_path = flag(&mut args, "--table")?;
+            let cfg = config();
+            let package = package
+                .or_else(|| (!cfg.inspect_package.is_empty()).then(|| cfg.inspect_package.clone()))
+                .ok_or("offset needs --package, the name of the package in the table (or inspect_package in vision.cfg)")?;
+            let replace = replace || cfg.replace_output;
+            let mut settings = cfg.offset_settings();
+            for (name, slot) in [
+                ("--nozzle-x", &mut settings.nozzle_x_mm),
+                ("--nozzle-y", &mut settings.nozzle_y_mm),
+                ("--nominal-angle", &mut settings.nominal_angle_deg),
+                ("--tolerance", &mut settings.tolerance_mm),
+                ("--max-offset", &mut settings.max_offset_mm),
+                ("--max-turn", &mut settings.max_turn_deg),
+            ] {
+                if let Some(v) = flag(&mut args, name)? {
+                    *slot = num(&v, name)?;
+                }
+            }
+            let format = flag(&mut args, "--format")?.unwrap_or_else(|| "csv".to_string());
+            let output = flag(&mut args, "--output")?;
+            finish(&args, 1)?;
+            if !matches!(format.as_str(), "csv" | "json") {
+                return Err(format!("--format '{format}' is not csv or json"));
+            }
+            let path = args.first().ok_or("offset needs an image")?;
+            let mm = mm_per_px.unwrap_or(cfg.mm_per_px);
+            if mm <= 0.0 {
+                return Err(
+                    "offset needs the scale: --mm-per-px, or mm_per_px in vision.cfg (the command calibrate works it out)"
+                        .into(),
+                );
+            }
+            let table_file = table_path.unwrap_or_else(|| cfg.package_table.clone());
+            if table_file.is_empty() {
+                return Err(
+                    "offset needs the table of packages: --table, or package_table in vision.cfg"
+                        .into(),
+                );
+            }
+            let table = parse_table(&read_text_limited(
+                Path::new(&table_file),
+                cfg.max_file_mib,
+            )?)
+            .map_err(|e| format!("{table_file}: {e}"))?;
+            let body = find_package(&table, &package)?;
+            s.threshold = cfg.threshold;
+            s.min_area_px = cfg.part_min_area;
+            s.max_area_px = cfg.part_max_area;
+            s.max_parts = cfg.max_parts;
+            let img = picture(path, &cfg, flatten_px)?;
+            let parts = measure_parts(&img, &s, Scale { mm_per_px: mm })?;
+            let held = pick_offset(&parts, body, &settings)?;
+            let text = if format == "json" {
+                offset_json(&held, body)
+            } else {
+                offset_csv(&held, body)
+            };
+            deliver(&text, output, replace)?;
+            let (cx, cy, cr) = held.correction();
+            eprintln!(
+                "offset ({:+.3}, {:+.3}) mm, turn {:+.2} degrees; correction ({:+.3}, {:+.3}) mm, {:+.2} degrees",
+                held.x_mm, held.y_mm, held.rot_deg, cx, cy, cr
+            );
+            // a part that fails is an error for a script, after the file is written
+            if !held.passes() {
+                return Err(format!(
+                    "the part does not pass for the package {}: {}",
+                    body.name,
+                    held.reasons.join(", ")
+                ));
+            }
             Ok(())
         }
         "inspect" => {

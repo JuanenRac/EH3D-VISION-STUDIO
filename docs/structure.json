@@ -275,6 +275,19 @@
           }
         },
         {
+          "name": "offset.rs",
+          "desc": {
+            "en": "where a picked part is held from a picture of it, with the correction that puts it right",
+            "es": "dónde se sostiene una pieza recogida, con la corrección que la deja bien",
+            "de": "wo ein aufgenommenes Teil gehalten wird, mit der Korrektur, die es richtet",
+            "fr": "où une pièce prise est tenue, avec la correction qui la remet bien",
+            "it": "dove è tenuto un pezzo prelevato, con la correzione che lo rimette a posto",
+            "ja": "ピックした部品の保持位置と、それを正す補正",
+            "zh": "被拾取零件的持放位置及其修正量",
+            "pt": "onde está seguida uma peça apanhada, com a correção que a põe bem"
+          }
+        },
+        {
           "name": "panels.rs",
           "desc": {
             "en": "the panels of the window for the lens, the parts against packages and the plan of pictures",
