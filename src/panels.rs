@@ -2,8 +2,14 @@
 //! so that all that the window decides is tested without a screen; `gui.rs` only draws it. The files that are written are named after the open picture and are never written over a file that
 //! is there unless `replace_output` says so.
 
-use crate::limit::write_text;
-use crate::window::{Status, Window};
+use crate::inspect::{
+    find_package, judge, parse_table, to_csv as inspect_csv, REASON_ANGLE, REASON_LENGTH,
+};
+use crate::lang::Msg;
+use crate::limit::{read_text_limited, write_text};
+use crate::shots::{plan, to_csv as shots_csv};
+use crate::window::{show, Status, Window};
+use std::path::Path;
 
 impl Window {
     /// Writes the two factors of the lens as the file `<picture>-lens.cfg` beside the picture, in the lines of `vision.cfg` (`lens_k1 = ...` and `lens_k2 = ...`).
@@ -19,6 +25,243 @@ impl Window {
         let name = format!("{stem}-lens.cfg");
         let text = format!("lens_k1 = {:.6}\nlens_k2 = {:.6}\n", lens.k1, lens.k2);
         match write_text(&folder.join(&name), &text, self.cfg.replace_output) {
+            Ok(()) => {
+                self.status = Status::Exported(name);
+                true
+            }
+            Err(e) => {
+                self.status = Status::Failed(e);
+                false
+            }
+        }
+    }
+
+    /// Reads the table of packages named by `package_table` (within `max_file_mib`): a table that cannot be read or has a bad line is the status, with its file and line.
+    pub fn load_packages(&mut self) -> bool {
+        let file = self.cfg.package_table.trim().to_string();
+        if file.is_empty() {
+            self.status = Status::NeedTable;
+            return false;
+        }
+        let table = read_text_limited(Path::new(&file), self.cfg.max_file_mib)
+            .and_then(|text| parse_table(&text).map_err(|e| format!("{file}: {e}")));
+        match table {
+            Ok(table) => {
+                self.status = Status::PackagesLoaded(table.len());
+                self.packages = table;
+                self.judged.clear();
+                self.judged_package = None;
+                true
+            }
+            Err(e) => {
+                self.status = Status::Failed(e);
+                false
+            }
+        }
+    }
+
+    /// Judges the parts that were measured against the package `inspect_package` of the table, as `eh3d-vision inspect` does: the length and the width within the tolerance (`inspect_tolerance`,
+    /// or the one of the package) and, when `inspect_max_angle` is above 0, the turn within it. The table is read again each time, so that a change of the file counts.
+    pub fn inspect_parts(&mut self) -> bool {
+        if self.image.is_none() {
+            self.status = Status::NeedImage;
+            return false;
+        }
+        if self.parts.is_empty() {
+            self.status = Status::NeedParts;
+            return false;
+        }
+        if !self.load_packages() {
+            return false;
+        }
+        let name = self.cfg.inspect_package.trim().to_string();
+        if name.is_empty() {
+            self.status = Status::NeedPackage;
+            return false;
+        }
+        let package = match find_package(&self.packages, &name) {
+            Ok(p) => p.clone(),
+            Err(e) => {
+                self.status = Status::Failed(e);
+                return false;
+            }
+        };
+        match judge(
+            &self.parts,
+            &package,
+            self.cfg.inspect_tolerance,
+            self.cfg.inspect_max_angle,
+        ) {
+            Ok(judged) => {
+                let pass = judged.iter().filter(|j| j.passes()).count();
+                self.status = Status::InspectDone {
+                    pass,
+                    fail: judged.len() - pass,
+                };
+                self.judged = judged;
+                self.judged_package = Some(package);
+                true
+            }
+            Err(e) => {
+                self.status = Status::Failed(e);
+                false
+            }
+        }
+    }
+
+    /// One line per part with its verdict (true when it passes) and, for a part that fails, why (length, width, turn), in the language of the window.
+    pub fn inspect_lines(&self) -> Vec<(String, bool)> {
+        self.judged
+            .iter()
+            .enumerate()
+            .map(|(i, j)| {
+                let (n, l, w) = (
+                    (i + 1).to_string(),
+                    show(j.part.length_mm, 3),
+                    show(j.part.width_mm, 3),
+                );
+                if j.passes() {
+                    (Msg::InspectPass.with(self.lang, &[&n, &l, &w]), true)
+                } else {
+                    let why: Vec<&str> = j
+                        .reasons
+                        .iter()
+                        .map(|r| match *r {
+                            REASON_LENGTH => Msg::ReasonLength.tr(self.lang),
+                            REASON_ANGLE => Msg::ReasonAngle.tr(self.lang),
+                            _ => Msg::ReasonWidth.tr(self.lang),
+                        })
+                        .collect();
+                    (
+                        Msg::InspectFail.with(self.lang, &[&n, &why.join(", "), &l, &w]),
+                        false,
+                    )
+                }
+            })
+            .collect()
+    }
+
+    /// Writes the verdicts as the CSV file `<picture>-inspection.csv` beside the picture, the columns of `eh3d-vision inspect`.
+    pub fn save_inspection(&mut self) -> bool {
+        let Some((folder, stem)) = self.beside() else {
+            self.status = Status::NeedImage;
+            return false;
+        };
+        let Some(package) = self
+            .judged_package
+            .clone()
+            .filter(|_| !self.judged.is_empty())
+        else {
+            self.status = Status::NeedParts;
+            return false;
+        };
+        let name = format!("{stem}-inspection.csv");
+        match write_text(
+            &folder.join(&name),
+            &inspect_csv(&self.judged, &package),
+            self.cfg.replace_output,
+        ) {
+            Ok(()) => {
+                self.status = Status::Exported(name);
+                true
+            }
+            Err(e) => {
+                self.status = Status::Failed(e);
+                false
+            }
+        }
+    }
+
+    /// The size in millimetres of the part the pictures are planned for: `shots_part_width` by `shots_part_height` when both are above 0, else the body of the package `inspect_package`
+    /// of the table.
+    fn shots_part(&mut self) -> Result<(f64, f64), Status> {
+        if self.cfg.shots_part_width > 0.0 && self.cfg.shots_part_height > 0.0 {
+            return Ok((self.cfg.shots_part_width, self.cfg.shots_part_height));
+        }
+        if self.cfg.inspect_package.trim().is_empty() {
+            return Err(Status::NeedBody);
+        }
+        if !self.load_packages() {
+            return Err(self.status.clone());
+        }
+        let name = self.cfg.inspect_package.trim().to_string();
+        find_package(&self.packages, &name)
+            .map(|p| (p.long_mm, p.short_mm))
+            .map_err(Status::Failed)
+    }
+
+    /// Plans the pictures a part bigger than the field of the camera needs, as `eh3d-vision shots` does: the field is the open picture in millimetres (its size in pixels times the scale),
+    /// the part is the size of the configuration or the body of the package, and `shots_overlap` and `shots_margin` are the values of the panel.
+    pub fn plan_shots(&mut self) -> bool {
+        let Some(img) = self.image.as_ref() else {
+            self.status = Status::NeedImage;
+            return false;
+        };
+        let (w_px, h_px) = (img.gray.w as f64, img.gray.h as f64);
+        let Some(scale) = self.measure_scale() else {
+            self.status = Status::NeedScale;
+            return false;
+        };
+        let (width, height) = match self.shots_part() {
+            Ok(size) => size,
+            Err(status) => {
+                self.status = status;
+                return false;
+            }
+        };
+        match plan(
+            width,
+            height,
+            w_px * scale.mm_per_px,
+            h_px * scale.mm_per_px,
+            self.cfg.shots_overlap,
+            self.cfg.shots_margin,
+        ) {
+            Ok(p) => {
+                self.status = Status::ShotsPlanned {
+                    pictures: p.shots.len(),
+                    columns: p.columns,
+                    rows: p.rows,
+                };
+                self.plan = Some(p);
+                true
+            }
+            Err(e) => {
+                self.status = Status::Failed(e);
+                false
+            }
+        }
+    }
+
+    /// The lines of the plan of pictures: where the camera goes for each one, in millimetres from the centre of the part.
+    pub fn shots_lines(&self) -> Vec<String> {
+        self.plan.as_ref().map_or_else(Vec::new, |p| {
+            p.shots
+                .iter()
+                .enumerate()
+                .map(|(i, (x, y))| {
+                    Msg::ShotLine.with(self.lang, &[(i + 1).to_string(), show(*x, 3), show(*y, 3)])
+                })
+                .collect()
+        })
+    }
+
+    /// Writes the plan as the CSV file `<picture>-shots.csv` beside the picture, the columns of `eh3d-vision shots`.
+    pub fn save_shots(&mut self) -> bool {
+        let Some((folder, stem)) = self.beside() else {
+            self.status = Status::NeedImage;
+            return false;
+        };
+        let Some(plan) = &self.plan else {
+            self.status = Status::NeedBody;
+            return false;
+        };
+        let name = format!("{stem}-shots.csv");
+        match write_text(
+            &folder.join(&name),
+            &shots_csv(plan),
+            self.cfg.replace_output,
+        ) {
             Ok(()) => {
                 self.status = Status::Exported(name);
                 true
@@ -244,5 +487,262 @@ mod tests {
         assert!(matches!(&w.status, Status::Failed(e) if e.starts_with("file_exists")));
         w.cfg.replace_output = true;
         assert!(w.save_lens());
+    }
+
+    /// A table of two packages saved as `packages.csv`: the body of 0805 is 2 by 1.25 mm with a tolerance of 0.15, SOIC-8 is 4.9 by 3.9.
+    fn table(s: &Scratch) -> PathBuf {
+        let path = s.path("packages.csv");
+        fs::write(
+            &path,
+            "package,body_long_mm,body_short_mm,tolerance_mm\n0805,2.0,1.25,0.15\nSOIC-8,4.9,3.9,0.25\n",
+        )
+        .unwrap();
+        path
+    }
+
+    /// A picture with two dark rectangles, 40 by 25 pixels and 40 by 32 pixels, saved as `parts.pgm`; at 0.05 mm a pixel the first is the body of 0805 and the second is too wide.
+    fn parts_picture(s: &Scratch) -> PathBuf {
+        let mut g = Gray::blank(320, 160, 220).unwrap();
+        for (x0, y0, w, h) in [(40usize, 50usize, 40usize, 25usize), (200, 50, 40, 32)] {
+            for y in y0..y0 + h {
+                for x in x0..x0 + w {
+                    g.data[y * 320 + x] = 30;
+                }
+            }
+        }
+        let path = s.path("parts.pgm");
+        fs::write(&path, pgm(&g)).unwrap();
+        path
+    }
+
+    /// A window with the picture open, the scale and the table of `table`, and the package named.
+    fn inspecting(s: &Scratch, package: &str) -> Window {
+        let cfg = format!(
+            "mm_per_px = 0.05\npackage_table = {}\ninspect_package = {package}\n",
+            table(s).display()
+        );
+        let mut w = window_with(&cfg);
+        assert!(w.open_image(&parts_picture(s)));
+        w
+    }
+
+    #[test]
+    fn the_parts_are_judged_against_the_package_and_the_verdicts_are_saved() {
+        let s = Scratch::new("inspect");
+        let mut w = inspecting(&s, "0805");
+        // the parts have to be measured first
+        assert!(!w.inspect_parts());
+        assert_eq!(w.status, Status::NeedParts);
+        assert!(w.measure());
+        assert_eq!(w.parts.len(), 2);
+        assert!(w.inspect_parts());
+        assert_eq!(w.status, Status::InspectDone { pass: 1, fail: 1 });
+        assert!(w.status.text(Lang::En).contains("1 parts pass, 1 fail"));
+        let lines = w.inspect_lines();
+        assert_eq!(lines.len(), 2);
+        // the order of the parts is the one of `measure`: one passes and one fails
+        let pass = lines.iter().find(|l| l.1).unwrap();
+        let fail = lines.iter().find(|l| !l.1).unwrap();
+        assert!(pass.0.contains(": passes (2.000 x 1.250 mm"), "{lines:?}");
+        assert!(fail.0.contains(": fails by width ("), "{lines:?}");
+        w.lang = Lang::Es;
+        assert!(w
+            .inspect_lines()
+            .iter()
+            .any(|l| l.0.contains("falla por ancho")));
+        w.lang = Lang::En;
+        // the same verdicts as the command line writes
+        assert!(w.save_inspection());
+        assert_eq!(w.status, Status::Exported("parts-inspection.csv".into()));
+        let csv = fs::read_to_string(s.path("parts-inspection.csv")).unwrap();
+        assert!(csv.starts_with(crate::inspect::CSV_HEADER), "{csv}");
+        assert!(
+            csv.contains(",0805,2.0000,1.2500,")
+                && csv.contains(",pass,")
+                && csv.contains(",fail,width")
+        );
+        assert!(!w.save_inspection());
+        assert!(matches!(&w.status, Status::Failed(e) if e.starts_with("file_exists")));
+        // a looser tolerance lets the wide part pass, and measuring again forgets the verdicts
+        let i = w
+            .fields
+            .iter()
+            .position(|f| f.key == "package_table")
+            .unwrap();
+        assert!(w.set_field(i, w.cfg.package_table.clone()));
+        assert!(w.set_field(
+            w.fields
+                .iter()
+                .position(|f| f.key == "inspect_tolerance")
+                .unwrap(),
+            "0.5".into()
+        ));
+        // the package has its own tolerance of 0.15, which wins over the field
+        assert!(w.inspect_parts());
+        assert_eq!(w.status, Status::InspectDone { pass: 1, fail: 1 });
+        assert!(w.measure());
+        assert!(w.judged.is_empty() && w.judged_package.is_none());
+        assert!(!w.save_inspection());
+        assert_eq!(w.status, Status::NeedParts);
+    }
+
+    #[test]
+    fn what_cannot_be_judged_is_said_with_its_reason() {
+        let s = Scratch::new("inspect_refuse");
+        let mut w = inspecting(&s, "");
+        assert!(w.measure());
+        // no package named
+        assert!(!w.inspect_parts());
+        assert_eq!(w.status, Status::NeedPackage);
+        // a package that is not in the table
+        let name = w
+            .fields
+            .iter()
+            .position(|f| f.key == "inspect_package")
+            .unwrap();
+        assert!(w.set_field(name, "9999".into()));
+        assert!(!w.inspect_parts());
+        assert!(
+            matches!(&w.status, Status::Failed(e) if e.starts_with("package_unknown")),
+            "{:?}",
+            w.status
+        );
+        // a table that is not there, a table with a bad line and no table at all
+        let table_field = w
+            .fields
+            .iter()
+            .position(|f| f.key == "package_table")
+            .unwrap();
+        assert!(w.set_field(table_field, s.path("missing.csv").display().to_string()));
+        assert!(!w.inspect_parts());
+        assert!(
+            matches!(&w.status, Status::Failed(e) if e.starts_with("file_unreadable")),
+            "{:?}",
+            w.status
+        );
+        fs::write(
+            s.path("bad.csv"),
+            "package,body_long_mm,body_short_mm\n0805,1,2\n",
+        )
+        .unwrap();
+        assert!(w.set_field(table_field, s.path("bad.csv").display().to_string()));
+        assert!(!w.load_packages());
+        assert!(
+            matches!(&w.status, Status::Failed(e) if e.contains("bad.csv") && e.contains("line 2")),
+            "{:?}",
+            w.status
+        );
+        assert!(w.set_field(table_field, String::new()));
+        assert!(!w.load_packages());
+        assert_eq!(w.status, Status::NeedTable);
+        assert!(w.status.is_problem());
+        // the table is read within the limit of the files
+        assert!(w.set_field(table_field, table(&s).display().to_string()));
+        assert!(w.load_packages());
+        assert_eq!(w.status, Status::PackagesLoaded(2));
+        assert_eq!(w.packages.len(), 2);
+        // without a picture there is nothing to judge
+        let mut empty = window_with("");
+        assert!(!empty.inspect_parts());
+        assert_eq!(empty.status, Status::NeedImage);
+        assert!(!empty.save_inspection());
+    }
+
+    #[test]
+    fn the_pictures_a_big_part_needs_are_planned_from_the_size_of_the_field() {
+        let s = Scratch::new("shots");
+        let mut w =
+            window_with("mm_per_px = 0.05\nshots_part_width = 60\nshots_part_height = 30\n");
+        assert!(!w.plan_shots());
+        assert_eq!(w.status, Status::NeedImage);
+        assert!(w.open_image(&parts_picture(&s)));
+        // the picture is 320 by 160 pixels, 16 by 8 millimetres at 0.05 mm a pixel
+        assert!(w.plan_shots());
+        let p = w.plan.clone().unwrap();
+        let expected = crate::shots::plan(60.0, 30.0, 16.0, 8.0, 0.1, 0.5).unwrap();
+        assert_eq!(p, expected);
+        assert!(p.shots.len() > 1);
+        assert_eq!(
+            w.status,
+            Status::ShotsPlanned {
+                pictures: p.shots.len(),
+                columns: p.columns,
+                rows: p.rows
+            }
+        );
+        let lines = w.shots_lines();
+        assert_eq!(lines.len(), p.shots.len());
+        assert!(lines[0].starts_with("Picture 1: x "), "{lines:?}");
+        // the file is the one of the command line
+        assert!(w.save_shots());
+        assert_eq!(w.status, Status::Exported("parts-shots.csv".into()));
+        assert_eq!(
+            fs::read_to_string(s.path("parts-shots.csv")).unwrap(),
+            crate::shots::to_csv(&p)
+        );
+        assert!(!w.save_shots());
+        assert!(matches!(&w.status, Status::Failed(e) if e.starts_with("file_exists")));
+        // the overlap and the margin are the fields of the panel and the plan follows them
+        let overlap = w
+            .fields
+            .iter()
+            .position(|f| f.key == "shots_overlap")
+            .unwrap();
+        assert!(w.set_field(overlap, "0.5".into()));
+        assert!(w.plan_shots());
+        assert!(w.plan.as_ref().unwrap().shots.len() > p.shots.len());
+        assert!(!w.set_field(overlap, "0.95".into()));
+        assert!(w.status.is_problem());
+    }
+
+    #[test]
+    fn the_part_of_the_plan_comes_from_the_package_when_no_size_is_given() {
+        let s = Scratch::new("shots_package");
+        let mut w = inspecting(&s, "SOIC-8");
+        // the body of SOIC-8 is 4.9 by 3.9 mm; the field is 16 by 8 mm: one picture
+        assert!(w.plan_shots());
+        assert_eq!(w.plan.as_ref().unwrap().shots.len(), 1);
+        // without a size and without a package the part is not known
+        let mut none = window_with("mm_per_px = 0.05\n");
+        assert!(none.open_image(&parts_picture(&s)));
+        assert!(!none.plan_shots());
+        assert_eq!(none.status, Status::NeedBody);
+        assert!(!none.save_shots());
+        assert_eq!(none.status, Status::NeedBody);
+        // a package that is not there is the status
+        let name = w
+            .fields
+            .iter()
+            .position(|f| f.key == "inspect_package")
+            .unwrap();
+        assert!(w.set_field(name, "nope".into()));
+        assert!(!w.plan_shots());
+        assert!(matches!(&w.status, Status::Failed(e) if e.starts_with("package_unknown")));
+        // without a scale there is no field in millimetres
+        let mut unscaled = window_with("shots_part_width = 10\nshots_part_height = 10\n");
+        assert!(unscaled.open_image(&parts_picture(&s)));
+        assert!(!unscaled.plan_shots());
+        assert_eq!(unscaled.status, Status::NeedScale);
+        // the status sentences are spoken in every language
+        for st in [
+            Status::PackagesLoaded(3),
+            Status::NeedTable,
+            Status::NeedParts,
+            Status::NeedPackage,
+            Status::InspectDone { pass: 4, fail: 1 },
+            Status::ShotsPlanned {
+                pictures: 6,
+                columns: 3,
+                rows: 2,
+            },
+            Status::NeedBody,
+        ] {
+            let texts: Vec<String> = Lang::ALL.iter().map(|l| st.text(*l)).collect();
+            assert!(
+                texts.iter().all(|t| !t.is_empty() && !t.contains('{')),
+                "{st:?}"
+            );
+            assert_ne!(texts[0], texts[5], "{st:?}");
+        }
     }
 }

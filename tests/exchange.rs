@@ -1167,6 +1167,74 @@ fn shots_plans_the_pictures_of_a_part_bigger_than_the_field() {
 }
 
 #[test]
+fn the_configuration_can_name_the_part_of_shots_and_the_package_of_inspect() {
+    let dir = scratch("cfg_part");
+    let fov = ["--fov-w", "6", "--fov-h", "6"];
+    let mut by_flags = vec!["shots", "--body-long", "10", "--body-short", "4"];
+    by_flags.extend(fov);
+    let expected = out(&run(&dir, &by_flags));
+    assert_eq!(
+        expected,
+        "shot,x_mm,y_mm\n1,-2.5000,0.0000\n2,2.5000,0.0000\n"
+    );
+    // the size of the part in the configuration file
+    fs::write(
+        dir.join("vision.cfg"),
+        "shots_part_width = 10\nshots_part_height = 4\n",
+    )
+    .unwrap();
+    let mut by_size = vec!["shots"];
+    by_size.extend(fov);
+    let sized = run(&dir, &by_size);
+    assert!(sized.status.success(), "{}", err(&sized));
+    assert_eq!(out(&sized), expected);
+    // the options of the command line win over the file
+    let mut other = vec!["shots", "--body-long", "4", "--body-short", "4"];
+    other.extend(fov);
+    assert_eq!(out(&run(&dir, &other)), "shot,x_mm,y_mm\n1,0.0000,0.0000\n");
+    // a size with only one side is not a size: the file then needs the package
+    fs::write(dir.join("vision.cfg"), "shots_part_width = 10\n").unwrap();
+    let half = run(&dir, &by_size);
+    assert!(!half.status.success() && err(&half).contains("either --package"));
+    // the package of the configuration, for shots and for inspect
+    fs::write(
+        dir.join("packages.csv"),
+        "package,body_long_mm,body_short_mm\nBIG,30.5,15.5\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.join("vision.cfg"),
+        "inspect_package = big\npackage_table = packages.csv\n",
+    )
+    .unwrap();
+    let named = run(&dir, &by_size);
+    assert!(named.status.success(), "{}", err(&named));
+    // the same plan as for the body of that package given by hand
+    let mut big = vec!["shots", "--body-long", "30.5", "--body-short", "15.5"];
+    big.extend(fov);
+    assert_eq!(out(&named), out(&run(&dir, &big)));
+    fs::write(dir.join("part.pgm"), part_picture()).unwrap();
+    let inspected = run(&dir, &["inspect", "part.pgm", "--mm-per-px", "0.5"]);
+    assert!(inspected.status.success(), "{}", err(&inspected));
+    assert!(out(&inspected).contains(",pass,"), "{}", out(&inspected));
+    // without it, as before, inspect asks for the package
+    fs::remove_file(dir.join("vision.cfg")).unwrap();
+    let asked = run(
+        &dir,
+        &[
+            "inspect",
+            "part.pgm",
+            "--mm-per-px",
+            "0.5",
+            "--table",
+            "packages.csv",
+        ],
+    );
+    assert!(!asked.status.success() && err(&asked).contains("inspect needs --package"));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn shots_needs_the_field_and_one_way_to_say_the_size_of_the_part() {
     let dir = scratch("shots_refused");
     let cases: Vec<(Vec<&str>, &str)> = vec![

@@ -188,6 +188,8 @@ impl Window {
             Ok(parts) => {
                 self.status = Status::PartsFound(parts.len());
                 self.parts = parts;
+                self.judged.clear();
+                self.judged_package = None;
                 true
             }
             Err(e) => {

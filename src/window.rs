@@ -5,12 +5,14 @@ use crate::align::{fit, isocam_args, pair_nearest, Transform};
 use crate::config::Config;
 use crate::fiducial::{find_with, refine, Fiducial, Polarity};
 use crate::image::{from_bytes, Gray};
+use crate::inspect::{Judged, Package};
 use crate::job::BatchJob;
 use crate::lang::{Lang, Msg};
 use crate::lens::{corrected_grid, fit_lens, predicted_grid, undistort2, Lens};
 use crate::measure::Part;
 use crate::points;
 use crate::scale::Scale;
+use crate::shots::Plan;
 use crate::tools::ShapeMark;
 use crate::viewport::Viewport;
 use std::path::{Path, PathBuf};
@@ -32,6 +34,8 @@ pub enum Section {
     Measure,
     Batch,
     Pitch,
+    Inspect,
+    Shots,
 }
 
 /// A value of the configuration that the person can edit in the window.
@@ -49,13 +53,41 @@ pub struct FieldState {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Status {
     Ready,
-    Opened { name: String, w: usize, h: usize },
+    Opened {
+        name: String,
+        w: usize,
+        h: usize,
+    },
     Found(usize),
     ScaleSet(f64),
-    LensSet { k1: f64, k2: f64 },
+    LensSet {
+        k1: f64,
+        k2: f64,
+    },
     NeedLens,
-    DesignLoaded { name: String, points: usize },
-    Aligned { dx: f64, dy: f64, turn: f64 },
+    PackagesLoaded(usize),
+    NeedTable,
+    NeedParts,
+    NeedPackage,
+    InspectDone {
+        pass: usize,
+        fail: usize,
+    },
+    ShotsPlanned {
+        pictures: usize,
+        columns: usize,
+        rows: usize,
+    },
+    NeedBody,
+    DesignLoaded {
+        name: String,
+        points: usize,
+    },
+    Aligned {
+        dx: f64,
+        dy: f64,
+        turn: f64,
+    },
     Exported(String),
     Failed(String),
     BadValue(Msg),
@@ -64,17 +96,32 @@ pub enum Status {
     NeedScale,
     NeedDesign,
     NeedAccepted,
-    GridCount { need: usize, found: usize },
+    GridCount {
+        need: usize,
+        found: usize,
+    },
     SquaresFound(usize),
     CrossesFound(usize),
     PartsFound(usize),
-    PitchScaleSet { mm_per_px: f64, marks: usize },
+    PitchScaleSet {
+        mm_per_px: f64,
+        marks: usize,
+    },
     NeedPitch,
-    BatchDone { pictures: usize, name: String },
-    BatchRunning { done: usize, total: usize },
+    BatchDone {
+        pictures: usize,
+        name: String,
+    },
+    BatchRunning {
+        done: usize,
+        total: usize,
+    },
     BatchCancelled,
     BatchBusy,
-    TooLarge { name: String, mib: u64 },
+    TooLarge {
+        name: String,
+        mib: u64,
+    },
     SameFile,
     ConfigProblem(String),
 }
@@ -98,6 +145,26 @@ impl Status {
                 Msg::DistortionSet.with(lang, &[&show(*k1, 5), &show(*k2, 5)])
             }
             Status::NeedLens => Msg::NeedLens.tr(lang).to_string(),
+            Status::PackagesLoaded(n) => Msg::PackagesLoaded.with(lang, &[&n.to_string()]),
+            Status::NeedTable => Msg::NeedTable.tr(lang).to_string(),
+            Status::NeedParts => Msg::NeedParts.tr(lang).to_string(),
+            Status::NeedPackage => Msg::NeedPackage.tr(lang).to_string(),
+            Status::InspectDone { pass, fail } => {
+                Msg::InspectDone.with(lang, &[&pass.to_string(), &fail.to_string()])
+            }
+            Status::ShotsPlanned {
+                pictures,
+                columns,
+                rows,
+            } => Msg::ShotsPlanned.with(
+                lang,
+                &[
+                    &pictures.to_string(),
+                    &columns.to_string(),
+                    &rows.to_string(),
+                ],
+            ),
+            Status::NeedBody => Msg::NeedBody.tr(lang).to_string(),
             Status::DesignLoaded { name, points } => {
                 Msg::DesignLoaded.with(lang, &[name, &points.to_string()])
             }
@@ -152,6 +219,10 @@ impl Status {
                 | Status::NeedAccepted
                 | Status::NeedPitch
                 | Status::NeedLens
+                | Status::NeedTable
+                | Status::NeedParts
+                | Status::NeedPackage
+                | Status::NeedBody
                 | Status::GridCount { .. }
                 | Status::TooLarge { .. }
                 | Status::SameFile
@@ -243,6 +314,14 @@ fn field_text(cfg: &Config, key: &str) -> String {
         "pitch_mm" => cfg.pitch_mm.to_string(),
         "pitch_tolerance" => cfg.pitch_tolerance.to_string(),
         "lens_max_rms" => cfg.lens_max_rms.to_string(),
+        "package_table" => cfg.package_table.clone(),
+        "inspect_package" => cfg.inspect_package.clone(),
+        "inspect_tolerance" => cfg.inspect_tolerance.to_string(),
+        "inspect_max_angle" => cfg.inspect_max_angle.to_string(),
+        "shots_overlap" => cfg.shots_overlap.to_string(),
+        "shots_margin" => cfg.shots_margin.to_string(),
+        "shots_part_width" => cfg.shots_part_width.to_string(),
+        "shots_part_height" => cfg.shots_part_height.to_string(),
         _ => String::new(),
     }
 }
@@ -274,6 +353,11 @@ pub struct Window {
     /// The squares and the crosses that were found, and the parts that were measured.
     pub shapes: Vec<ShapeMark>,
     pub parts: Vec<Part>,
+    /// The table of packages that was read, the parts judged against one of them and that package, and the plan of pictures for a big part.
+    pub packages: Vec<Package>,
+    pub judged: Vec<Judged>,
+    pub judged_package: Option<Package>,
+    pub plan: Option<Plan>,
     pub selected: Option<usize>,
     pub scale: Option<Scale>,
     pub distortion: Option<Lens>,
@@ -328,6 +412,14 @@ impl Window {
             ("pitch_mm", Msg::PitchMm, Section::Pitch),
             ("pitch_tolerance", Msg::PitchTolerance, Section::Pitch),
             ("lens_max_rms", Msg::LensMaxRms, Section::Grid),
+            ("package_table", Msg::InspectTable, Section::Inspect),
+            ("inspect_package", Msg::InspectPackage, Section::Inspect),
+            ("inspect_tolerance", Msg::InspectTolerance, Section::Inspect),
+            ("inspect_max_angle", Msg::InspectMaxAngle, Section::Inspect),
+            ("shots_part_width", Msg::ShotsPartWidth, Section::Shots),
+            ("shots_part_height", Msg::ShotsPartHeight, Section::Shots),
+            ("shots_overlap", Msg::ShotsOverlap, Section::Shots),
+            ("shots_margin", Msg::ShotsMargin, Section::Shots),
         ]
         .into_iter()
         .map(|(key, label, section)| FieldState {
@@ -347,6 +439,10 @@ impl Window {
             confidence: Vec::new(),
             shapes: Vec::new(),
             parts: Vec::new(),
+            packages: Vec::new(),
+            judged: Vec::new(),
+            judged_package: None,
+            plan: None,
             selected: None,
             scale: None,
             distortion: None,
@@ -406,7 +502,7 @@ impl Window {
         Some((centre, centre.0.hypot(centre.1)))
     }
 
-    fn read_limited(&self, path: &Path) -> Result<Vec<u8>, Status> {
+    pub(crate) fn read_limited(&self, path: &Path) -> Result<Vec<u8>, Status> {
         let name = file_name(path);
         let limit = self.cfg.max_file_mib;
         let size = std::fs::metadata(path)
@@ -475,6 +571,8 @@ impl Window {
                 self.confidence = confidence;
                 self.shapes.clear();
                 self.parts.clear();
+                self.judged.clear();
+                self.judged_package = None;
                 self.selected = None;
                 self.distortion = None;
                 self.use_distortion = false;
@@ -942,7 +1040,7 @@ mod tests {
     fn a_new_window_waits_for_a_picture() {
         let w = window();
         assert_eq!(w.status, Status::Ready);
-        assert_eq!(w.fields.len(), 29);
+        assert_eq!(w.fields.len(), 37);
         assert_eq!(w.fields[0].text, "auto");
         assert_eq!(w.fields[1].text, "8");
         assert!(!w.light_marks());

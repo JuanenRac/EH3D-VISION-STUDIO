@@ -365,6 +365,22 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 .unwrap_or(cfg.shots_margin);
             let output = flag(&mut args, "--output")?;
             finish(&args, 0)?;
+            // nothing about the part on the command line: the size or the package of the configuration
+            let (package, long, short) = if package.is_none() && long.is_none() && short.is_none() {
+                if cfg.shots_part_width > 0.0 && cfg.shots_part_height > 0.0 {
+                    (
+                        None,
+                        Some(cfg.shots_part_width),
+                        Some(cfg.shots_part_height),
+                    )
+                } else if !cfg.inspect_package.is_empty() {
+                    (Some(cfg.inspect_package.clone()), None, None)
+                } else {
+                    (package, long, short)
+                }
+            } else {
+                (package, long, short)
+            };
             let (width, height) = match (package, long, short) {
                 (Some(name), None, None) => {
                     let file = table_path.unwrap_or_else(|| cfg.package_table.clone());
@@ -379,7 +395,7 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 }
                 (None, Some(l), Some(s)) => (l, s),
                 _ => {
-                    return Err("shots needs either --package (with a table) or both --body-long and --body-short".into())
+                    return Err("shots needs either --package (with a table) or both --body-long and --body-short (or shots_part_width and shots_part_height, or inspect_package, in vision.cfg)".into())
                 }
             };
             let plan = shots_plan(width, height, fov_w, fov_h, overlap, margin)?;
@@ -404,10 +420,12 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
             let mm_per_px = flag(&mut args, "--mm-per-px")?
                 .map(|v| num(&v, "--mm-per-px"))
                 .transpose()?;
-            let package = flag(&mut args, "--package")?
-                .ok_or("inspect needs --package, the name of the package in the table")?;
+            let package = flag(&mut args, "--package")?;
             let table_path = flag(&mut args, "--table")?;
             let cfg = config();
+            let package = package
+                .or_else(|| (!cfg.inspect_package.is_empty()).then(|| cfg.inspect_package.clone()))
+                .ok_or("inspect needs --package, the name of the package in the table (or inspect_package in vision.cfg)")?;
             let replace = replace || cfg.replace_output;
             let tolerance = flag(&mut args, "--tolerance")?
                 .map(|v| num(&v, "--tolerance"))

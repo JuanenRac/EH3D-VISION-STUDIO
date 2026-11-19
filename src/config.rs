@@ -11,7 +11,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 44] = [
+pub const KEYS: [&str; 47] = [
     "language",
     "polarity",
     "threshold",
@@ -56,6 +56,9 @@ pub const KEYS: [&str; 44] = [
     "square_max_size",
     "square_max_elongation",
     "show_lens_grid",
+    "inspect_package",
+    "shots_part_width",
+    "shots_part_height",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -134,6 +137,11 @@ pub struct Config {
     pub square_max_elongation: f64,
     /// Whether the window draws, once the lens is fitted from a grid, the places where the fitted lens puts the lattice of the grid, to be compared with the marks that were found.
     pub show_lens_grid: bool,
+    /// The name of the package of the table that `inspect` and the window judge the parts against when `--package` is not given; empty means that it has to be given.
+    pub inspect_package: String,
+    /// The size of the part in millimetres that `shots` and the window plan the pictures for; 0 and 0 mean that the body of the package is used.
+    pub shots_part_width: f64,
+    pub shots_part_height: f64,
 }
 
 impl Default for Config {
@@ -184,6 +192,9 @@ impl Default for Config {
             square_max_size: 200.0,
             square_max_elongation: 1.2,
             show_lens_grid: true,
+            inspect_package: String::new(),
+            shots_part_width: 0.0,
+            shots_part_height: 0.0,
         }
     }
 }
@@ -306,12 +317,15 @@ impl Config {
             "lens_k2" => self.lens_k2 = number(value, key)?,
             "lens_max_rms" => self.lens_max_rms = number(value, key)?,
             "package_table" => self.package_table = value.to_string(),
+            "inspect_package" => self.inspect_package = value.to_string(),
             "inspect_tolerance" => self.inspect_tolerance = number(value, key)?,
             "inspect_max_angle" => self.inspect_max_angle = number(value, key)?,
             "report_low_score" => self.report_low_score = number(value, key)?,
             "pitch_mm" => self.pitch_mm = number(value, key)?,
             "shots_overlap" => self.shots_overlap = number(value, key)?,
             "shots_margin" => self.shots_margin = number(value, key)?,
+            "shots_part_width" => self.shots_part_width = number(value, key)?,
+            "shots_part_height" => self.shots_part_height = number(value, key)?,
             "replace_output" => {
                 self.replace_output = match value {
                     "yes" | "true" | "on" => true,
@@ -413,6 +427,9 @@ impl Config {
         if self.package_table.len() > 1024 || self.package_table.contains('\0') {
             return Err("package_table must be a file name of at most 1024 characters".into());
         }
+        if self.inspect_package.len() > 256 || self.inspect_package.contains(' ') {
+            return Err("inspect_package must be a name of at most 256 characters".into());
+        }
         if self.inspect_tolerance <= 0.0 {
             return Err("inspect_tolerance must be more than 0".into());
         }
@@ -430,6 +447,12 @@ impl Config {
                 "shots_overlap must be from 0 to {}",
                 crate::shots::MAX_OVERLAP
             ));
+        }
+        if self.shots_part_width < 0.0 || self.shots_part_height < 0.0 {
+            return Err(
+                "shots_part_width and shots_part_height must be 0 (the package is used) or more"
+                    .into(),
+            );
         }
         if self.shots_margin < 0.0 {
             return Err("shots_margin must be 0 or more".into());
@@ -616,6 +639,9 @@ square_max_size = 20",
             "shots_overlap = 0.95",
             "shots_overlap = -0.1",
             "shots_margin = -1",
+            "shots_part_width = -1",
+            "shots_part_height = -0.5",
+            "inspect_package = a b",
         ] {
             assert!(Config::parse(text).is_err(), "{text:?} was accepted");
         }

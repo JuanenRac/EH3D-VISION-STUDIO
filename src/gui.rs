@@ -429,6 +429,98 @@ impl App {
         }
     }
 
+    fn inspect_section(&mut self, ui: &mut egui::Ui) {
+        let lang = self.win.lang;
+        Self::heading(ui, Msg::InspectTitle.tr(lang));
+        self.fields(ui, Section::Inspect);
+        let has_image = self.win.image.is_some();
+        let has_parts = !self.win.parts.is_empty();
+        ui.horizontal(|ui| {
+            if ui.button(Msg::InspectLoad.tr(lang)).clicked() {
+                self.win.load_packages();
+            }
+            if ui
+                .add_enabled(
+                    has_image && has_parts,
+                    egui::Button::new(Msg::InspectRun.tr(lang)),
+                )
+                .clicked()
+            {
+                self.win.inspect_parts();
+            }
+            if ui
+                .add_enabled(
+                    !self.win.judged.is_empty(),
+                    egui::Button::new(Msg::InspectSave.tr(lang)),
+                )
+                .clicked()
+            {
+                self.win.save_inspection();
+            }
+        });
+        // the packages of the table: a click names the package of the parts
+        let names: Vec<String> = self.win.packages.iter().map(|p| p.name.clone()).collect();
+        if !names.is_empty() {
+            ui.horizontal_wrapped(|ui| {
+                for name in names {
+                    if ui.small_button(name.as_str()).clicked() {
+                        if let Some(i) = self
+                            .win
+                            .fields
+                            .iter()
+                            .position(|f| f.key == "inspect_package")
+                        {
+                            self.win.set_field(i, name.clone());
+                        }
+                    }
+                }
+            });
+        }
+        let lines = self.win.inspect_lines();
+        egui::ScrollArea::vertical()
+            .id_salt("inspect")
+            .max_height(140.0)
+            .show(ui, |ui| {
+                for (line, passes) in lines {
+                    let colour = if passes { OK } else { DANGER };
+                    ui.label(egui::RichText::new(line).color(colour));
+                }
+            });
+    }
+
+    fn shots_section(&mut self, ui: &mut egui::Ui) {
+        let lang = self.win.lang;
+        Self::heading(ui, Msg::ShotsTitle.tr(lang));
+        self.fields(ui, Section::Shots);
+        let has_image = self.win.image.is_some();
+        ui.horizontal(|ui| {
+            if ui
+                .add_enabled(has_image, egui::Button::new(Msg::ShotsRun.tr(lang)))
+                .clicked()
+            {
+                self.win.plan_shots();
+            }
+            if ui
+                .add_enabled(
+                    self.win.plan.is_some(),
+                    egui::Button::new(Msg::ShotsSave.tr(lang)),
+                )
+                .clicked()
+            {
+                self.win.save_shots();
+            }
+        });
+        let lines = self.win.shots_lines();
+        egui::ScrollArea::vertical()
+            .id_salt("shots")
+            .max_height(140.0)
+            .show(ui, |ui| {
+                for line in lines {
+                    ui.label(egui::RichText::new(line).color(DIM));
+                }
+            });
+    }
+
     fn align_section(&mut self, ui: &mut egui::Ui) {
         let lang = self.win.lang;
         Self::heading(ui, Msg::AlignTitle.tr(lang));
@@ -471,6 +563,8 @@ impl App {
                         self.distortion_section(ui);
                         self.shapes_section(ui);
                         self.measure_section(ui);
+                        self.inspect_section(ui);
+                        self.shots_section(ui);
                         self.align_section(ui);
                         self.batch_section(ui);
                     });

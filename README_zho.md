@@ -17,7 +17,7 @@
 
 ---
 
-**诚实检查 - 当前真正能运行的内容：** 一个 Rust 库和一个命令行程序（`eh3d-vision`），有 263 个在电脑上运行的测试：在图像中找到圆形基准点，把像素转换为毫米，并计算使电路板回到设计位置所需的旋转和平移。有一个窗口（用 `--features gui` 构建，程序为 `eh3d-vision-gui`），可打开图像、显示带坐标的标记、设定比例、用网格拟合镜头畸变、与设计对齐并导出 ISOCAM 选项，但窗口尚未在屏幕上看过；没有在机器上试过，也没有用大量真实文件验证过。
+**诚实检查 - 当前真正能运行的内容：** 一个 Rust 库和一个命令行程序（`eh3d-vision`），有 268 个在电脑上运行的测试：在图像中找到圆形基准点，把像素转换为毫米，并计算使电路板回到设计位置所需的旋转和平移。有一个窗口（用 `--features gui` 构建，程序为 `eh3d-vision-gui`），可打开图像、显示带坐标的标记、设定比例、用网格拟合镜头畸变、与设计对齐并导出 ISOCAM 选项，但窗口尚未在屏幕上看过；没有在机器上试过，也没有用大量真实文件验证过。
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | 版本 | `0.0.6` |
 | 成熟度 | 可用 |
-| 测试 | 263 |
+| 测试 | 268 |
 | 技术栈 | Rust |
 | 真实硬件 | 未试过：这里的任何内容都没有在机器上运行过 |
 
@@ -46,7 +46,7 @@
 |---|---|---|
 | 核心 | 🟡 | 在图像中找到圆形基准点，把像素转换为毫米，并计算使电路板回到设计位置所需的旋转和平移；已在电脑上用正常和损坏的输入测试，未用大量真实文件验证。 |
 | 命令行 | 🟡 | `eh3d-vision` 运行与库相同的函数并打印结果；每个错误都以消息和非零退出码返回。 |
-| 测试 | 🟡 | 263 个测试通过（`cargo test`），包含正常情况、边界情况和损坏的输入，以及位于电路板上方的模拟相机：它会加入噪声、曝光错误、失效或缺失的画面、看起来像标记的灰尘或被截断的图像文件，并会被再次请求。 |
+| 测试 | 🟡 | 268 个测试通过（`cargo test`），包含正常情况、边界情况和损坏的输入，以及位于电路板上方的模拟相机：它会加入噪声、曝光错误、失效或缺失的画面、看起来像标记的灰尘或被截断的图像文件，并会被再次请求。 |
 | 安全 | 🟡 | 纯安全 Rust（`forbid(unsafe_code)`）：处理收到的文件时不会 panic，错误的值会返回带原因的错误；没有独立审查。 |
 | 窗口 | 🟠 | 已编写（egui，`--features gui`，程序 `eh3d-vision-gui`）：打开或拖入图像，查看带坐标的标记，用已知大小的标记设定比例，用网格拟合镜头畸变，与 CSV 设计对齐并导出 ISOCAM 选项；其逻辑已测试，但尚未构建，也未在屏幕上看过。 |
 | 真实硬件 | 🔴 | 未试过：这里的任何内容都没有在机器上运行过。 |
@@ -94,6 +94,7 @@ EH3D-VISION-STUDIO 是 EH3D Fabrication Suite 的一个程序。它以库和命�
 * **文件夹的 HTML 报告：** `eh3d-vision batch 文件夹 --html report.html` 写出一个自包含的页面（没有脚本、没有链接、没有其他文件）：图像表格、每张图像的小图（每个找到的标记画一个圆圈）和警告（无法使用的图像、没有标记的图像或得分低于 `report_low_score` 的图像），语言由 `--lang` 或 `vision.cfg` 决定。
 * **窗口中的新工具：** 侧边栏新增了带每个标记置信度的亚像素中心、光照窗口、任意角度的方形与十字（画在图像上）、以毫米计的零件（保存为 `<图像>-parts.csv`）、文件夹报告（在独立线程中读取，带进度条和取消按钮；`eh3d-vision-report.html`，没有 `replace_output` 就不会覆盖已有文件）以及由标靶间距得到的比例，文字有八种语言，数值在 `vision.cfg` 中；尚未在屏幕上看过。
 * **窗口中的镜头（两个系数）：** 网格按钮像 `eh3d-vision lens` 一样拟合 `k1` 和 `k2`（超过面板中的 `lens_max_rms` 就拒绝）；窗口画出拟合后的镜头把网格点阵放到的位置，便于与找到的标记比较（`show_lens_grid`），可以不用网格而取 `vision.cfg` 中的 `lens_k1` 和 `lens_k2`，也可以保存为 `<图像>-lens.cfg`。
+* **窗口中的零件与封装比对，以及大型零件的拍摄：** 侧边栏读取封装表（`package_table`），把测得的零件与封装 `inspect_package` 比对（每个零件一行，绿色或红色，并说明不合格原因；`inspect_tolerance` 和 `inspect_max_angle` 是面板中的字段），并把判定保存为 `<图像>-inspection.csv`，即 `eh3d-vision inspect` 的文件；还能为大于视野的零件规划所需拍摄（视野是以毫米计的图像，零件是 `shots_part_width` 乘 `shots_part_height` 或封装本体，另有 `shots_overlap` 和 `shots_margin`），列出相机的去处并保存为 `<图像>-shots.csv`，即 `eh3d-vision shots` 的文件。未给出 `--package` 或零件尺寸时，命令行使用同样的两个新键。
 * **大型零件的拍摄规划：** `eh3d-vision shots --package 名称 --fov-w MM --fov-h MM`（或 `--body-long` 与 `--body-short`）以 CSV 列出相机位置（相对零件中心的毫米数），使超过视场的零件完全可见；相邻图像重叠 `shots_overlap`，并留有 `shots_margin` 的边距；不需要相机。
 
 ## 🔒 安全与防护
@@ -127,7 +128,7 @@ eh3d-vision-gui [IMAGE] [DESIGN.csv]   the window (a build with --features gui);
 
 ## ⚙️ 配置
 
-调校的数值保存在简单的 `键 = 值` 文件中，而不是代码里：程序启动所在文件夹或其旁边的 `vision.cfg`（变量 `EH3D_VISION_CONFIG` 可指定另一个文件）。它设定窗口语言、标记是深色还是浅色、阈值、直径范围、标记的填充率和伸长率、用来设定比例的标记大小、网格的列数和行数、对齐是否可以改变尺寸、对齐必须满足的限度以及读取的最大文件。`examples/vision.cfg` 列出每个键及其含义和程序启动时的值；文件不存在就使用这些值，有错误的文件会连同行号被拒绝。命令行中同样的内容以选项给出（见接口）。它还保存其他调好的值：置信度（`refine_subpixel`、`full_contrast`）、光照窗口（`flatten_window`）、比例与零件大小（`mm_per_px`、`part_min_area`、`part_max_area`、`max_parts`）、十字的范围（`cross_min_size`、`cross_max_size`、`cross_max_elongation`）、靶标的容差（`pitch_tolerance`）以及文件夹中图片的最大数量（`batch_max_files`）。 方形的最小填充率和任意角度十字的最低得分是 `square_min_fill` 和 `cross_min_score`。 方形边长的范围以及其外框可比宽度长多少是 `square_min_size`、`square_max_size` 和 `square_max_elongation`，与十字的分开。 镜头由 `lens_k1` 和 `lens_k2`（由 `lens` 求出）表示，校正后网格离其晶格的最大允许距离是 `lens_max_rms`。 `inspect` 读取的封装表是 `package_table`，零件与其封装的最大允许偏差和最大旋转角是 `inspect_tolerance` 和 `inspect_max_angle`。 HTML 报告对某张图像发出警告的得分下限是 `report_low_score`。 设定比例的标靶标记之间的距离是 `pitch_mm`，`replace_output` 决定写出的文件是否可以覆盖已存在的文件（默认不可以）。 `shots` 规划中相邻图像的重叠量和零件周围的边距是 `shots_overlap` 和 `shots_margin`。 窗口是否绘制镜头点阵由 `show_lens_grid` 决定。
+调校的数值保存在简单的 `键 = 值` 文件中，而不是代码里：程序启动所在文件夹或其旁边的 `vision.cfg`（变量 `EH3D_VISION_CONFIG` 可指定另一个文件）。它设定窗口语言、标记是深色还是浅色、阈值、直径范围、标记的填充率和伸长率、用来设定比例的标记大小、网格的列数和行数、对齐是否可以改变尺寸、对齐必须满足的限度以及读取的最大文件。`examples/vision.cfg` 列出每个键及其含义和程序启动时的值；文件不存在就使用这些值，有错误的文件会连同行号被拒绝。命令行中同样的内容以选项给出（见接口）。它还保存其他调好的值：置信度（`refine_subpixel`、`full_contrast`）、光照窗口（`flatten_window`）、比例与零件大小（`mm_per_px`、`part_min_area`、`part_max_area`、`max_parts`）、十字的范围（`cross_min_size`、`cross_max_size`、`cross_max_elongation`）、靶标的容差（`pitch_tolerance`）以及文件夹中图片的最大数量（`batch_max_files`）。 方形的最小填充率和任意角度十字的最低得分是 `square_min_fill` 和 `cross_min_score`。 方形边长的范围以及其外框可比宽度长多少是 `square_min_size`、`square_max_size` 和 `square_max_elongation`，与十字的分开。 镜头由 `lens_k1` 和 `lens_k2`（由 `lens` 求出）表示，校正后网格离其晶格的最大允许距离是 `lens_max_rms`。 `inspect` 读取的封装表是 `package_table`，零件与其封装的最大允许偏差和最大旋转角是 `inspect_tolerance` 和 `inspect_max_angle`。 HTML 报告对某张图像发出警告的得分下限是 `report_low_score`。 设定比例的标靶标记之间的距离是 `pitch_mm`，`replace_output` 决定写出的文件是否可以覆盖已存在的文件（默认不可以）。 `shots` 规划中相邻图像的重叠量和零件周围的边距是 `shots_overlap` 和 `shots_margin`。 窗口是否绘制镜头点阵由 `show_lens_grid` 决定。 `inspect` 和窗口用来比对零件的封装是 `inspect_package`，`shots` 和窗口为其规划拍摄的零件尺寸是 `shots_part_width` 和 `shots_part_height`（0 和 0：使用封装本体）。
 
 ## 🚀 快速开始
 
@@ -145,7 +146,7 @@ cargo run --release --features gui --bin eh3d-vision-gui -- --shot screen.png --
 
 ## 🧪 测试
 
-测试套件有 263 个测试（`cargo test`，CI 在 Windows 和 Linux 上运行）。它们检查正常情况、边界情况和损坏的输入：空文件、乱码和被截断的文件绝不会 panic。CI 还运行 `cargo fmt --check`、把警告当作错误的 `cargo clippy` 以及 `python -I tools/ci_validate.py`。
+测试套件有 268 个测试（`cargo test`，CI 在 Windows 和 Linux 上运行）。它们检查正常情况、边界情况和损坏的输入：空文件、乱码和被截断的文件绝不会 panic。CI 还运行 `cargo fmt --check`、把警告当作错误的 `cargo clippy` 以及 `python -I tools/ci_validate.py`。
 
 ## 🏗️ 构建与发布
 
@@ -153,7 +154,7 @@ cargo run --release --features gui --bin eh3d-vision-gui -- --shot screen.png --
 
 ### 下载
 
-每个版本都提供带窗口的程序，适用于 Windows（64 位和 32 位）、Linux（64 位）和 macOS（Apple silicon 和 Intel），文件名为 `<名称>-<版本>-<系统>.zip`（Windows）或 `.tar.gz`，内含程序、许可证、自述文件、图标和示例。这些文件由 GitHub Actions 构建，列在 `SHA263SUMS` 中，并使用 EH3D 的密钥签名。要检查下载的文件，请将其哈希与旁边的 `.sha263` 文件比较（`sha263sum -c`），并用旁边的 `.sig` 文件检查签名（`ssh-keygen -Y verify`）。
+每个版本都提供带窗口的程序，适用于 Windows（64 位和 32 位）、Linux（64 位）和 macOS（Apple silicon 和 Intel），文件名为 `<名称>-<版本>-<系统>.zip`（Windows）或 `.tar.gz`，内含程序、许可证、自述文件、图标和示例。这些文件由 GitHub Actions 构建，列在 `SHA268SUMS` 中，并使用 EH3D 的密钥签名。要检查下载的文件，请将其哈希与旁边的 `.sha268` 文件比较（`sha268sum -c`），并用旁边的 `.sig` 文件检查签名（`ssh-keygen -Y verify`）。
 
 ## 📂 仓库结构
 
