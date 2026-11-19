@@ -1,7 +1,7 @@
 //! A folder of pictures at once: every PNG and PGM file of the folder is read within the size limit, the marks are searched for, and one line per picture says how it went (the number of
 //! marks, their mean and lowest score, their mean diameter, or the code of what went wrong). The report is a CSV file that other tools and spreadsheets read.
 
-use crate::fiducial::{find_with, Settings};
+use crate::fiducial::{find_with, Fiducial, Settings};
 use crate::flatten::flatten;
 use crate::image::from_bytes;
 use crate::limit::read_limited;
@@ -31,6 +31,16 @@ pub struct Row {
     pub mean_diameter: Option<f64>,
     /// The reason, when the picture could not be used.
     pub detail: String,
+}
+
+/// A picture that was read: its row, its size and the marks that were found in it (what a report that draws them needs).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Checked {
+    pub row: Row,
+    /// The size of the picture in pixels; 0 by 0 when it could not be read.
+    pub width: usize,
+    pub height: usize,
+    pub marks: Vec<Fiducial>,
 }
 
 /// The PNG and PGM files of a folder (not the folders, not the links, not the folders inside), by name. More than `max_files` is an error with the code `too_many_files`; the folder is
@@ -83,20 +93,36 @@ pub fn check_picture(
     threshold: Option<u8>,
     flatten_px: usize,
 ) -> Row {
+    check_detailed(path, max_mib, s, threshold, flatten_px).row
+}
+
+/// The same as `check_picture`, with the size of the picture and the marks that were found.
+pub fn check_detailed(
+    path: &Path,
+    max_mib: u64,
+    s: &Settings,
+    threshold: Option<u8>,
+    flatten_px: usize,
+) -> Checked {
     let file = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
     let failed = |message: String| {
         let (status, detail) = split_code(&message);
-        Row {
-            file: file.clone(),
-            status,
-            marks: 0,
-            mean_score: None,
-            min_score: None,
-            mean_diameter: None,
-            detail,
+        Checked {
+            row: Row {
+                file: file.clone(),
+                status,
+                marks: 0,
+                mean_score: None,
+                min_score: None,
+                mean_diameter: None,
+                detail,
+            },
+            width: 0,
+            height: 0,
+            marks: Vec::new(),
         }
     };
     let bytes = match read_limited(path, max_mib) {
@@ -118,15 +144,20 @@ pub fn check_picture(
         Err(e) => return failed(e),
     };
     let n = found.len() as f64;
-    Row {
-        file,
-        status: if found.is_empty() { NO_MARKS } else { OK }.to_string(),
-        marks: found.len(),
-        mean_score: (!found.is_empty()).then(|| found.iter().map(|f| f.score).sum::<f64>() / n),
-        min_score: found.iter().map(|f| f.score).reduce(f64::min),
-        mean_diameter: (!found.is_empty())
-            .then(|| found.iter().map(|f| f.diameter).sum::<f64>() / n),
-        detail: String::new(),
+    Checked {
+        row: Row {
+            file,
+            status: if found.is_empty() { NO_MARKS } else { OK }.to_string(),
+            marks: found.len(),
+            mean_score: (!found.is_empty()).then(|| found.iter().map(|f| f.score).sum::<f64>() / n),
+            min_score: found.iter().map(|f| f.score).reduce(f64::min),
+            mean_diameter: (!found.is_empty())
+                .then(|| found.iter().map(|f| f.diameter).sum::<f64>() / n),
+            detail: String::new(),
+        },
+        width: img.w,
+        height: img.h,
+        marks: found,
     }
 }
 

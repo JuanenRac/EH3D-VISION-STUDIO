@@ -210,6 +210,19 @@
           }
         },
         {
+          "name": "report.rs",
+          "desc": {
+            "en": "the report of a folder as one HTML page that stands alone, in eight languages",
+            "es": "el informe de una carpeta como una página HTML autónoma, en ocho idiomas",
+            "de": "der Bericht über einen Ordner als eigenständige HTML-Seite in acht Sprachen",
+            "fr": "le rapport d'un dossier en une page HTML autonome, en huit langues",
+            "it": "il rapporto di una cartella come una pagina HTML autonoma, in otto lingue",
+            "ja": "フォルダのレポートを 8 言語の単独 HTML ページとして出力",
+            "zh": "把文件夹报告输出为八种语言的自包含 HTML 页面",
+            "pt": "o relatório de uma pasta como uma página HTML autónoma, em oito línguas"
+          }
+        },
+        {
           "name": "limit.rs",
           "desc": {
             "en": "reading a file with a size limit and a code for each refusal",

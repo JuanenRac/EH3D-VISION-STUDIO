@@ -8,7 +8,7 @@
 ### カメラ画像の基準マーク：マーク、スケール、基板の補正
 
 <p align="center">
-  <img src="https://img.shields.io/badge/License-GPL%223.0--or--later-blue.svg" alt="GPL 3.0 or later">
+  <img src="https://img.shields.io/badge/License-GPL%230.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Stack-Rust-DEA584.svg" alt="Rust">
   <img src="https://img.shields.io/badge/Languages-8-00E5FF.svg" alt="Languages">
   <img src="https://img.shields.io/badge/Version-0.0.5-0f6cbd.svg" alt="Version">
@@ -17,7 +17,7 @@
 
 ---
 
-**正直さの確認 - 現在実際に動くもの：** Rust ライブラリとコマンドライン プログラム（`eh3d-vision`）で、コンピューター上で実行される 223 件のテストがあります：画像から丸い基準マークを見つけ、画素をミリメートルに変換し、基板を設計どおりの位置に合わせる回転と移動量を計算します。ウィンドウ（`--features gui` でビルドする `eh3d-vision-gui` プログラム）があり、画像を開き、マークを座標つきで表示し、スケールを設定し、グリッドからレンズの歪みを求め、設計と位置合わせして ISOCAM 用のオプションを書き出しますが、ウィンドウはまだ画面で確認していません。機械では試しておらず、実際のファイルの集まりでも確認していません。
+**正直さの確認 - 現在実際に動くもの：** Rust ライブラリとコマンドライン プログラム（`eh3d-vision`）で、コンピューター上で実行される 230 件のテストがあります：画像から丸い基準マークを見つけ、画素をミリメートルに変換し、基板を設計どおりの位置に合わせる回転と移動量を計算します。ウィンドウ（`--features gui` でビルドする `eh3d-vision-gui` プログラム）があり、画像を開き、マークを座標つきで表示し、スケールを設定し、グリッドからレンズの歪みを求め、設計と位置合わせして ISOCAM 用のオプションを書き出しますが、ウィンドウはまだ画面で確認していません。機械では試しておらず、実際のファイルの集まりでも確認していません。
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | バージョン | `0.0.5` |
 | 成熟度 | 機能する |
-| テスト | 223 |
+| テスト | 230 |
 | 技術スタック | Rust |
 | 実機での動作 | 未試験：ここにあるものは機械で動かしたことがありません |
 
@@ -46,7 +46,7 @@
 |---|---|---|
 | コア | 🟡 | 画像から丸い基準マークを見つけ、画素をミリメートルに変換し、基板を設計どおりの位置に合わせる回転と移動量を計算します。コンピューター上で通常入力と破損入力でテスト済み。実際のファイルの集まりでは未確認。 |
 | コマンドライン | 🟡 | `eh3d-vision` はライブラリと同じ関数を実行して結果を表示します。エラーはメッセージと 0 以外の終了コードで返ります。 |
-| テスト | 🟡 | 223 件のテストが通ります（`cargo test`）。通常ケース、境界ケース、破損入力に加え、ノイズ、誤った露出、無効または欠落したフレーム、マークに見えるほこり、途切れた画像ファイルを加え、再取得される基板上の模擬カメラを含みます。 |
+| テスト | 🟡 | 230 件のテストが通ります（`cargo test`）。通常ケース、境界ケース、破損入力に加え、ノイズ、誤った露出、無効または欠落したフレーム、マークに見えるほこり、途切れた画像ファイルを加え、再取得される基板上の模擬カメラを含みます。 |
 | セキュリティ | 🟡 | 安全な Rust のみ（`forbid(unsafe_code)`）。受け取ったファイルでパニックせず、不正な値は理由付きのエラーになります。独立したレビューはありません。 |
 | ウィンドウ | 🟠 | 作成済み（egui、`--features gui`、プログラム `eh3d-vision-gui`）：画像を開く／ドロップする、マークを座標つきで見る、大きさが既知のマークでスケールを設定する、グリッドからレンズの歪みを求める、CSV の設計と位置合わせする、ISOCAM 用オプションを書き出す。ロジックはテスト済みですが、まだビルドも画面での確認もしていません。 |
 | 実機 | 🔴 | 未試験：ここにあるものは機械で実行したことがありません。 |
@@ -91,6 +91,7 @@ EH3D-VISION-STUDIO は EH3D Fabrication Suite のプログラムの一つです�
 * **任意の角度の正方形と十字：** `eh3d-vision squares 画像` は任意の角度に回った正方形のマークを見つけ（中心、辺、機械から見て反時計回りの角度、-45 を除き 45 度まで）、`eh3d-vision crosses 画像 --turned` は腕が軸に沿っていない十字を見つけます。正方形の最小の充填率と十字の最小スコア（`square_min_fill`、`cross_min_score`）は `vision.cfg` にあります。
 * **2 つの係数を持つレンズ、合わなければ拒否：** `eh3d-vision lens 画像` はマークのグリッドから放射歪みの `k1` と `k2` を求め、`vision.cfg` 用に `lens_k1 = ...` と `lens_k2 = ...` の行を出力します。補正後もマークが格子から `lens_max_rms` ピクセルより離れる当てはめ（`lens_residual_too_large`）や、0.5 を超える係数（`lens_out_of_range`）は拒否され、`find --undistort` はそれらで位置を補正します。
 * **部品ごとの判定：** `eh3d-vision inspect 画像 --package 名前 --table packages.csv` は画像の部品を計測し、それぞれをパッケージの本体寸法（CSV ファイルの `package`、`body_long_mm`、`body_short_mm`、必要なら `tolerance_mm`。`examples/packages.csv` にいくつか入っています）と比較して、`pass` か `fail` を理由（`length`、`width`、`angle`）とともに CSV または JSON で出し、部品が不合格なら終了コードは 1 です。許容差と最大の回転（`inspect_tolerance`、`inspect_max_angle`）は `vision.cfg` にあります。
+* **フォルダの HTML レポート：** `eh3d-vision batch フォルダ --html report.html` は単独で完結する 1 ページ（スクリプト、リンク、他のファイルなし）を書き出します。画像の表、見つかった各マークに円を付けた小さな絵、警告（使用できなかった画像、マークがない画像、`report_low_score` を下回るスコアの画像）が入り、言語は `--lang` または `vision.cfg` に従います。
 
 ## 🔒 セキュリティと安全
 
@@ -116,13 +117,13 @@ eh3d-vision lens IMAGE [--columns C] [--rows R] [--max-rms PX] [--light] [--flat
 eh3d-vision squares IMAGE [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the square marks found, turned by any angle (centre, side and angle)
 eh3d-vision calibrate IMAGE --pitch-mm D [--light] [--tolerance 0.05] [--flatten PX]   the millimetres of a pixel from a target whose neighbouring marks are D millimetres apart
 eh3d-vision measure IMAGE [--mm-per-px V] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   the parts of a picture: centre, turn, length, width and area in millimetres, as a CSV or JSON file
-eh3d-vision batch FOLDER [--light] [--flatten PX] [--report FILE.csv] [--replace]   every PNG and PGM picture of a folder: marks, scores and diameters, or the code of what went wrong, one line each
+eh3d-vision batch FOLDER [--light] [--flatten PX] [--report FILE.csv] [--html FILE.html] [--lang CODE] [--replace]   every PNG and PGM picture of a folder: marks, scores and diameters, or the code of what went wrong, one line each; --html writes a page that stands alone, with a drawing of each picture and the warnings, in the language of --lang or of vision.cfg
 eh3d-vision-gui [IMAGE] [DESIGN.csv]   the window (a build with --features gui); on Windows it opens with no console
 ```
 
 ## ⚙️ 設定
 
-調整される値はコードではなく、単純な `キー = 値` のファイルに書きます。プログラムを起動したフォルダー、またはプログラムの隣の `vision.cfg` です（変数 `EH3D_VISION_CONFIG` で別のファイルを指定できます）。ウィンドウの言語、マークが暗いか明るいか、しきい値、直径の範囲、マークの充填率と細長さ、スケールを決めるマークの大きさ、グリッドの列数と行数、位置合わせでサイズの変更を許すか、位置合わせが満たすべき限度、読み込む最大ファイルを設定します。`examples/vision.cfg` はすべてのキーを意味と起動時の値つきで一覧にしています。ファイルがなければその値が使われ、間違いのあるファイルは行番号つきで拒否されます。コマンドラインでは同じことをオプションで指定します（インターフェースを参照）。また、その他の調整値も保持します。信頼度（`refine_subpixel`、`full_contrast`）、照明のウィンドウ（`flatten_window`）、スケールと部品の大きさ（`mm_per_px`、`part_min_area`、`part_max_area`、`max_parts`）、十字の範囲（`cross_min_size`、`cross_max_size`、`cross_max_elongation`）、ターゲットの許容差（`pitch_tolerance`）、フォルダ内の画像の最大数（`batch_max_files`）です。 正方形の最小の充填率と、任意の角度の十字の最小スコアは `square_min_fill` と `cross_min_score` です。 レンズは `lens_k1` と `lens_k2`（`lens` が求める値）で、補正後にグリッドが格子から離れてよい最大値は `lens_max_rms` です。 `inspect` が読むパッケージの表は `package_table`、部品がパッケージから外れてよい最大値と回転の最大値は `inspect_tolerance` と `inspect_max_angle` です。
+調整される値はコードではなく、単純な `キー = 値` のファイルに書きます。プログラムを起動したフォルダー、またはプログラムの隣の `vision.cfg` です（変数 `EH3D_VISION_CONFIG` で別のファイルを指定できます）。ウィンドウの言語、マークが暗いか明るいか、しきい値、直径の範囲、マークの充填率と細長さ、スケールを決めるマークの大きさ、グリッドの列数と行数、位置合わせでサイズの変更を許すか、位置合わせが満たすべき限度、読み込む最大ファイルを設定します。`examples/vision.cfg` はすべてのキーを意味と起動時の値つきで一覧にしています。ファイルがなければその値が使われ、間違いのあるファイルは行番号つきで拒否されます。コマンドラインでは同じことをオプションで指定します（インターフェースを参照）。また、その他の調整値も保持します。信頼度（`refine_subpixel`、`full_contrast`）、照明のウィンドウ（`flatten_window`）、スケールと部品の大きさ（`mm_per_px`、`part_min_area`、`part_max_area`、`max_parts`）、十字の範囲（`cross_min_size`、`cross_max_size`、`cross_max_elongation`）、ターゲットの許容差（`pitch_tolerance`）、フォルダ内の画像の最大数（`batch_max_files`）です。 正方形の最小の充填率と、任意の角度の十字の最小スコアは `square_min_fill` と `cross_min_score` です。 レンズは `lens_k1` と `lens_k2`（`lens` が求める値）で、補正後にグリッドが格子から離れてよい最大値は `lens_max_rms` です。 `inspect` が読むパッケージの表は `package_table`、部品がパッケージから外れてよい最大値と回転の最大値は `inspect_tolerance` と `inspect_max_angle` です。 HTML レポートが画像に警告を出すスコアのしきい値は `report_low_score` です。
 
 ## 🚀 クイックスタート
 
@@ -140,7 +141,7 @@ cargo run --release --features gui --bin eh3d-vision-gui -- --shot screen.png --
 
 ## 🧪 テスト
 
-テストは 223 件あります（`cargo test`、CI では Windows と Linux で実行）。通常ケース、境界ケース、破損入力を確認し、空のファイル、ゴミデータ、途中で切れたファイルでもパニックしません。CI は `cargo fmt --check`、警告をエラーにした `cargo clippy`、`python -I tools/ci_validate.py` も実行します。
+テストは 230 件あります（`cargo test`、CI では Windows と Linux で実行）。通常ケース、境界ケース、破損入力を確認し、空のファイル、ゴミデータ、途中で切れたファイルでもパニックしません。CI は `cargo fmt --check`、警告をエラーにした `cargo clippy`、`python -I tools/ci_validate.py` も実行します。
 
 ## 🏗️ ビルドとリリース
 
@@ -176,6 +177,7 @@ EH3D-VISION-STUDIO/
 │   ├── inspect.rs                               部品を表のパッケージ本体寸法と比較して判定する
 │   ├── lens.rs                                  マークのグリッドから求めるレンズの 2 係数（合わなければ拒否）
 │   ├── points.rs                                設計の点のファイル
+│   ├── report.rs                                フォルダのレポートを 8 言語の単独 HTML ページとして出力
 │   ├── limit.rs                                 サイズ上限付きのファイル読み込みと、拒否ごとのコード
 │   ├── measure.rs                               部品をミリメートルで計測し、CSV と JSON を出力
 │   ├── scale.rs                                 ピクセルからミリメートルへ、レンズの放射歪み

@@ -11,7 +11,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 35] = [
+pub const KEYS: [&str; 36] = [
     "language",
     "polarity",
     "threshold",
@@ -47,6 +47,7 @@ pub const KEYS: [&str; 35] = [
     "package_table",
     "inspect_tolerance",
     "inspect_max_angle",
+    "report_low_score",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -110,6 +111,8 @@ pub struct Config {
     pub inspect_tolerance: f64,
     /// The most a part may be turned from the x axis, in degrees (0 is not checked, 90 at most).
     pub inspect_max_angle: f64,
+    /// The score below which a picture of the HTML report of `batch` gets a warning (0 to 1).
+    pub report_low_score: f64,
 }
 
 impl Default for Config {
@@ -151,6 +154,7 @@ impl Default for Config {
             package_table: String::new(),
             inspect_tolerance: 0.2,
             inspect_max_angle: 0.0,
+            report_low_score: 0.6,
         }
     }
 }
@@ -265,6 +269,7 @@ impl Config {
             "package_table" => self.package_table = value.to_string(),
             "inspect_tolerance" => self.inspect_tolerance = number(value, key)?,
             "inspect_max_angle" => self.inspect_max_angle = number(value, key)?,
+            "report_low_score" => self.report_low_score = number(value, key)?,
             other => return Err(format!("{other}: unknown key")),
         }
         Ok(())
@@ -355,6 +360,9 @@ impl Config {
         }
         if !(0.0..=90.0).contains(&self.inspect_max_angle) {
             return Err("inspect_max_angle must be from 0 (not checked) to 90".into());
+        }
+        if !(0.0..=1.0).contains(&self.report_low_score) {
+            return Err("report_low_score must be from 0 to 1".into());
         }
         Ok(())
     }
@@ -523,6 +531,8 @@ cross_max_size = 20",
             "inspect_tolerance = 0",
             "inspect_max_angle = 91",
             "inspect_max_angle = -1",
+            "report_low_score = 1.5",
+            "report_low_score = -0.1",
         ] {
             assert!(Config::parse(text).is_err(), "{text:?} was accepted");
         }

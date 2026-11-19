@@ -21,6 +21,7 @@ pub mod lens;
 pub mod limit;
 pub mod measure;
 pub mod points;
+pub mod report;
 pub mod scale;
 pub mod shot;
 pub mod square;

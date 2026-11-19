@@ -6,7 +6,7 @@ mod cli_args;
 
 use cli_args::{finish, flag, num, switch};
 use eh3d_vision_studio::align::{accept, fit, isocam_args as isocam_lines, pair_nearest};
-use eh3d_vision_studio::batch::{check_picture, list_pictures, report_csv, summary, NO_MARKS, OK};
+use eh3d_vision_studio::batch::{check_detailed, list_pictures, report_csv, summary, NO_MARKS, OK};
 use eh3d_vision_studio::config::Config;
 use eh3d_vision_studio::cross::{find_crosses, CrossSettings};
 use eh3d_vision_studio::fiducial::{find, refine, Polarity, Settings};
@@ -16,10 +16,12 @@ use eh3d_vision_studio::inspect::{
     find_package, judge, parse_table, summary as inspect_summary, to_csv as inspect_csv,
     to_json as inspect_json,
 };
+use eh3d_vision_studio::lang::Lang;
 use eh3d_vision_studio::lens::{fit_lens, undistort2};
 use eh3d_vision_studio::limit::{read_limited, read_text_limited, write_text};
 use eh3d_vision_studio::measure::{measure_parts, to_csv, to_json, PartSettings};
 use eh3d_vision_studio::points::parse as parse_points;
+use eh3d_vision_studio::report::html as report_html;
 use eh3d_vision_studio::scale::{from_pitch, Scale};
 use eh3d_vision_studio::square::{find_squares, find_turned_crosses, ShapeSettings};
 use std::env;
@@ -36,7 +38,7 @@ const HELP: &str = "eh3d-vision: fiducials in a camera image
   eh3d-vision lens IMAGE [--columns C] [--rows R] [--max-rms PX] [--light] [--flatten PX]   the two radial factors of the lens from a grid of marks (columns and rows as grid_columns and grid_rows), refused when the marks stay farther than --max-rms pixels from their lattice
   eh3d-vision squares IMAGE [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the square marks found, turned by any angle (centre, side and angle)
   eh3d-vision calibrate IMAGE --pitch-mm D [--light] [--tolerance 0.05] [--flatten PX]   the millimetres of a pixel from a target whose neighbouring marks are D millimetres apart
-  eh3d-vision batch FOLDER [--light] [--flatten PX] [--report FILE.csv] [--replace]   every PNG and PGM picture of a folder: marks, scores and diameters, or the code of what went wrong, one line each
+  eh3d-vision batch FOLDER [--light] [--flatten PX] [--report FILE.csv] [--html FILE.html] [--lang CODE] [--replace]   every PNG and PGM picture of a folder: marks, scores and diameters, or the code of what went wrong, one line each; --html writes a page that stands alone, with a drawing of each picture and the warnings, in the language of --lang or of vision.cfg
 
 IMAGE is a PNG or a PGM file. The CSV files have one point per line: x,y in millimetres, in the same order in both files.";
 
@@ -232,19 +234,36 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 .map(|v| count(&v, "--flatten"))
                 .transpose()?;
             let report = flag(&mut args, "--report")?;
+            let html_path = flag(&mut args, "--html")?;
+            let lang_code = flag(&mut args, "--lang")?;
             finish(&args, 1)?;
             let folder = args.first().ok_or("batch needs a folder")?;
             let cfg = config();
+            let lang = match lang_code {
+                Some(code) => Lang::from_code(&code).ok_or_else(|| {
+                    format!("--lang '{code}' is not en, es, de, fr, it, ja, zh or pt")
+                })?,
+                None => Lang::from_setting(&cfg.language),
+            };
             settings.min_diameter = cfg.min_diameter;
             settings.max_diameter = cfg.max_diameter;
             settings.min_fill = cfg.min_fill;
             settings.max_elongation = cfg.max_elongation;
             let window = flatten_px.unwrap_or(cfg.flatten_window);
             let files = list_pictures(Path::new(folder), cfg.batch_max_files)?;
-            let rows: Vec<_> = files
+            let items: Vec<_> = files
                 .iter()
-                .map(|f| check_picture(f, cfg.max_file_mib, &settings, cfg.threshold, window))
+                .map(|f| check_detailed(f, cfg.max_file_mib, &settings, cfg.threshold, window))
                 .collect();
+            let rows: Vec<_> = items.iter().map(|i| i.row.clone()).collect();
+            if let Some(path) = &html_path {
+                write_text(
+                    Path::new(path),
+                    &report_html(&items, lang, cfg.report_low_score),
+                    replace,
+                )?;
+                eprintln!("the HTML report is in {path}");
+            }
             let text = report_csv(&rows);
             let line = summary(&rows);
             match report {

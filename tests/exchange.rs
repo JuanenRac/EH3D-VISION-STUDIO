@@ -965,3 +965,81 @@ fn the_sample_table_of_packages_reads_and_names_common_bodies() {
         );
     }
 }
+
+#[test]
+fn batch_html_writes_a_page_that_stands_alone_in_the_language_asked() {
+    let dir = scratch("batch_html");
+    let pictures = dir.join("pictures");
+    fs::create_dir_all(&pictures).unwrap();
+    fs::write(pictures.join("one.pgm"), soft_disc_picture(40.0, 30.0, 9.0)).unwrap();
+    fs::write(pictures.join("flat.pgm"), pgm(20, 20, &[100u8; 400])).unwrap();
+    fs::write(pictures.join("a&b'x.pgm"), b"not a picture").unwrap();
+    let args = ["batch", "pictures", "--html", "report.html", "--lang", "es"];
+    let first = run(&dir, &args);
+    // one picture could not be used, so the exit code says so after the page is written
+    assert!(!first.status.success(), "{}", err(&first));
+    assert!(
+        err(&first).contains("the HTML report is in report.html"),
+        "{}",
+        err(&first)
+    );
+    let page = fs::read_to_string(dir.join("report.html"))
+        .unwrap()
+        .replace('\r', "");
+    assert!(
+        page.starts_with("<!doctype html>\n<html lang=\"es\">"),
+        "{page}"
+    );
+    assert!(
+        page.contains("Informe de las imágenes de una carpeta"),
+        "{page}"
+    );
+    assert_eq!(page.matches("<circle").count(), 1, "{page}");
+    assert!(
+        page.contains("a&amp;b&#39;x.pgm") && !page.contains("a&b'x"),
+        "{page}"
+    );
+    assert!(
+        page.contains("flat.pgm: no se encontró ninguna marca."),
+        "{page}"
+    );
+    assert!(
+        !page.contains("<script") && !page.contains("http:") && !page.contains("https:"),
+        "{page}"
+    );
+    // the page is not written over without --replace, and with it the language comes from the configuration file
+    let again = run(&dir, &args);
+    assert!(err(&again).contains("file_exists"), "{}", err(&again));
+    fs::write(
+        dir.join("vision.cfg"),
+        "language = de\nreport_low_score = 1\n",
+    )
+    .unwrap();
+    let replaced = run(
+        &dir,
+        &["batch", "pictures", "--html", "report.html", "--replace"],
+    );
+    assert!(
+        err(&replaced).contains("the HTML report is in"),
+        "{}",
+        err(&replaced)
+    );
+    let page = fs::read_to_string(dir.join("report.html")).unwrap();
+    assert!(
+        page.contains("<html lang=\"de\">") && page.contains("Bericht über die Bilder"),
+        "{page}"
+    );
+    // a score of 1 is above every picture: the picture with marks gets a warning too
+    assert!(page.contains("one.pgm: Die niedrigste Punktzahl"), "{page}");
+    let bad = run(
+        &dir,
+        &["batch", "pictures", "--html", "x.html", "--lang", "xx"],
+    );
+    assert!(
+        !bad.status.success() && err(&bad).contains("--lang 'xx'"),
+        "{}",
+        err(&bad)
+    );
+    assert!(!dir.join("x.html").exists());
+    let _ = fs::remove_dir_all(&dir);
+}
