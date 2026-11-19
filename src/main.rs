@@ -22,6 +22,7 @@ use eh3d_vision_studio::limit::{read_limited, read_text_limited, write_text};
 use eh3d_vision_studio::measure::{measure_parts, to_csv, to_json, PartSettings};
 use eh3d_vision_studio::points::parse as parse_points;
 use eh3d_vision_studio::report::html as report_html;
+use eh3d_vision_studio::ring::find_rings;
 use eh3d_vision_studio::scale::{from_pitch, Scale};
 use eh3d_vision_studio::shots::{plan as shots_plan, to_csv as shots_csv};
 use eh3d_vision_studio::square::{find_squares, find_turned_crosses, ShapeSettings};
@@ -38,6 +39,7 @@ const HELP: &str = "eh3d-vision: fiducials in a camera image
   eh3d-vision inspect IMAGE --package NAME [--table FILE] [--mm-per-px V] [--tolerance MM] [--max-angle DEG] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   each part of a picture compared with the body of its package from a table (CSV with package, body_long_mm, body_short_mm), one verdict per part; exit 1 when a part fails
   eh3d-vision shots (--package NAME [--table FILE] | --body-long MM --body-short MM) --fov-w MM --fov-h MM [--overlap F] [--margin MM] [--output FILE] [--replace]   the places of the camera that cover a part bigger than its field (millimetres from the centre of the part), row after row, as CSV; no camera is needed
   eh3d-vision lens IMAGE [--columns C] [--rows R] [--max-rms PX] [--light] [--flatten PX]   the two radial factors of the lens from a grid of marks (columns and rows as grid_columns and grid_rows), refused when the marks stay farther than --max-rms pixels from their lattice
+  eh3d-vision rings IMAGE [--light] [--min-size PX] [--max-size PX] [--split PX] [--flatten PX]   the ring marks found (donuts: a round mark with a hole), with the outer and inner diameter, the size class when the rings are of two sizes (--split gives the diameter that tells small from large, else it is found from the diameters), the score of the shape and a confidence
   eh3d-vision squares IMAGE [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the square marks found, turned by any angle (centre, side and angle)
   eh3d-vision calibrate IMAGE --pitch-mm D [--light] [--tolerance 0.05] [--flatten PX]   the millimetres of a pixel from a target whose neighbouring marks are D millimetres apart
   eh3d-vision batch FOLDER [--light] [--flatten PX] [--report FILE.csv] [--html FILE.html] [--lang CODE] [--replace]   every PNG and PGM picture of a folder: marks, scores and diameters, or the code of what went wrong, one line each; --html writes a page that stands alone, with a drawing of each picture and the warnings, in the language of --lang or of vision.cfg
@@ -533,6 +535,47 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
             );
             println!("lens_k1 = {:.6}", l.k1);
             println!("lens_k2 = {:.6}", l.k2);
+            Ok(())
+        }
+        "rings" => {
+            let light = switch(&mut args, "--light");
+            let flatten_px = flag(&mut args, "--flatten")?
+                .map(|v| count(&v, "--flatten"))
+                .transpose()?;
+            let cfg = config();
+            let mut s = cfg.ring_settings();
+            if light {
+                s.polarity = Polarity::Light;
+            }
+            if let Some(v) = flag(&mut args, "--min-size")? {
+                s.min_diameter = num(&v, "--min-size")?;
+            }
+            if let Some(v) = flag(&mut args, "--max-size")? {
+                s.max_diameter = num(&v, "--max-size")?;
+            }
+            if let Some(v) = flag(&mut args, "--split")? {
+                s.split = num(&v, "--split")?;
+            }
+            finish(&args, 1)?;
+            let path = args.first().ok_or("rings needs an image")?;
+            let img = picture(path, &cfg, flatten_px)?;
+            let found = find_rings(&img, &s)?;
+            for (i, r) in found.iter().enumerate() {
+                println!(
+                    "{}: ({:.2}, {:.2}) px, outer {:.1} px, inner {:.1} px, size {}, score {:.2}, confidence {:.2}",
+                    i + 1,
+                    r.x,
+                    r.y,
+                    r.outer,
+                    r.inner,
+                    r.size.word(),
+                    r.score,
+                    r.confidence
+                );
+            }
+            if found.is_empty() {
+                println!("no rings found");
+            }
             Ok(())
         }
         "squares" => {

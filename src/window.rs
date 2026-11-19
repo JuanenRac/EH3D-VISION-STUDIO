@@ -11,6 +11,7 @@ use crate::lang::{Lang, Msg};
 use crate::lens::{corrected_grid, fit_lens, predicted_grid, undistort2, Lens};
 use crate::measure::Part;
 use crate::points;
+use crate::ring::Ring;
 use crate::scale::Scale;
 use crate::shots::Plan;
 use crate::tools::ShapeMark;
@@ -36,6 +37,7 @@ pub enum Section {
     Pitch,
     Inspect,
     Shots,
+    Rings,
 }
 
 /// A value of the configuration that the person can edit in the window.
@@ -79,6 +81,7 @@ pub enum Status {
         rows: usize,
     },
     NeedBody,
+    RingsFound(usize),
     DesignLoaded {
         name: String,
         points: usize,
@@ -165,6 +168,8 @@ impl Status {
                 ],
             ),
             Status::NeedBody => Msg::NeedBody.tr(lang).to_string(),
+            Status::RingsFound(0) => Msg::NoRingsFound.tr(lang).to_string(),
+            Status::RingsFound(n) => Msg::RingsFound.with(lang, &[&n.to_string()]),
             Status::DesignLoaded { name, points } => {
                 Msg::DesignLoaded.with(lang, &[name, &points.to_string()])
             }
@@ -322,6 +327,11 @@ fn field_text(cfg: &Config, key: &str) -> String {
         "shots_margin" => cfg.shots_margin.to_string(),
         "shots_part_width" => cfg.shots_part_width.to_string(),
         "shots_part_height" => cfg.shots_part_height.to_string(),
+        "ring_min_diameter" => cfg.ring_min_diameter.to_string(),
+        "ring_max_diameter" => cfg.ring_max_diameter.to_string(),
+        "ring_min_ratio" => cfg.ring_min_ratio.to_string(),
+        "ring_max_ratio" => cfg.ring_max_ratio.to_string(),
+        "ring_split" => cfg.ring_split.to_string(),
         _ => String::new(),
     }
 }
@@ -353,6 +363,8 @@ pub struct Window {
     /// The squares and the crosses that were found, and the parts that were measured.
     pub shapes: Vec<ShapeMark>,
     pub parts: Vec<Part>,
+    /// The ring marks that were found.
+    pub rings: Vec<Ring>,
     /// The table of packages that was read, the parts judged against one of them and that package, and the plan of pictures for a big part.
     pub packages: Vec<Package>,
     pub judged: Vec<Judged>,
@@ -420,6 +432,11 @@ impl Window {
             ("shots_part_height", Msg::ShotsPartHeight, Section::Shots),
             ("shots_overlap", Msg::ShotsOverlap, Section::Shots),
             ("shots_margin", Msg::ShotsMargin, Section::Shots),
+            ("ring_min_diameter", Msg::RingMinDiameter, Section::Rings),
+            ("ring_max_diameter", Msg::RingMaxDiameter, Section::Rings),
+            ("ring_min_ratio", Msg::RingMinRatio, Section::Rings),
+            ("ring_max_ratio", Msg::RingMaxRatio, Section::Rings),
+            ("ring_split", Msg::RingSplit, Section::Rings),
         ]
         .into_iter()
         .map(|(key, label, section)| FieldState {
@@ -439,6 +456,7 @@ impl Window {
             confidence: Vec::new(),
             shapes: Vec::new(),
             parts: Vec::new(),
+            rings: Vec::new(),
             packages: Vec::new(),
             judged: Vec::new(),
             judged_package: None,
@@ -570,6 +588,7 @@ impl Window {
                 self.marks = marks;
                 self.confidence = confidence;
                 self.shapes.clear();
+                self.rings.clear();
                 self.parts.clear();
                 self.judged.clear();
                 self.judged_package = None;
@@ -1040,7 +1059,7 @@ mod tests {
     fn a_new_window_waits_for_a_picture() {
         let w = window();
         assert_eq!(w.status, Status::Ready);
-        assert_eq!(w.fields.len(), 37);
+        assert_eq!(w.fields.len(), 42);
         assert_eq!(w.fields[0].text, "auto");
         assert_eq!(w.fields[1].text, "8");
         assert!(!w.light_marks());

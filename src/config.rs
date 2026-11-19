@@ -3,6 +3,7 @@
 //! the program (`examples/vision.cfg`) holds all of them with their meaning. A file that is not there means the defaults; a file with a mistake is refused with the line and the reason.
 
 use crate::fiducial::{Polarity, Settings};
+use crate::ring::RingSettings;
 use std::path::{Path, PathBuf};
 
 /// The name of the file that is looked for when nothing else is said.
@@ -11,7 +12,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 47] = [
+pub const KEYS: [&str; 55] = [
     "language",
     "polarity",
     "threshold",
@@ -59,6 +60,14 @@ pub const KEYS: [&str; 47] = [
     "inspect_package",
     "shots_part_width",
     "shots_part_height",
+    "ring_min_diameter",
+    "ring_max_diameter",
+    "ring_min_ratio",
+    "ring_max_ratio",
+    "ring_min_fill",
+    "ring_max_elongation",
+    "ring_split",
+    "ring_size_gap",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -142,6 +151,17 @@ pub struct Config {
     /// The size of the part in millimetres that `shots` and the window plan the pictures for; 0 and 0 mean that the body of the package is used.
     pub shots_part_width: f64,
     pub shots_part_height: f64,
+    /// The range of the outer diameter of a ring mark in pixels (8 up), the range of its inner diameter over the outer one (above 0, below 1), the least share of its band that it fills, and how
+    /// much longer than wide it may be.
+    pub ring_min_diameter: f64,
+    pub ring_max_diameter: f64,
+    pub ring_min_ratio: f64,
+    pub ring_max_ratio: f64,
+    pub ring_min_fill: f64,
+    pub ring_max_elongation: f64,
+    /// The outer diameter in pixels that tells small rings from large ones (0 finds it from the diameters), and how much larger the large ones must be than the small ones for the two sizes to be told apart then.
+    pub ring_split: f64,
+    pub ring_size_gap: f64,
 }
 
 impl Default for Config {
@@ -195,6 +215,14 @@ impl Default for Config {
             inspect_package: String::new(),
             shots_part_width: 0.0,
             shots_part_height: 0.0,
+            ring_min_diameter: 12.0,
+            ring_max_diameter: 200.0,
+            ring_min_ratio: 0.25,
+            ring_max_ratio: 0.85,
+            ring_min_fill: 0.85,
+            ring_max_elongation: 1.25,
+            ring_split: 0.0,
+            ring_size_gap: 1.25,
         }
     }
 }
@@ -220,6 +248,24 @@ impl Config {
             max_diameter: self.max_diameter,
             min_fill: self.min_fill,
             max_elongation: self.max_elongation,
+        }
+    }
+
+    /// The settings of the search for ring marks that the values make.
+    pub fn ring_settings(&self) -> RingSettings {
+        RingSettings {
+            polarity: self.polarity,
+            threshold: self.threshold,
+            min_diameter: self.ring_min_diameter,
+            max_diameter: self.ring_max_diameter,
+            min_ratio: self.ring_min_ratio,
+            max_ratio: self.ring_max_ratio,
+            min_fill: self.ring_min_fill,
+            max_elongation: self.ring_max_elongation,
+            max_spots: self.max_parts,
+            full_contrast: self.full_contrast,
+            split: self.ring_split,
+            size_gap: self.ring_size_gap,
         }
     }
 
@@ -326,6 +372,14 @@ impl Config {
             "shots_margin" => self.shots_margin = number(value, key)?,
             "shots_part_width" => self.shots_part_width = number(value, key)?,
             "shots_part_height" => self.shots_part_height = number(value, key)?,
+            "ring_min_diameter" => self.ring_min_diameter = number(value, key)?,
+            "ring_max_diameter" => self.ring_max_diameter = number(value, key)?,
+            "ring_min_ratio" => self.ring_min_ratio = number(value, key)?,
+            "ring_max_ratio" => self.ring_max_ratio = number(value, key)?,
+            "ring_min_fill" => self.ring_min_fill = number(value, key)?,
+            "ring_max_elongation" => self.ring_max_elongation = number(value, key)?,
+            "ring_split" => self.ring_split = number(value, key)?,
+            "ring_size_gap" => self.ring_size_gap = number(value, key)?,
             "replace_output" => {
                 self.replace_output = match value {
                     "yes" | "true" | "on" => true,
@@ -447,6 +501,30 @@ impl Config {
                 "shots_overlap must be from 0 to {}",
                 crate::shots::MAX_OVERLAP
             ));
+        }
+        if !(self.ring_min_diameter >= 8.0 && self.ring_max_diameter >= self.ring_min_diameter) {
+            return Err(
+                "the outer diameter of a ring must be from 8 pixels up and the largest not below the smallest"
+                    .into(),
+            );
+        }
+        if !(self.ring_min_ratio > 0.0
+            && self.ring_max_ratio < 1.0
+            && self.ring_max_ratio >= self.ring_min_ratio)
+        {
+            return Err("the ratio of the inner to the outer diameter of a ring must be above 0 and below 1, the largest not below the smallest".into());
+        }
+        if !(self.ring_min_fill > 0.0 && self.ring_min_fill <= 1.0) {
+            return Err("ring_min_fill must be more than 0 and at most 1".into());
+        }
+        if self.ring_max_elongation < 1.0 {
+            return Err("ring_max_elongation must be 1 or more".into());
+        }
+        if self.ring_split < 0.0 {
+            return Err("ring_split must be 0 (found from the diameters) or more".into());
+        }
+        if self.ring_size_gap <= 1.0 {
+            return Err("ring_size_gap must be above 1".into());
         }
         if self.shots_part_width < 0.0 || self.shots_part_height < 0.0 {
             return Err(
@@ -640,6 +718,16 @@ square_max_size = 20",
             "shots_overlap = -0.1",
             "shots_margin = -1",
             "shots_part_width = -1",
+            "ring_min_diameter = 5",
+            "ring_min_diameter = 50\nring_max_diameter = 20",
+            "ring_min_ratio = 0",
+            "ring_max_ratio = 1",
+            "ring_min_ratio = 0.8\nring_max_ratio = 0.5",
+            "ring_min_fill = 0",
+            "ring_min_fill = 1.5",
+            "ring_max_elongation = 0.9",
+            "ring_split = -1",
+            "ring_size_gap = 1",
             "shots_part_height = -0.5",
             "inspect_package = a b",
         ] {

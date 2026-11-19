@@ -24,6 +24,7 @@ pub mod measure;
 pub mod panels;
 pub mod points;
 pub mod report;
+pub mod ring;
 pub mod scale;
 pub mod shot;
 pub mod shots;

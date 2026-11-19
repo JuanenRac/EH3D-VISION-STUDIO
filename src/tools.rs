@@ -10,6 +10,7 @@ use crate::lang::Msg;
 use crate::limit::write_text;
 use crate::measure::{measure_parts, to_csv, PartSettings};
 use crate::report;
+use crate::ring::{find_rings, SizeClass};
 use crate::scale::{from_pitch, Scale};
 use crate::square::{find_squares, find_turned_crosses, ShapeSettings};
 use crate::window::{show, Status, Window};
@@ -147,6 +148,53 @@ impl Window {
                         show(s.y, 1),
                         show(s.size, 1),
                         show(s.angle_deg, 1),
+                    ],
+                )
+            })
+            .collect()
+    }
+
+    /// Looks for the ring marks of the picture (donuts, of one size or of two) with the values of the window; what was found before is replaced.
+    pub fn find_ring_marks(&mut self) -> bool {
+        if self.image.is_none() {
+            self.status = Status::NeedImage;
+            return false;
+        }
+        let settings = self.cfg.ring_settings();
+        let result = self.working().and_then(|gray| find_rings(&gray, &settings));
+        match result {
+            Ok(found) => {
+                self.status = Status::RingsFound(found.len());
+                self.rings = found;
+                true
+            }
+            Err(e) => {
+                self.status = Status::Failed(e);
+                false
+            }
+        }
+    }
+
+    /// The lines of the list of rings: the place, the outer diameter, the size class when there are two sizes and the confidence.
+    pub fn ring_lines(&self) -> Vec<String> {
+        self.rings
+            .iter()
+            .enumerate()
+            .map(|(i, r)| {
+                let class = match r.size {
+                    SizeClass::Single => Msg::SizeSingle,
+                    SizeClass::Small => Msg::SizeSmall,
+                    SizeClass::Large => Msg::SizeLarge,
+                };
+                Msg::RingLine.with(
+                    self.lang,
+                    &[
+                        (i + 1).to_string(),
+                        show(r.x, 1),
+                        show(r.y, 1),
+                        show(r.outer, 1),
+                        class.tr(self.lang).to_string(),
+                        show(r.confidence, 2),
                     ],
                 )
             })
@@ -563,6 +611,80 @@ mod tests {
             .unwrap();
         assert!(!w.set_field(i, "3".into()));
         assert!(w.status.is_problem());
+    }
+
+    /// A picture with a small ring, two large rings and a filled disc, saved as `rings.pgm`.
+    fn rings_picture(s: &Scratch) -> PathBuf {
+        let mut g = Gray::blank(300, 120, 220).unwrap();
+        for (cx, cy, outer, inner) in [
+            (50.0, 60.0, 14.0, 7.0),
+            (150.0, 60.0, 28.0, 15.0),
+            (250.0, 60.0, 29.0, 16.0),
+        ] {
+            g.disc(cx, cy, outer, 30);
+            g.disc(cx, cy, inner, 220);
+        }
+        g.disc(50.0, 100.0, 8.0, 30);
+        let path = s.path("rings.pgm");
+        fs::write(&path, pgm(&g)).unwrap();
+        path
+    }
+
+    #[test]
+    fn rings_of_two_sizes_are_found_and_listed_in_the_language_of_the_window() {
+        let s = Scratch::new("rings");
+        let mut w = window_with("");
+        assert!(!w.find_ring_marks());
+        assert_eq!(w.status, Status::NeedImage);
+        assert!(w.open_image(&rings_picture(&s)));
+        assert!(w.find_ring_marks());
+        assert_eq!(w.status, Status::RingsFound(3));
+        assert!(w.status.text(Lang::En).starts_with("3 rings found"));
+        let lines = w.ring_lines();
+        assert_eq!(lines.len(), 3);
+        assert_eq!(
+            lines.iter().filter(|l| l.contains(", small, ")).count(),
+            1,
+            "{lines:?}"
+        );
+        assert_eq!(
+            lines.iter().filter(|l| l.contains(", large, ")).count(),
+            2,
+            "{lines:?}"
+        );
+        assert!(lines
+            .iter()
+            .any(|l| l.starts_with("Ring ") && l.contains("(50.0, 60.0) px")));
+        w.lang = Lang::Es;
+        assert!(w
+            .ring_lines()
+            .iter()
+            .any(|l| l.contains("pequeño") && l.contains("confianza")));
+        w.lang = Lang::En;
+        // the values of the panel decide what is found: a split that is given, then a range that leaves them out
+        let split = w.fields.iter().position(|f| f.key == "ring_split").unwrap();
+        assert!(w.set_field(split, "80".into()));
+        assert!(w.find_ring_marks());
+        assert!(w.ring_lines().iter().all(|l| l.contains(", small, ")));
+        let min = w
+            .fields
+            .iter()
+            .position(|f| f.key == "ring_min_diameter")
+            .unwrap();
+        assert!(w.set_field(min, "100".into()));
+        assert!(w.find_ring_marks());
+        assert_eq!(w.status, Status::RingsFound(0));
+        assert!(w.status.text(Lang::En).contains("No rings"));
+        assert!(w.rings.is_empty());
+        // a value that makes no sense is refused and the old one stays
+        assert!(!w.set_field(min, "3".into()));
+        assert!(w.status.is_problem());
+        // looking for the marks again forgets the rings
+        assert!(w.set_field(min, "12".into()));
+        assert!(w.find_ring_marks());
+        assert!(!w.rings.is_empty());
+        assert!(w.detect());
+        assert!(w.rings.is_empty());
     }
 
     #[test]

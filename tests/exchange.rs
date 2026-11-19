@@ -632,6 +632,83 @@ fn squares_and_turned_crosses_are_found_with_their_angle() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+/// A board of 300 by 120 with a small ring at (50, 60), a large ring at (150, 60), a second large ring at (250, 60) and a filled disc at (50, 100) that is not a ring.
+fn rings_picture() -> Vec<u8> {
+    let (w, h) = (300usize, 120usize);
+    let mut data = vec![220u8; w * h];
+    let rings = [
+        (50.0f64, 60.0f64, 14.0f64, 7.0f64),
+        (150.0, 60.0, 28.0, 15.0),
+        (250.0, 60.0, 29.0, 16.0),
+    ];
+    for y in 0..h {
+        for x in 0..w {
+            let (fx, fy) = (x as f64, y as f64);
+            for (cx, cy, outer, inner) in rings {
+                let d = ((fx - cx).powi(2) + (fy - cy).powi(2)).sqrt();
+                if d <= outer && d > inner {
+                    data[y * w + x] = 30;
+                }
+            }
+            if ((fx - 50.0).powi(2) + (fy - 100.0).powi(2)).sqrt() <= 8.0 {
+                data[y * w + x] = 30;
+            }
+        }
+    }
+    pgm(w, h, &data)
+}
+
+#[test]
+fn rings_are_found_with_their_two_diameters_their_size_class_and_a_confidence() {
+    let dir = scratch("rings");
+    fs::write(dir.join("rings.pgm"), rings_picture()).unwrap();
+    let found = run(&dir, &["rings", "rings.pgm"]);
+    assert!(found.status.success(), "{}", err(&found));
+    let text = out(&found);
+    assert_eq!(marks_in(&text), 3, "{text}");
+    assert_eq!(text.matches("size small").count(), 1, "{text}");
+    assert_eq!(text.matches("size large").count(), 2, "{text}");
+    assert!(
+        text.contains("confidence 0.9") || text.contains("confidence 1.0"),
+        "{text}"
+    );
+    assert!(text.contains("(50.00, 60.00) px, outer 2"), "{text}");
+    // a diameter that is given tells the sizes apart, the disc is never a ring, and the options win over the file
+    let split = run(&dir, &["rings", "rings.pgm", "--split", "80"]);
+    assert_eq!(
+        out(&split).matches("size small").count(),
+        3,
+        "{}",
+        out(&split)
+    );
+    let narrow = run(&dir, &["rings", "rings.pgm", "--max-size", "40"]);
+    assert_eq!(marks_in(&out(&narrow)), 1, "{}", out(&narrow));
+    // the values are in the configuration file
+    fs::write(
+        dir.join("vision.cfg"),
+        "ring_min_diameter = 40\nring_size_gap = 3\n",
+    )
+    .unwrap();
+    let cfg = run(&dir, &["rings", "rings.pgm"]);
+    assert_eq!(marks_in(&out(&cfg)), 2, "{}", out(&cfg));
+    assert_eq!(out(&cfg).matches("size single").count(), 2, "{}", out(&cfg));
+    fs::write(dir.join("vision.cfg"), "ring_max_ratio = 0.3\n").unwrap();
+    assert!(out(&run(&dir, &["rings", "rings.pgm"])).contains("no rings found"));
+    fs::remove_file(dir.join("vision.cfg")).unwrap();
+    // a light ring needs --light, and a size that makes no sense or a missing image is refused
+    let none = run(&dir, &["rings", "rings.pgm", "--light"]);
+    assert!(out(&none).contains("no rings found"), "{}", out(&none));
+    let bad = run(&dir, &["rings", "rings.pgm", "--min-size", "3"]);
+    assert!(
+        !bad.status.success() && err(&bad).contains("rings"),
+        "{}",
+        err(&bad)
+    );
+    let missing = run(&dir, &["rings"]);
+    assert!(!missing.status.success() && err(&missing).contains("rings needs an image"));
+    let _ = fs::remove_dir_all(&dir);
+}
+
 /// A board of 400 by 300 with a grid of 5 by 4 dark discs 70 pixels apart, seen through a lens with the radial factors `k1` and `k2`; one disc is moved by `shift` pixels along x when asked.
 fn lens_picture(k1: f64, k2: f64, shift: Option<(usize, f64)>) -> Vec<u8> {
     let (w, h) = (400usize, 300usize);

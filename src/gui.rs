@@ -5,6 +5,7 @@ use crate::browse::{self, Browser};
 use crate::config::Config;
 use crate::image::Gray;
 use crate::lang::{Lang, Msg};
+use crate::ring::SizeClass;
 use crate::shot::{ShotRequest, ShotTheme, PATIENCE_FRAMES};
 use crate::tools::ShapeKind;
 use crate::window::{Section, Window, DESIGN_EXTENSIONS, IMAGE_EXTENSIONS, OUTPUT_EXTENSIONS};
@@ -260,6 +261,30 @@ impl App {
         let lines = self.win.shape_lines();
         egui::ScrollArea::vertical()
             .id_salt("shapes")
+            .max_height(120.0)
+            .show(ui, |ui| {
+                for line in lines {
+                    ui.label(egui::RichText::new(line).color(DIM));
+                }
+            });
+    }
+
+    fn rings_section(&mut self, ui: &mut egui::Ui) {
+        let lang = self.win.lang;
+        Self::heading(ui, Msg::RingsTitle.tr(lang));
+        self.fields(ui, Section::Rings);
+        if ui
+            .add_enabled(
+                self.win.image.is_some(),
+                egui::Button::new(Msg::FindRings.tr(lang)),
+            )
+            .clicked()
+        {
+            self.win.find_ring_marks();
+        }
+        let lines = self.win.ring_lines();
+        egui::ScrollArea::vertical()
+            .id_salt("rings")
             .max_height(120.0)
             .show(ui, |ui| {
                 for line in lines {
@@ -562,6 +587,7 @@ impl App {
                         self.pitch_section(ui);
                         self.distortion_section(ui);
                         self.shapes_section(ui);
+                        self.rings_section(ui);
                         self.measure_section(ui);
                         self.inspect_section(ui);
                         self.shots_section(ui);
@@ -693,6 +719,17 @@ impl App {
             );
             let uv = Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(1.0, 1.0));
             painter.image(tex.id(), area, uv, Color32::WHITE);
+        }
+        // the rings: the outer and the inner circle, in a colour for each size class
+        for r in &self.win.rings {
+            let at = self.screen(rect, r.x, r.y);
+            let colour = match r.size {
+                SizeClass::Small => ACCENT,
+                SizeClass::Large => OK,
+                SizeClass::Single => MARK,
+            };
+            painter.circle_stroke(at, (r.outer / 2.0 * zoom) as f32, Stroke::new(2.0, colour));
+            painter.circle_stroke(at, (r.inner / 2.0 * zoom) as f32, Stroke::new(1.5, colour));
         }
         // the places where the fitted lens puts the lattice of the grid: small circles that the marks should lie in
         for place in self.win.lens_grid_px() {

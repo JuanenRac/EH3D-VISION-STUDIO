@@ -236,6 +236,19 @@
           }
         },
         {
+          "name": "ring.rs",
+          "desc": {
+            "en": "the ring marks: round marks with a hole, of one size or of two, with a confidence",
+            "es": "las marcas en anillo: redondas con un agujero, de uno o dos tamaños, con confianza",
+            "de": "die Ringmarken: runde Marken mit Loch, in einer oder zwei Größen, mit Vertrauen",
+            "fr": "les repères en anneau : ronds et percés, d'une ou deux tailles, avec confiance",
+            "it": "i segni ad anello: rotondi con un foro, di una o due dimensioni, con fiducia",
+            "ja": "リングマーク：穴のある丸いマーク、1 種または 2 種の大きさ、信頼度つき",
+            "zh": "圆环标记：带孔的圆形标记，一种或两种尺寸，带置信度",
+            "pt": "as marcas em anel: redondas com um furo, de um ou dois tamanhos, com confiança"
+          }
+        },
+        {
           "name": "limit.rs",
           "desc": {
             "en": "reading a file with a size limit and a code for each refusal",
