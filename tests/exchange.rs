@@ -704,3 +704,264 @@ fn lens_refuses_a_wrong_mark_and_a_tolerance_that_is_not_met() {
     assert!(!missing.status.success() && err(&missing).contains("lens needs an image"));
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn inspect_gives_a_verdict_for_each_part_from_the_table_of_packages() {
+    let dir = scratch("inspect");
+    fs::write(dir.join("part.pgm"), part_picture()).unwrap();
+    fs::write(
+        dir.join("packages.csv"),
+        "package,body_long_mm,body_short_mm,tolerance_mm\nBIG,30.5,15.5,\nSMALL,20,10,\nWIDE,30.4,14,0.2\n",
+    )
+    .unwrap();
+    let base = [
+        "inspect",
+        "part.pgm",
+        "--mm-per-px",
+        "0.5",
+        "--table",
+        "packages.csv",
+    ];
+    let mut ok = base.to_vec();
+    ok.extend(["--package", "BIG"]);
+    let pass = run(&dir, &ok);
+    assert!(pass.status.success(), "{}", err(&pass));
+    let text = out(&pass);
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.len(), 2, "{text}");
+    assert!(
+        lines[0].starts_with("index,x_mm,y_mm,angle_deg,length_mm,width_mm,package,"),
+        "{text}"
+    );
+    assert_eq!(
+        lines[1],
+        "1,-10.0000,10.0000,0.000,30.5000,15.5000,BIG,30.5000,15.5000,0.0000,0.0000,pass,"
+    );
+    assert!(
+        err(&pass).contains("1 parts: 1 pass, 0 fail"),
+        "{}",
+        err(&pass)
+    );
+    // the same part against a smaller package fails on both sides, and the exit code says so after the verdicts are written
+    let mut small = base.to_vec();
+    small.extend(["--package", "small", "--format", "json"]);
+    let fail = run(&dir, &small);
+    assert!(
+        !fail.status.success() && err(&fail).contains("do not fit the package SMALL"),
+        "{}",
+        err(&fail)
+    );
+    let json = out(&fail);
+    assert!(
+        json.contains("\"fail\": 1") && json.contains("\"reasons\": [\"length\", \"width\"]"),
+        "{json}"
+    );
+    // a width that is off by more than the tolerance of the package
+    let mut wide = base.to_vec();
+    wide.extend(["--package", "WIDE"]);
+    let w = run(&dir, &wide);
+    assert!(
+        !w.status.success() && out(&w).contains(",fail,width"),
+        "{}",
+        out(&w)
+    );
+    // a tolerance given on the line (and a turn limit that the part keeps) lets the part pass; the tolerance of a package in the table wins over it
+    let mut loose = base.to_vec();
+    loose.extend([
+        "--package",
+        "SMALL",
+        "--tolerance",
+        "20",
+        "--max-angle",
+        "5",
+    ]);
+    assert!(run(&dir, &loose).status.success());
+    let mut own = base.to_vec();
+    own.extend(["--package", "WIDE", "--tolerance", "20"]);
+    assert!(!run(&dir, &own).status.success());
+    // the verdicts go to a file that is not written over without --replace
+    let mut file = ok.clone();
+    file.extend(["--output", "verdicts.csv"]);
+    assert!(run(&dir, &file).status.success());
+    assert_eq!(
+        fs::read_to_string(dir.join("verdicts.csv"))
+            .unwrap()
+            .replace('\r', ""),
+        text
+    );
+    let again = run(&dir, &file);
+    assert!(
+        !again.status.success() && err(&again).contains("file_exists"),
+        "{}",
+        err(&again)
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn inspect_needs_the_scale_the_table_the_package_and_a_part() {
+    let dir = scratch("inspect_refused");
+    fs::write(dir.join("part.pgm"), part_picture()).unwrap();
+    fs::write(dir.join("flat.pgm"), pgm(60, 40, &vec![120u8; 60 * 40])).unwrap();
+    fs::write(
+        dir.join("packages.csv"),
+        "package,body_long_mm,body_short_mm\nBIG,30.5,15.5\n",
+    )
+    .unwrap();
+    fs::write(dir.join("broken.csv"), "package,body_long_mm\nBIG,30.5\n").unwrap();
+    let cases: Vec<(Vec<&str>, &str)> = vec![
+        (
+            vec![
+                "inspect",
+                "part.pgm",
+                "--package",
+                "BIG",
+                "--table",
+                "packages.csv",
+            ],
+            "needs the scale",
+        ),
+        (
+            vec![
+                "inspect",
+                "part.pgm",
+                "--mm-per-px",
+                "0.5",
+                "--table",
+                "packages.csv",
+            ],
+            "needs --package",
+        ),
+        (
+            vec![
+                "inspect",
+                "part.pgm",
+                "--mm-per-px",
+                "0.5",
+                "--package",
+                "BIG",
+            ],
+            "needs the table of packages",
+        ),
+        (
+            vec![
+                "inspect",
+                "part.pgm",
+                "--mm-per-px",
+                "0.5",
+                "--package",
+                "BIG",
+                "--table",
+                "nowhere.csv",
+            ],
+            "file_unreadable",
+        ),
+        (
+            vec![
+                "inspect",
+                "part.pgm",
+                "--mm-per-px",
+                "0.5",
+                "--package",
+                "BIG",
+                "--table",
+                "broken.csv",
+            ],
+            "broken.csv: line 1",
+        ),
+        (
+            vec![
+                "inspect",
+                "part.pgm",
+                "--mm-per-px",
+                "0.5",
+                "--package",
+                "NONE",
+                "--table",
+                "packages.csv",
+            ],
+            "package_unknown",
+        ),
+        (
+            vec![
+                "inspect",
+                "flat.pgm",
+                "--mm-per-px",
+                "0.5",
+                "--package",
+                "BIG",
+                "--table",
+                "packages.csv",
+            ],
+            "no_parts",
+        ),
+        (
+            vec![
+                "inspect",
+                "part.pgm",
+                "--mm-per-px",
+                "0.5",
+                "--package",
+                "BIG",
+                "--table",
+                "packages.csv",
+                "--tolerance",
+                "0",
+            ],
+            "tolerance",
+        ),
+        (
+            vec![
+                "inspect",
+                "part.pgm",
+                "--mm-per-px",
+                "0.5",
+                "--package",
+                "BIG",
+                "--table",
+                "packages.csv",
+                "--format",
+                "xml",
+            ],
+            "not csv or json",
+        ),
+        (vec!["inspect", "--package", "BIG"], "inspect needs"),
+    ];
+    for (args, expected) in cases {
+        let o = run(&dir, &args);
+        assert!(
+            !o.status.success() && err(&o).contains(expected),
+            "{args:?}: {}",
+            err(&o)
+        );
+        assert!(out(&o).is_empty(), "{args:?}: {}", out(&o));
+    }
+    // the table and the limits can come from the configuration file
+    fs::write(
+        dir.join("vision.cfg"),
+        "package_table = packages.csv\nmm_per_px = 0.5\ninspect_tolerance = 0.05\n",
+    )
+    .unwrap();
+    assert!(run(&dir, &["inspect", "part.pgm", "--package", "BIG"])
+        .status
+        .success());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_sample_table_of_packages_reads_and_names_common_bodies() {
+    let text = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples")
+            .join("packages.csv"),
+    )
+    .unwrap();
+    let table = eh3d_vision_studio::inspect::parse_table(&text.replace('\r', "")).unwrap();
+    assert!(table.len() >= 6);
+    for name in ["0402", "0603", "0805", "1206", "SOT-23", "SOIC-8"] {
+        assert!(
+            eh3d_vision_studio::inspect::find_package(&table, name).is_ok(),
+            "{name} is not in examples/packages.csv"
+        );
+    }
+}

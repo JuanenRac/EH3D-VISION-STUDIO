@@ -15,6 +15,7 @@ pub mod flatten;
 pub mod grid;
 #[cfg(feature = "gui")]
 pub mod gui;
+pub mod inspect;
 pub mod lang;
 pub mod lens;
 pub mod limit;

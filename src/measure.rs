@@ -203,7 +203,7 @@ pub const FORMAT_VERSION: u32 = 1;
 pub const CSV_HEADER: &str = "index,x_mm,y_mm,angle_deg,length_mm,width_mm,area_mm2";
 
 /// A number with fixed decimals, never `-0.000` (a value that rounds to nothing has no sign).
-fn fixed(v: f64, decimals: usize) -> String {
+pub fn fixed(v: f64, decimals: usize) -> String {
     let s = format!("{v:.decimals$}");
     match s.strip_prefix('-') {
         Some(rest) if rest.chars().all(|c| c == '0' || c == '.') => rest.to_string(),

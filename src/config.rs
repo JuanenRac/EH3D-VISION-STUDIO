@@ -11,7 +11,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 32] = [
+pub const KEYS: [&str; 35] = [
     "language",
     "polarity",
     "threshold",
@@ -44,6 +44,9 @@ pub const KEYS: [&str; 32] = [
     "lens_k1",
     "lens_k2",
     "lens_max_rms",
+    "package_table",
+    "inspect_tolerance",
+    "inspect_max_angle",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -101,6 +104,12 @@ pub struct Config {
     pub lens_k2: f64,
     /// The most the marks of a grid may be from their lattice after the correction of the lens, in pixels; a fit above it is refused.
     pub lens_max_rms: f64,
+    /// The file with the table of packages that `inspect` compares the parts with; empty means that `--table` has to be given.
+    pub package_table: String,
+    /// The most a part may differ from the body of its package in length or in width, in millimetres, unless the table gives another for the package.
+    pub inspect_tolerance: f64,
+    /// The most a part may be turned from the x axis, in degrees (0 is not checked, 90 at most).
+    pub inspect_max_angle: f64,
 }
 
 impl Default for Config {
@@ -139,6 +148,9 @@ impl Default for Config {
             lens_k1: 0.0,
             lens_k2: 0.0,
             lens_max_rms: 0.5,
+            package_table: String::new(),
+            inspect_tolerance: 0.2,
+            inspect_max_angle: 0.0,
         }
     }
 }
@@ -250,6 +262,9 @@ impl Config {
             "lens_k1" => self.lens_k1 = number(value, key)?,
             "lens_k2" => self.lens_k2 = number(value, key)?,
             "lens_max_rms" => self.lens_max_rms = number(value, key)?,
+            "package_table" => self.package_table = value.to_string(),
+            "inspect_tolerance" => self.inspect_tolerance = number(value, key)?,
+            "inspect_max_angle" => self.inspect_max_angle = number(value, key)?,
             other => return Err(format!("{other}: unknown key")),
         }
         Ok(())
@@ -331,6 +346,15 @@ impl Config {
         }
         if self.lens_max_rms <= 0.0 {
             return Err("lens_max_rms must be more than 0".into());
+        }
+        if self.package_table.len() > 1024 || self.package_table.contains('\0') {
+            return Err("package_table must be a file name of at most 1024 characters".into());
+        }
+        if self.inspect_tolerance <= 0.0 {
+            return Err("inspect_tolerance must be more than 0".into());
+        }
+        if !(0.0..=90.0).contains(&self.inspect_max_angle) {
+            return Err("inspect_max_angle must be from 0 (not checked) to 90".into());
         }
         Ok(())
     }
@@ -496,6 +520,9 @@ cross_max_size = 20",
             "lens_k2 = -0.6",
             "lens_max_rms = 0",
             "lens_max_rms = -1",
+            "inspect_tolerance = 0",
+            "inspect_max_angle = 91",
+            "inspect_max_angle = -1",
         ] {
             assert!(Config::parse(text).is_err(), "{text:?} was accepted");
         }

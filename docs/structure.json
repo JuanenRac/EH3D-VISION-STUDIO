@@ -171,6 +171,19 @@
           }
         },
         {
+          "name": "inspect.rs",
+          "desc": {
+            "en": "each part compared with the body of its package from a table, with a verdict",
+            "es": "cada pieza comparada con el cuerpo de su encapsulado desde una tabla, con veredicto",
+            "de": "jedes Teil mit dem Körper seiner Bauform aus einer Tabelle verglichen, mit Urteil",
+            "fr": "chaque pièce comparée au corps de son boîtier depuis une table, avec un verdict",
+            "it": "ogni pezzo confrontato con il corpo del suo contenitore da una tabella, con verdetto",
+            "ja": "部品を表のパッケージ本体寸法と比較して判定する",
+            "zh": "把每个零件与表中封装的本体尺寸比较并给出判定",
+            "pt": "cada peça comparada com o corpo do seu encapsulamento a partir de uma tabela, com veredicto"
+          }
+        },
+        {
           "name": "lens.rs",
           "desc": {
             "en": "the two factors of the lens from a grid of marks, refused when they do not fit",
@@ -468,6 +481,19 @@
             "ja": "試すためのサンプル",
             "zh": "试用的示例",
             "pt": "um exemplo para experimentar o programa"
+          }
+        },
+        {
+          "name": "packages.csv",
+          "desc": {
+            "en": "a table of package bodies for inspect",
+            "es": "una tabla de cuerpos de encapsulados para inspect",
+            "de": "eine Tabelle von Bauformkörpern für inspect",
+            "fr": "une table de corps de boîtiers pour inspect",
+            "it": "una tabella di corpi di contenitori per inspect",
+            "ja": "inspect 用のパッケージ本体寸法の表",
+            "zh": "供 inspect 使用的封装本体尺寸表",
+            "pt": "uma tabela de corpos de encapsulamentos para o inspect"
           }
         },
         {

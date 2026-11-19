@@ -12,6 +12,10 @@ use eh3d_vision_studio::cross::{find_crosses, CrossSettings};
 use eh3d_vision_studio::fiducial::{find, refine, Polarity, Settings};
 use eh3d_vision_studio::flatten::flatten;
 use eh3d_vision_studio::image::{from_bytes, Gray};
+use eh3d_vision_studio::inspect::{
+    find_package, judge, parse_table, summary as inspect_summary, to_csv as inspect_csv,
+    to_json as inspect_json,
+};
 use eh3d_vision_studio::lens::{fit_lens, undistort2};
 use eh3d_vision_studio::limit::{read_limited, read_text_limited, write_text};
 use eh3d_vision_studio::measure::{measure_parts, to_csv, to_json, PartSettings};
@@ -28,6 +32,7 @@ const HELP: &str = "eh3d-vision: fiducials in a camera image
   eh3d-vision align DESIGN.csv MEASURED.csv [--scale] [--pair-nearest] [--isocam-args] [--max-rms 0.1] [--max-stretch 0.01]   the turn and the shift that put the board where it is
   eh3d-vision measure IMAGE [--mm-per-px V] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   the parts of a picture: centre, turn, length, width and area in millimetres, as a CSV or JSON file
   eh3d-vision crosses IMAGE [--turned] [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the cross-shaped marks found (plus signs; with --turned the arms may have any angle and the angle is printed)
+  eh3d-vision inspect IMAGE --package NAME [--table FILE] [--mm-per-px V] [--tolerance MM] [--max-angle DEG] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   each part of a picture compared with the body of its package from a table (CSV with package, body_long_mm, body_short_mm), one verdict per part; exit 1 when a part fails
   eh3d-vision lens IMAGE [--columns C] [--rows R] [--max-rms PX] [--light] [--flatten PX]   the two radial factors of the lens from a grid of marks (columns and rows as grid_columns and grid_rows), refused when the marks stay farther than --max-rms pixels from their lattice
   eh3d-vision squares IMAGE [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the square marks found, turned by any angle (centre, side and angle)
   eh3d-vision calibrate IMAGE --pitch-mm D [--light] [--tolerance 0.05] [--flatten PX]   the millimetres of a pixel from a target whose neighbouring marks are D millimetres apart
@@ -294,6 +299,83 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 p.spread * 100.0
             );
             println!("mm_per_px = {:.6}", p.scale.mm_per_px);
+            Ok(())
+        }
+        "inspect" => {
+            let mut s = PartSettings::default();
+            if switch(&mut args, "--light") {
+                s.polarity = Polarity::Light;
+            }
+            let replace = switch(&mut args, "--replace");
+            let flatten_px = flag(&mut args, "--flatten")?
+                .map(|v| count(&v, "--flatten"))
+                .transpose()?;
+            let mm_per_px = flag(&mut args, "--mm-per-px")?
+                .map(|v| num(&v, "--mm-per-px"))
+                .transpose()?;
+            let package = flag(&mut args, "--package")?
+                .ok_or("inspect needs --package, the name of the package in the table")?;
+            let table_path = flag(&mut args, "--table")?;
+            let cfg = config();
+            let tolerance = flag(&mut args, "--tolerance")?
+                .map(|v| num(&v, "--tolerance"))
+                .transpose()?
+                .unwrap_or(cfg.inspect_tolerance);
+            let max_angle = flag(&mut args, "--max-angle")?
+                .map(|v| num(&v, "--max-angle"))
+                .transpose()?
+                .unwrap_or(cfg.inspect_max_angle);
+            let format = flag(&mut args, "--format")?.unwrap_or_else(|| "csv".to_string());
+            let output = flag(&mut args, "--output")?;
+            finish(&args, 1)?;
+            if !matches!(format.as_str(), "csv" | "json") {
+                return Err(format!("--format '{format}' is not csv or json"));
+            }
+            let path = args.first().ok_or("inspect needs an image")?;
+            let mm = mm_per_px.unwrap_or(cfg.mm_per_px);
+            if mm <= 0.0 {
+                return Err(
+                    "inspect needs the scale: --mm-per-px, or mm_per_px in vision.cfg (the command calibrate works it out)"
+                        .into(),
+                );
+            }
+            let table_file = table_path.unwrap_or_else(|| cfg.package_table.clone());
+            if table_file.is_empty() {
+                return Err(
+                    "inspect needs the table of packages: --table, or package_table in vision.cfg"
+                        .into(),
+                );
+            }
+            let table = parse_table(&read_text_limited(
+                Path::new(&table_file),
+                cfg.max_file_mib,
+            )?)
+            .map_err(|e| format!("{table_file}: {e}"))?;
+            let body = find_package(&table, &package)?;
+            s.threshold = cfg.threshold;
+            s.min_area_px = cfg.part_min_area;
+            s.max_area_px = cfg.part_max_area;
+            s.max_parts = cfg.max_parts;
+            let img = picture(path, &cfg, flatten_px)?;
+            let parts = measure_parts(&img, &s, Scale { mm_per_px: mm })?;
+            if parts.is_empty() {
+                return Err(
+                    "no_parts: no part was found in the picture, so nothing was inspected".into(),
+                );
+            }
+            let judged = judge(&parts, body, tolerance, max_angle)?;
+            let text = if format == "json" {
+                inspect_json(&judged, body, tolerance)
+            } else {
+                inspect_csv(&judged, body)
+            };
+            deliver(&text, output, replace)?;
+            let line = inspect_summary(&judged);
+            eprintln!("{line}");
+            // a part that fails is an error for a script, after the verdicts are written
+            if judged.iter().any(|j| !j.passes()) {
+                return Err(format!("some parts do not fit the package {}", body.name));
+            }
             Ok(())
         }
         "lens" => {
