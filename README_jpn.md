@@ -17,7 +17,7 @@
 
 ---
 
-**正直さの確認 - 現在実際に動くもの：** Rust ライブラリとコマンドライン プログラム（`eh3d-vision`）で、コンピューター上で実行される 300 件のテストがあります：画像から丸い基準マークを見つけ、画素をミリメートルに変換し、基板を設計どおりの位置に合わせる回転と移動量を計算します。ウィンドウ（`--features gui` でビルドする `eh3d-vision-gui` プログラム）があり、画像を開き、マークを座標つきで表示し、スケールを設定し、グリッドからレンズの歪みを求め、設計と位置合わせして ISOCAM 用のオプションを書き出しますが、ウィンドウはまだ画面で確認していません。機械では試しておらず、実際のファイルの集まりでも確認していません。
+**正直さの確認 - 現在実際に動くもの：** Rust ライブラリとコマンドライン プログラム（`eh3d-vision`）で、コンピューター上で実行される 390 件のテストがあります：画像から丸い基準マークを見つけ、画素をミリメートルに変換し、基板を設計どおりの位置に合わせる回転と移動量を計算します。ウィンドウ（`--features gui` でビルドする `eh3d-vision-gui` プログラム）があり、画像を開き、マークを座標つきで表示し、スケールを設定し、グリッドからレンズの歪みを求め、設計と位置合わせして ISOCAM 用のオプションを書き出しますが、ウィンドウはまだ画面で確認していません。機械では試しておらず、実際のファイルの集まりでも確認していません。
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | バージョン | `0.0.8` |
 | 成熟度 | 機能する |
-| テスト | 300 |
+| テスト | 390 |
 | 技術スタック | Rust |
 | 実機での動作 | 未試験：ここにあるものは機械で動かしたことがありません |
 
@@ -46,7 +46,7 @@
 |---|---|---|
 | コア | 🟡 | 画像から丸い基準マークを見つけ、画素をミリメートルに変換し、基板を設計どおりの位置に合わせる回転と移動量を計算します。コンピューター上で通常入力と破損入力でテスト済み。実際のファイルの集まりでは未確認。 |
 | コマンドライン | 🟡 | `eh3d-vision` はライブラリと同じ関数を実行して結果を表示します。エラーはメッセージと 0 以外の終了コードで返ります。 |
-| テスト | 🟡 | 300 件のテストが通ります（`cargo test`）。通常ケース、境界ケース、破損入力に加え、ノイズ、誤った露出、無効または欠落したフレーム、マークに見えるほこり、途切れた画像ファイルを加え、再取得される基板上の模擬カメラを含みます。 |
+| テスト | 🟡 | 390 件のテストが通ります（`cargo test`）。通常ケース、境界ケース、破損入力に加え、ノイズ、誤った露出、無効または欠落したフレーム、マークに見えるほこり、途切れた画像ファイルを加え、再取得される基板上の模擬カメラを含みます。 |
 | セキュリティ | 🟡 | 安全な Rust のみ（`forbid(unsafe_code)`）。受け取ったファイルでパニックせず、不正な値は理由付きのエラーになります。独立したレビューはありません。 |
 | ウィンドウ | 🟠 | 作成済み（egui、`--features gui`、プログラム `eh3d-vision-gui`）：画像を開く／ドロップする、マークを座標つきで見る、大きさが既知のマークでスケールを設定する、グリッドからレンズの歪みを求める、CSV の設計と位置合わせする、ISOCAM 用オプションを書き出す。ロジックはテスト済みですが、まだビルドも画面での確認もしていません。 |
 | 実機 | 🔴 | 未試験：ここにあるものは機械で実行したことがありません。 |
@@ -101,6 +101,12 @@ EH3D-VISION-STUDIO は EH3D Fabrication Suite のプログラムの一つです�
 * **ウィンドウのレンズ（2 つの係数）：** グリッドのボタンは `eh3d-vision lens` と同じく `k1` と `k2` を求めます（パネルの欄 `lens_max_rms` を超えると拒否）。ウィンドウは、求めたレンズがグリッドの格子を置く位置を描き、見つかったマークと比べられます（`show_lens_grid`）。グリッドなしで `vision.cfg` の `lens_k1` と `lens_k2` を使うことも、`<画像>-lens.cfg` として保存することもできます。
 * **ウィンドウでの部品とパッケージの照合、大きな部品の撮影計画：** サイドパネルはパッケージ表（`package_table`）を読み、測定した部品をパッケージ `inspect_package` と照合して（部品ごとに緑か赤の行、不合格の理由つき。`inspect_tolerance` と `inspect_max_angle` はパネルの欄）、判定を `eh3d-vision inspect` と同じ `<画像>-inspection.csv` として保存します。また、視野より大きな部品に必要な撮影を計画し（視野はミリメートルにした画像、部品は `shots_part_width` x `shots_part_height` かパッケージの本体、`shots_overlap` と `shots_margin`）、カメラの移動先を一覧にして、`eh3d-vision shots` と同じ `<画像>-shots.csv` として保存します。コマンドラインは、`--package` も部品サイズも与えないとき、この 2 つの新しいキーを使います。
 * **大きな部品の撮影計画：** `eh3d-vision shots --package 名前 --fov-w MM --fov-h MM`（または `--body-long` と `--body-short`）は、視野より大きな部品の全体が見えるカメラの位置を、部品の中心からのミリメートルで CSV に並べます。隣り合う画像は `shots_overlap` だけ重なり、`shots_margin` の余白を含みます。カメラは不要です。
+* **相関によるマーク検出：** `eh3d-vision correlate 画像 --diameter PX` は、その直径の円板を画像の上でずらし、各位置で正規化相関を計算します（光が明るくなってもコントラストが下がっても変わりません）。そのため、ムラのある光でしきい値では見失うマークも見つかります。位置は 1 ピクセル未満の精度でスコア付きで、良い順に示され、より良いものから直径以内にあるものは出ません。直径（`correlate_diameter`、`correlate_min_score`）が必要で、しきい値による検索より遅いので、時間がかかりすぎる画像は拒否されます（`correlate_too_big`）。
+* **遠近補正：** `eh3d-vision rectify 画像 --corners X1,Y1,...,X4,Y4 --output FILE.pgm` は、画像内の長方形の 4 つの角から、真上から見たように画像を描き直します（双線形サンプリングによるホモグラフィ）。凸四角形にならない角は拒否され（`bad_corners`）、最大の辺は `rectify_max_side` です。
+* **パッドの列：** `eh3d-vision pads 画像 --mm-per-px V` は画像の部品をパッドとみなし、ピッチ（最良近似直線に沿った距離の中央値）、そのばらつき、列からのパッドのずれ、平均サイズを CSV または JSON で出します。判定は `pads_tolerance` に対して理由 `pitch`、`row`、`expected`（`--expect-pitch`）付きの `fail` で、終了コードは 1 です。
+* **前と後：** `eh3d-vision diff 前 後` は同じ大きさの 2 枚の画像を比較します。グレー値が `diff_threshold` を超えて異なる画素、その割合、平均と最大の差、それらを囲む枠、`diff_min_area` 画素以上の領域を出します。`--mask FILE.pgm` は変化の画像を書き出し、`diff_max_changed` を超えて変わった場合の終了コードは 1 です。
+* **機械のサーバー：** `eh3d-vision server health|config|send` は、スイートの他のプログラムと同じキー（`server_address`、`server_token`、`server_machine`、`server_timeout_s`、`server_retries`）を使います。`config` はサーバーが持つ `vision.cfg` の値を読み（全部か、何もしないか。接続のキーはサーバーから受け取りません）、ファイル用の行として書き出し、`send quality|offset|pads|diff` はそのコマンドの JSON 結果を送ります。再試行は共有クライアントに従い（届いたかもしれない要求は 2 度送りません）、トークンは表示されず、ローカルでないアドレスへ平文 HTTP で送られるトークンには警告が出ます。ルートはサーバーの `cam` プラグインが提供する予定のもので、メモリ上のサーバー（`server::SimServer`）とループバックのソケットに対してテストしており、実際のサーバーではありません。
+* **固定シードのテスト：** `tests/fuzz.rs` は、時計を読まない生成器で、任意の大きさの画像、任意の位置の角、壊れた設定ファイル、JSON、HTTP 応答を与えます。パニックしてはならず、出てくるものは意味を持たなければなりません。
 
 ## 🔒 セキュリティと安全
 
@@ -110,12 +116,13 @@ EH3D-VISION-STUDIO は EH3D Fabrication Suite のプログラムの一つです�
 | 意味のない数値（負、無限、極端に大きい） | 値を示すエラーで拒否され、もっともらしい値に丸められることはありません |
 | 別のファイルに上書きしてしまうレポートや計測ファイル | ファイルがない場所にしか書きません。上書きには `--replace` が必要で、リンク越しには決して書きません |
 | 安全でないメモリ使用 | `forbid(unsafe_code)` の安全な Rust のみ |
+| トークンが出てはならない所に表示・送信される | トークンは表示されず、結果にも入りません。サーバーが送る値は全部か何もかで、接続のキー（`server_*`）はサーバーから受け取りません。ローカルでないアドレスへ平文 HTTP で送られるトークンには警告が出ます |
 
 **防御していないこと：** エラーなく作られた結果は、検証された結果ではありません。ここには機械の限界を知るものはなく、プログラムは独立したレビューを受けていません。脆弱性は非公開で報告してください（[SECURITY.md](SECURITY.md) 参照）。
 
 ## 🔌 インターフェース
 
-ライブラリは `eh3d_vision_studio`（`use eh3d_vision_studio::...`）、コマンドラインは `eh3d-vision` です。コマンドは次のとおりで、結果は標準出力に表示され、エラーは標準エラー出力に 0 以外の終了コードで報告されます。ネットワークアクセスはありません。
+ライブラリは `eh3d_vision_studio`（`use eh3d_vision_studio::...`）、コマンドラインは `eh3d-vision` です。コマンドは次のとおりで、結果は標準出力に表示され、エラーは標準エラー出力に 0 以外の終了コードで報告されます。ネットワークを使うのは `server` コマンドだけです（`vision.cfg` に書かれた機械のサーバーへの平文 HTTP）。ほかのコマンドはすべてローカルのファイルで動きます。
 
 ```text
 eh3d-vision find IMAGE [--light] [--min-diam PX] [--max-diam PX] [--known-mm D] [--refine] [--undistort] [--flatten PX]   the round marks found (--known-mm gives millimetres, --refine the centre to a fraction of a pixel with a confidence, --undistort straightens the places with lens_k1 and lens_k2 of vision.cfg, --flatten takes uneven light out first)
@@ -132,12 +139,17 @@ eh3d-vision quality IMAGE [--min-contrast V] [--min-mean V] [--max-mean V] [--mi
 eh3d-vision calibrate IMAGE --pitch-mm D [--light] [--tolerance 0.05] [--flatten PX]   the millimetres of a pixel from a target whose neighbouring marks are D millimetres apart
 eh3d-vision measure IMAGE [--mm-per-px V] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   the parts of a picture: centre, turn, length, width and area in millimetres, as a CSV or JSON file
 eh3d-vision batch FOLDER [--light] [--flatten PX] [--report FILE.csv] [--html FILE.html] [--lang CODE] [--replace]   every PNG and PGM picture of a folder: marks, scores and diameters, or the code of what went wrong, one line each; --html writes a page that stands alone, with a drawing of each picture and the warnings, in the language of --lang or of vision.cfg
+eh3d-vision correlate IMAGE [--diameter PX] [--min-score S] [--light] [--flatten PX]   the round marks found by sliding a disc of that diameter over the picture and working out the correlation at every place (a mark that the search by threshold loses on uneven light), with the place to a fraction of a pixel and the score
+eh3d-vision rectify IMAGE --corners X1,Y1,X2,Y2,X3,Y3,X4,Y4 --output FILE.pgm [--size WxH] [--fill V] [--replace]   the picture drawn again as seen from straight above, from the four corners of a rectangle in it (top left, top right, bottom right, bottom left, in pixels)
+eh3d-vision pads IMAGE [--mm-per-px V] [--expect-pitch MM] [--tolerance F] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   a row of pads: the pitch, how much it varies, how far the pads lie from the row and their size; exit 1 when the pitch varies, a pad is off the row or the pitch is not the one asked for
+eh3d-vision diff BEFORE AFTER [--threshold V] [--min-area PX] [--max-changed F] [--mask FILE.pgm] [--format csv|json] [--output FILE] [--replace]   two pictures of the same size compared: how many pixels changed, how much, where and in how many regions; exit 1 when more than --max-changed of the pixels changed
+eh3d-vision server health|config|send KIND ... [--address HOST:PORT] [--machine ID]   the EH3D server of the machine (server_address, server_token and server_machine of vision.cfg): health asks whether it answers, config reads the values of the configuration file that it holds (written as lines for vision.cfg with --output, never over a file without --replace), send quality|offset|pads|diff takes the arguments of the command of that name and sends its result as JSON
 eh3d-vision-gui [IMAGE] [DESIGN.csv]   the window (a build with --features gui); on Windows it opens with no console
 ```
 
 ## ⚙️ 設定
 
-調整される値はコードではなく、単純な `キー = 値` のファイルに書きます。プログラムを起動したフォルダー、またはプログラムの隣の `vision.cfg` です（変数 `EH3D_VISION_CONFIG` で別のファイルを指定できます）。ウィンドウの言語、マークが暗いか明るいか、しきい値、直径の範囲、マークの充填率と細長さ、スケールを決めるマークの大きさ、グリッドの列数と行数、位置合わせでサイズの変更を許すか、位置合わせが満たすべき限度、読み込む最大ファイルを設定します。`examples/vision.cfg` はすべてのキーを意味と起動時の値つきで一覧にしています。ファイルがなければその値が使われ、間違いのあるファイルは行番号つきで拒否されます。コマンドラインでは同じことをオプションで指定します（インターフェースを参照）。また、その他の調整値も保持します。信頼度（`refine_subpixel`、`full_contrast`）、照明のウィンドウ（`flatten_window`）、スケールと部品の大きさ（`mm_per_px`、`part_min_area`、`part_max_area`、`max_parts`）、十字の範囲（`cross_min_size`、`cross_max_size`、`cross_max_elongation`）、ターゲットの許容差（`pitch_tolerance`）、フォルダ内の画像の最大数（`batch_max_files`）です。 正方形の最小の充填率と、任意の角度の十字の最小スコアは `square_min_fill` と `cross_min_score` です。 正方形の辺の範囲と、その枠が幅よりどれだけ長くてよいかは、十字のものとは別に `square_min_size`、`square_max_size`、`square_max_elongation` です。 レンズは `lens_k1` と `lens_k2`（`lens` が求める値）で、補正後にグリッドが格子から離れてよい最大値は `lens_max_rms` です。 `inspect` が読むパッケージの表は `package_table`、部品がパッケージから外れてよい最大値と回転の最大値は `inspect_tolerance` と `inspect_max_angle` です。 HTML レポートが画像に警告を出すスコアのしきい値は `report_low_score` です。 スケールを決めるターゲットのマーク間隔は `pitch_mm`、書き出すファイルが既存のファイルに上書きしてよいかは `replace_output`（既定は no）です。 `shots` の計画で隣り合う画像の重なりと部品の周りの余白は `shots_overlap` と `shots_margin` です。 ウィンドウがレンズの格子を描くかどうかは `show_lens_grid` です。 `inspect` とウィンドウが部品を照合するパッケージは `inspect_package`、`shots` とウィンドウが撮影を計画する部品のサイズは `shots_part_width` と `shots_part_height` です（0 と 0 ならパッケージの本体）。 リングマークには、外径の範囲（`ring_min_diameter`、`ring_max_diameter`）、内径と外径の比の範囲（`ring_min_ratio`、`ring_max_ratio`）、帯の最小充填率（`ring_min_fill`）、細長さ（`ring_max_elongation`）、2 種類の大きさを分ける直径（`ring_split`、0 で自動）、大きさの間隔（`ring_size_gap`）があります。 ピックした部品の画像でのノズル軸は `nozzle_x_mm` と `nozzle_y_mm`、保持してよい最大距離と最大回転は `pick_max_offset_mm` と `pick_max_turn_deg` です（0 は確認しない）。 正しく保持された部品の回転は `nominal_angle_deg`、カメラが部品を鏡像で見るかどうかは `pick_mirror`、画像のチェックは `quality_check` と下限 `quality_min_contrast`、`quality_min_mean`、`quality_max_mean`、`quality_min_sharpness`（0：確認しない）です。
+調整される値はコードではなく、単純な `キー = 値` のファイルに書きます。プログラムを起動したフォルダー、またはプログラムの隣の `vision.cfg` です（変数 `EH3D_VISION_CONFIG` で別のファイルを指定できます）。ウィンドウの言語、マークが暗いか明るいか、しきい値、直径の範囲、マークの充填率と細長さ、スケールを決めるマークの大きさ、グリッドの列数と行数、位置合わせでサイズの変更を許すか、位置合わせが満たすべき限度、読み込む最大ファイルを設定します。`examples/vision.cfg` はすべてのキーを意味と起動時の値つきで一覧にしています。ファイルがなければその値が使われ、間違いのあるファイルは行番号つきで拒否されます。コマンドラインでは同じことをオプションで指定します（インターフェースを参照）。また、その他の調整値も保持します。信頼度（`refine_subpixel`、`full_contrast`）、照明のウィンドウ（`flatten_window`）、スケールと部品の大きさ（`mm_per_px`、`part_min_area`、`part_max_area`、`max_parts`）、十字の範囲（`cross_min_size`、`cross_max_size`、`cross_max_elongation`）、ターゲットの許容差（`pitch_tolerance`）、フォルダ内の画像の最大数（`batch_max_files`）です。 正方形の最小の充填率と、任意の角度の十字の最小スコアは `square_min_fill` と `cross_min_score` です。 正方形の辺の範囲と、その枠が幅よりどれだけ長くてよいかは、十字のものとは別に `square_min_size`、`square_max_size`、`square_max_elongation` です。 レンズは `lens_k1` と `lens_k2`（`lens` が求める値）で、補正後にグリッドが格子から離れてよい最大値は `lens_max_rms` です。 `inspect` が読むパッケージの表は `package_table`、部品がパッケージから外れてよい最大値と回転の最大値は `inspect_tolerance` と `inspect_max_angle` です。 HTML レポートが画像に警告を出すスコアのしきい値は `report_low_score` です。 スケールを決めるターゲットのマーク間隔は `pitch_mm`、書き出すファイルが既存のファイルに上書きしてよいかは `replace_output`（既定は no）です。 `shots` の計画で隣り合う画像の重なりと部品の周りの余白は `shots_overlap` と `shots_margin` です。 ウィンドウがレンズの格子を描くかどうかは `show_lens_grid` です。 `inspect` とウィンドウが部品を照合するパッケージは `inspect_package`、`shots` とウィンドウが撮影を計画する部品のサイズは `shots_part_width` と `shots_part_height` です（0 と 0 ならパッケージの本体）。 リングマークには、外径の範囲（`ring_min_diameter`、`ring_max_diameter`）、内径と外径の比の範囲（`ring_min_ratio`、`ring_max_ratio`）、帯の最小充填率（`ring_min_fill`）、細長さ（`ring_max_elongation`）、2 種類の大きさを分ける直径（`ring_split`、0 で自動）、大きさの間隔（`ring_size_gap`）があります。 ピックした部品の画像でのノズル軸は `nozzle_x_mm` と `nozzle_y_mm`、保持してよい最大距離と最大回転は `pick_max_offset_mm` と `pick_max_turn_deg` です（0 は確認しない）。 正しく保持された部品の回転は `nominal_angle_deg`、カメラが部品を鏡像で見るかどうかは `pick_mirror`、画像のチェックは `quality_check` と下限 `quality_min_contrast`、`quality_min_mean`、`quality_max_mean`、`quality_min_sharpness`（0：確認しない）です。 サーバーは `server_address`、`server_token`、`server_machine`、`server_timeout_s`、`server_retries` です（アドレスが空ならサーバーなし）。相関による検索は `correlate_diameter` と `correlate_min_score`、補正した画像の最大の辺は `rectify_max_side`、パッド列の許容差は `pads_tolerance`、2 枚の画像の比較は `diff_threshold`、`diff_min_area`、`diff_max_changed` です。トークンを含む `vision.cfg` は非公開にしてください。
 
 ## 🚀 クイックスタート
 
@@ -155,7 +167,7 @@ cargo run --release --features gui --bin eh3d-vision-gui -- --shot screen.png --
 
 ## 🧪 テスト
 
-テストは 300 件あります（`cargo test`、CI では Windows と Linux で実行）。通常ケース、境界ケース、破損入力を確認し、空のファイル、ゴミデータ、途中で切れたファイルでもパニックしません。CI は `cargo fmt --check`、警告をエラーにした `cargo clippy`、`python -I tools/ci_validate.py` も実行します。
+テストは 390 件あります（`cargo test`、CI では Windows と Linux で実行）。通常ケース、境界ケース、破損入力を確認し、空のファイル、ゴミデータ、途中で切れたファイルでもパニックしません。CI は `cargo fmt --check`、警告をエラーにした `cargo clippy`、`python -I tools/ci_validate.py` も実行します。
 
 ## 🏗️ ビルドとリリース
 
@@ -184,6 +196,8 @@ EH3D-VISION-STUDIO/
 │   ├── align.rs                                 基板の回転・シフト・サイズと設計との対応付け
 │   ├── batch.rs                                 フォルダ内の画像をまとめて処理し、CSV レポートを出力
 │   ├── config.rs                                設定ファイル：調整されたすべての値
+│   ├── correlate.rs                             目的の直径の円板との相関で見つける丸いマーク
+│   ├── diff.rs                                  同じ場所の2枚の画像の比較：何が、どこで、どれだけ変わったか
 │   ├── cross.rs                                 十字形の基準マーク
 │   ├── fiducial.rs                              画像の円形マーク：しきい値・領域・検査
 │   ├── flatten.rs                               画像のムラのある照明を取り除く
@@ -198,8 +212,11 @@ EH3D-VISION-STUDIO/
 │   ├── limit.rs                                 サイズ上限付きのファイル読み込みと、拒否ごとのコード
 │   ├── measure.rs                               部品をミリメートルで計測し、CSV と JSON を出力
 │   ├── offset.rs                                ピックした部品の保持位置と補正、トレイの補正表、ノズル軸
+│   ├── pads.rs                                  パッドの列：ピッチ、そのばらつき、列からのパッドのずれ
 │   ├── panels.rs                                ウィンドウのパネル：レンズ・パッケージ・撮影計画・ピックのずれ・画像チェック
+│   ├── perspective.rs                           遠近補正：4つの角から、真上から見たように描き直した画像
 │   ├── scale.rs                                 ピクセルからミリメートルへ、レンズの放射歪み
+│   ├── server.rs                                EH3Dサーバーへの経路：結果の送信、設定の読み取り、テスト用のメモリ上サーバー
 │   ├── square.rs                                四角いマークと任意の角度に回った十字
 │   ├── tools.rs                                 サイドパネルの画像ツール：図形・部品・フォルダレポート・間隔によるスケール
 │   ├── shot.rs                                  ウィンドウの画像モード（--shot）：画面なしで読み取り・検証される引数
@@ -214,6 +231,8 @@ EH3D-VISION-STUDIO/
 │   ├── strict.rs                                コマンドラインのテスト：知らないオプションと語
 │   ├── read_limit.rs                            コマンドラインが読むファイルのサイズ上限のテスト
 │   ├── exchange.rs                              画像を読んでファイルを書くコマンドのテスト
+│   ├── commands.rs                              correlate・rectify・pads・diff・server コマンドのテスト
+│   ├── fuzz.rs                                  固定シードのランダム入力によるテスト：パニックしてはならない
 │   ├── shot_sample.rs                           サンプルが画像用ウィンドウで開くことのテスト
 │   └── vision.rs                                ライブラリとコマンドラインのテスト
 ├── examples/
@@ -246,6 +265,7 @@ EH3D-VISION-STUDIO/
 * ウィンドウはまだ画面で確認していません。マークは位置で設計と対応付けるため、大きく回転した基板や欠けたマークは推測せずに拒否されます。
 * 機械でも実際のファイルの集まりでも試しておらず、独立したレビューも受けていません。
 * 読むのは画像ファイルでライブカメラではなく、見つけるのは丸いマーク、四角いマーク、十字形のマークだけで、テストが描いた画像で試しただけで、実際の基板の写真では試していません。部品の回転はその画素から長方形として測るため、長方形でない部品には長軸の回転が与えられます。
+* サーバーのルート（機械ごとの `vision/config` と `vision/results`）はサーバーの `cam` プラグインが提供する予定のもので、現時点ではメモリ上のサーバーとループバックのソケットに対してのみテストしています。`src/server.rs` の薄い層は、スイートの共有クライアントが公開された時点で置き換える予定です。
 
 **次のステップ**
 

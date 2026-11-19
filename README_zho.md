@@ -17,7 +17,7 @@
 
 ---
 
-**诚实检查 - 当前真正能运行的内容：** 一个 Rust 库和一个命令行程序（`eh3d-vision`），有 300 个在电脑上运行的测试：在图像中找到圆形基准点，把像素转换为毫米，并计算使电路板回到设计位置所需的旋转和平移。有一个窗口（用 `--features gui` 构建，程序为 `eh3d-vision-gui`），可打开图像、显示带坐标的标记、设定比例、用网格拟合镜头畸变、与设计对齐并导出 ISOCAM 选项，但窗口尚未在屏幕上看过；没有在机器上试过，也没有用大量真实文件验证过。
+**诚实检查 - 当前真正能运行的内容：** 一个 Rust 库和一个命令行程序（`eh3d-vision`），有 390 个在电脑上运行的测试：在图像中找到圆形基准点，把像素转换为毫米，并计算使电路板回到设计位置所需的旋转和平移。有一个窗口（用 `--features gui` 构建，程序为 `eh3d-vision-gui`），可打开图像、显示带坐标的标记、设定比例、用网格拟合镜头畸变、与设计对齐并导出 ISOCAM 选项，但窗口尚未在屏幕上看过；没有在机器上试过，也没有用大量真实文件验证过。
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | 版本 | `0.0.8` |
 | 成熟度 | 可用 |
-| 测试 | 300 |
+| 测试 | 390 |
 | 技术栈 | Rust |
 | 真实硬件 | 未试过：这里的任何内容都没有在机器上运行过 |
 
@@ -46,7 +46,7 @@
 |---|---|---|
 | 核心 | 🟡 | 在图像中找到圆形基准点，把像素转换为毫米，并计算使电路板回到设计位置所需的旋转和平移；已在电脑上用正常和损坏的输入测试，未用大量真实文件验证。 |
 | 命令行 | 🟡 | `eh3d-vision` 运行与库相同的函数并打印结果；每个错误都以消息和非零退出码返回。 |
-| 测试 | 🟡 | 300 个测试通过（`cargo test`），包含正常情况、边界情况和损坏的输入，以及位于电路板上方的模拟相机：它会加入噪声、曝光错误、失效或缺失的画面、看起来像标记的灰尘或被截断的图像文件，并会被再次请求。 |
+| 测试 | 🟡 | 390 个测试通过（`cargo test`），包含正常情况、边界情况和损坏的输入，以及位于电路板上方的模拟相机：它会加入噪声、曝光错误、失效或缺失的画面、看起来像标记的灰尘或被截断的图像文件，并会被再次请求。 |
 | 安全 | 🟡 | 纯安全 Rust（`forbid(unsafe_code)`）：处理收到的文件时不会 panic，错误的值会返回带原因的错误；没有独立审查。 |
 | 窗口 | 🟠 | 已编写（egui，`--features gui`，程序 `eh3d-vision-gui`）：打开或拖入图像，查看带坐标的标记，用已知大小的标记设定比例，用网格拟合镜头畸变，与 CSV 设计对齐并导出 ISOCAM 选项；其逻辑已测试，但尚未构建，也未在屏幕上看过。 |
 | 真实硬件 | 🔴 | 未试过：这里的任何内容都没有在机器上运行过。 |
@@ -101,6 +101,12 @@ EH3D-VISION-STUDIO 是 EH3D Fabrication Suite 的一个程序。它以库和命�
 * **窗口中的镜头（两个系数）：** 网格按钮像 `eh3d-vision lens` 一样拟合 `k1` 和 `k2`（超过面板中的 `lens_max_rms` 就拒绝）；窗口画出拟合后的镜头把网格点阵放到的位置，便于与找到的标记比较（`show_lens_grid`），可以不用网格而取 `vision.cfg` 中的 `lens_k1` 和 `lens_k2`，也可以保存为 `<图像>-lens.cfg`。
 * **窗口中的零件与封装比对，以及大型零件的拍摄：** 侧边栏读取封装表（`package_table`），把测得的零件与封装 `inspect_package` 比对（每个零件一行，绿色或红色，并说明不合格原因；`inspect_tolerance` 和 `inspect_max_angle` 是面板中的字段），并把判定保存为 `<图像>-inspection.csv`，即 `eh3d-vision inspect` 的文件；还能为大于视野的零件规划所需拍摄（视野是以毫米计的图像，零件是 `shots_part_width` 乘 `shots_part_height` 或封装本体，另有 `shots_overlap` 和 `shots_margin`），列出相机的去处并保存为 `<图像>-shots.csv`，即 `eh3d-vision shots` 的文件。未给出 `--package` 或零件尺寸时，命令行使用同样的两个新键。
 * **大型零件的拍摄规划：** `eh3d-vision shots --package 名称 --fov-w MM --fov-h MM`（或 `--body-long` 与 `--body-short`）以 CSV 列出相机位置（相对零件中心的毫米数），使超过视场的零件完全可见；相邻图像重叠 `shots_overlap`，并留有 `shots_margin` 的边距；不需要相机。
+* **相关法找标记：** `eh3d-vision correlate 图像 --diameter PX` 把该直径的圆盘滑过图像，在每个位置计算归一化相关（光线变亮或对比度变低都不改变它），因此阈值在光照不均时丢失的标记也能找到；位置精确到像素的小数并附带得分，最好的在前，没有哪个离更好的标记近于一个直径。它需要直径（`correlate_diameter`、`correlate_min_score`），并且比阈值搜索慢，所以耗时过长的图像会被拒绝（`correlate_too_big`）。
+* **透视校正：** `eh3d-vision rectify 图像 --corners X1,Y1,...,X4,Y4 --output 文件.pgm` 根据图像中一个矩形的四个角，把图像重绘为从正上方看到的样子（带双线性采样的单应变换）；不构成凸四边形的角点会被拒绝（`bad_corners`），最大边长为 `rectify_max_side`。
+* **一排焊盘：** `eh3d-vision pads 图像 --mm-per-px V` 把图像中的零件当作焊盘，给出间距（沿最佳拟合直线的距离中位数）、间距的变化、焊盘偏离排线的程度及平均尺寸，格式为 CSV 或 JSON；按 `pads_tolerance` 判定，不合格时为 `fail`，原因为 `pitch`、`row`、`expected`（`--expect-pitch`），退出码为 1。
+* **前后对比：** `eh3d-vision diff 之前 之后` 比较两张同样大小的图像：灰度相差超过 `diff_threshold` 的像素、其占比、平均差和最大差、包围它们的框，以及不少于 `diff_min_area` 像素的区域；`--mask 文件.pgm` 写出变化图，变化超过 `diff_max_changed` 时退出码为 1。
+* **机器的服务器：** `eh3d-vision server health|config|send` 使用与套件其他程序相同的键（`server_address`、`server_token`、`server_machine`、`server_timeout_s`、`server_retries`）：`config` 读取服务器保存的 `vision.cfg` 的值（要么全部接受，要么都不接受；连接相关的键绝不从服务器获取），并写成可用于文件的行；`send quality|offset|pads|diff` 发送该命令的 JSON 结果。重试遵循共享客户端（可能已送达的请求绝不会发送两次），令牌从不打印，并且会警告将经明文 HTTP 发往非本地地址的令牌。这些路由是服务器的 `cam` 插件将提供的路由；测试对象是内存中的服务器（`server::SimServer`）和回环地址上的套接字，而不是真实服务器。
+* **固定种子的测试：** `tests/fuzz.rs` 用一个不读取时钟的生成器输入任意大小的图像、任意位置的角点，以及损坏的配置文件、JSON 和 HTTP 应答；任何情况下都不能崩溃，输出必须合理。
 
 ## 🔒 安全与防护
 
@@ -110,12 +116,13 @@ EH3D-VISION-STUDIO 是 EH3D Fabrication Suite 的一个程序。它以库和命�
 | 没有意义的数字（负数、非有限值、过大的数） | 以指出该值的错误拒绝；不会被舍入成看似合理的值 |
 | 会覆盖其他文件的报告或测量文件 | 只在没有文件的位置写入；覆盖需要 `--replace`，并且绝不会通过链接写入 |
 | 不安全的内存使用 | 带 `forbid(unsafe_code)` 的纯安全 Rust |
+| 令牌在不该出现的地方被显示或发送 | 令牌从不被打印，也不会写入结果；服务器发来的值要么全部接受要么都不接受，连接相关的键（`server_*`）绝不从服务器获取；会警告将经明文 HTTP 发往非本地地址的令牌 |
 
 **没有防御的内容：** 无错误产生的结果不等于经过验证的结果。这里没有任何内容了解机器的极限，程序也没有经过独立审查。请私下报告漏洞（见 [SECURITY.md](SECURITY.md)）。
 
 ## 🔌 接口
 
-库为 `eh3d_vision_studio`（`use eh3d_vision_studio::...`），命令行为 `eh3d-vision`。命令如下；每个命令把结果打印到标准输出，把错误以非零退出码报告到标准错误。没有网络访问。
+库为 `eh3d_vision_studio`（`use eh3d_vision_studio::...`），命令行为 `eh3d-vision`。命令如下；每个命令把结果打印到标准输出，把错误以非零退出码报告到标准错误。只有 `server` 命令使用网络（通过明文 HTTP 连接 `vision.cfg` 中指定的机器的服务器）；其他命令都只处理本地文件。
 
 ```text
 eh3d-vision find IMAGE [--light] [--min-diam PX] [--max-diam PX] [--known-mm D] [--refine] [--undistort] [--flatten PX]   the round marks found (--known-mm gives millimetres, --refine the centre to a fraction of a pixel with a confidence, --undistort straightens the places with lens_k1 and lens_k2 of vision.cfg, --flatten takes uneven light out first)
@@ -132,12 +139,17 @@ eh3d-vision quality IMAGE [--min-contrast V] [--min-mean V] [--max-mean V] [--mi
 eh3d-vision calibrate IMAGE --pitch-mm D [--light] [--tolerance 0.05] [--flatten PX]   the millimetres of a pixel from a target whose neighbouring marks are D millimetres apart
 eh3d-vision measure IMAGE [--mm-per-px V] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   the parts of a picture: centre, turn, length, width and area in millimetres, as a CSV or JSON file
 eh3d-vision batch FOLDER [--light] [--flatten PX] [--report FILE.csv] [--html FILE.html] [--lang CODE] [--replace]   every PNG and PGM picture of a folder: marks, scores and diameters, or the code of what went wrong, one line each; --html writes a page that stands alone, with a drawing of each picture and the warnings, in the language of --lang or of vision.cfg
+eh3d-vision correlate IMAGE [--diameter PX] [--min-score S] [--light] [--flatten PX]   the round marks found by sliding a disc of that diameter over the picture and working out the correlation at every place (a mark that the search by threshold loses on uneven light), with the place to a fraction of a pixel and the score
+eh3d-vision rectify IMAGE --corners X1,Y1,X2,Y2,X3,Y3,X4,Y4 --output FILE.pgm [--size WxH] [--fill V] [--replace]   the picture drawn again as seen from straight above, from the four corners of a rectangle in it (top left, top right, bottom right, bottom left, in pixels)
+eh3d-vision pads IMAGE [--mm-per-px V] [--expect-pitch MM] [--tolerance F] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   a row of pads: the pitch, how much it varies, how far the pads lie from the row and their size; exit 1 when the pitch varies, a pad is off the row or the pitch is not the one asked for
+eh3d-vision diff BEFORE AFTER [--threshold V] [--min-area PX] [--max-changed F] [--mask FILE.pgm] [--format csv|json] [--output FILE] [--replace]   two pictures of the same size compared: how many pixels changed, how much, where and in how many regions; exit 1 when more than --max-changed of the pixels changed
+eh3d-vision server health|config|send KIND ... [--address HOST:PORT] [--machine ID]   the EH3D server of the machine (server_address, server_token and server_machine of vision.cfg): health asks whether it answers, config reads the values of the configuration file that it holds (written as lines for vision.cfg with --output, never over a file without --replace), send quality|offset|pads|diff takes the arguments of the command of that name and sends its result as JSON
 eh3d-vision-gui [IMAGE] [DESIGN.csv]   the window (a build with --features gui); on Windows it opens with no console
 ```
 
 ## ⚙️ 配置
 
-调校的数值保存在简单的 `键 = 值` 文件中，而不是代码里：程序启动所在文件夹或其旁边的 `vision.cfg`（变量 `EH3D_VISION_CONFIG` 可指定另一个文件）。它设定窗口语言、标记是深色还是浅色、阈值、直径范围、标记的填充率和伸长率、用来设定比例的标记大小、网格的列数和行数、对齐是否可以改变尺寸、对齐必须满足的限度以及读取的最大文件。`examples/vision.cfg` 列出每个键及其含义和程序启动时的值；文件不存在就使用这些值，有错误的文件会连同行号被拒绝。命令行中同样的内容以选项给出（见接口）。它还保存其他调好的值：置信度（`refine_subpixel`、`full_contrast`）、光照窗口（`flatten_window`）、比例与零件大小（`mm_per_px`、`part_min_area`、`part_max_area`、`max_parts`）、十字的范围（`cross_min_size`、`cross_max_size`、`cross_max_elongation`）、靶标的容差（`pitch_tolerance`）以及文件夹中图片的最大数量（`batch_max_files`）。 方形的最小填充率和任意角度十字的最低得分是 `square_min_fill` 和 `cross_min_score`。 方形边长的范围以及其外框可比宽度长多少是 `square_min_size`、`square_max_size` 和 `square_max_elongation`，与十字的分开。 镜头由 `lens_k1` 和 `lens_k2`（由 `lens` 求出）表示，校正后网格离其晶格的最大允许距离是 `lens_max_rms`。 `inspect` 读取的封装表是 `package_table`，零件与其封装的最大允许偏差和最大旋转角是 `inspect_tolerance` 和 `inspect_max_angle`。 HTML 报告对某张图像发出警告的得分下限是 `report_low_score`。 设定比例的标靶标记之间的距离是 `pitch_mm`，`replace_output` 决定写出的文件是否可以覆盖已存在的文件（默认不可以）。 `shots` 规划中相邻图像的重叠量和零件周围的边距是 `shots_overlap` 和 `shots_margin`。 窗口是否绘制镜头点阵由 `show_lens_grid` 决定。 `inspect` 和窗口用来比对零件的封装是 `inspect_package`，`shots` 和窗口为其规划拍摄的零件尺寸是 `shots_part_width` 和 `shots_part_height`（0 和 0：使用封装本体）。 圆环标记有外径范围（`ring_min_diameter`、`ring_max_diameter`）、内外径之比的范围（`ring_min_ratio`、`ring_max_ratio`）、环带的最小填充率（`ring_min_fill`）、伸长度（`ring_max_elongation`）、区分两种尺寸的直径（`ring_split`，0 表示自动查找）以及尺寸之间的间隔（`ring_size_gap`）。 被拾取零件图像中的吸嘴轴线是 `nozzle_x_mm` 和 `nozzle_y_mm`，允许持放的最大距离和最大旋转是 `pick_max_offset_mm` 和 `pick_max_turn_deg`（0：不检查）。 零件被正确吸取时的旋转角是 `nominal_angle_deg`，相机看到的零件是否为镜像是 `pick_mirror`，图像检查是 `quality_check` 及下限 `quality_min_contrast`、`quality_min_mean`、`quality_max_mean` 和 `quality_min_sharpness`（0：不检查）。
+调校的数值保存在简单的 `键 = 值` 文件中，而不是代码里：程序启动所在文件夹或其旁边的 `vision.cfg`（变量 `EH3D_VISION_CONFIG` 可指定另一个文件）。它设定窗口语言、标记是深色还是浅色、阈值、直径范围、标记的填充率和伸长率、用来设定比例的标记大小、网格的列数和行数、对齐是否可以改变尺寸、对齐必须满足的限度以及读取的最大文件。`examples/vision.cfg` 列出每个键及其含义和程序启动时的值；文件不存在就使用这些值，有错误的文件会连同行号被拒绝。命令行中同样的内容以选项给出（见接口）。它还保存其他调好的值：置信度（`refine_subpixel`、`full_contrast`）、光照窗口（`flatten_window`）、比例与零件大小（`mm_per_px`、`part_min_area`、`part_max_area`、`max_parts`）、十字的范围（`cross_min_size`、`cross_max_size`、`cross_max_elongation`）、靶标的容差（`pitch_tolerance`）以及文件夹中图片的最大数量（`batch_max_files`）。 方形的最小填充率和任意角度十字的最低得分是 `square_min_fill` 和 `cross_min_score`。 方形边长的范围以及其外框可比宽度长多少是 `square_min_size`、`square_max_size` 和 `square_max_elongation`，与十字的分开。 镜头由 `lens_k1` 和 `lens_k2`（由 `lens` 求出）表示，校正后网格离其晶格的最大允许距离是 `lens_max_rms`。 `inspect` 读取的封装表是 `package_table`，零件与其封装的最大允许偏差和最大旋转角是 `inspect_tolerance` 和 `inspect_max_angle`。 HTML 报告对某张图像发出警告的得分下限是 `report_low_score`。 设定比例的标靶标记之间的距离是 `pitch_mm`，`replace_output` 决定写出的文件是否可以覆盖已存在的文件（默认不可以）。 `shots` 规划中相邻图像的重叠量和零件周围的边距是 `shots_overlap` 和 `shots_margin`。 窗口是否绘制镜头点阵由 `show_lens_grid` 决定。 `inspect` 和窗口用来比对零件的封装是 `inspect_package`，`shots` 和窗口为其规划拍摄的零件尺寸是 `shots_part_width` 和 `shots_part_height`（0 和 0：使用封装本体）。 圆环标记有外径范围（`ring_min_diameter`、`ring_max_diameter`）、内外径之比的范围（`ring_min_ratio`、`ring_max_ratio`）、环带的最小填充率（`ring_min_fill`）、伸长度（`ring_max_elongation`）、区分两种尺寸的直径（`ring_split`，0 表示自动查找）以及尺寸之间的间隔（`ring_size_gap`）。 被拾取零件图像中的吸嘴轴线是 `nozzle_x_mm` 和 `nozzle_y_mm`，允许持放的最大距离和最大旋转是 `pick_max_offset_mm` 和 `pick_max_turn_deg`（0：不检查）。 零件被正确吸取时的旋转角是 `nominal_angle_deg`，相机看到的零件是否为镜像是 `pick_mirror`，图像检查是 `quality_check` 及下限 `quality_min_contrast`、`quality_min_mean`、`quality_max_mean` 和 `quality_min_sharpness`（0：不检查）。 服务器由 `server_address`、`server_token`、`server_machine`、`server_timeout_s` 和 `server_retries` 设定（地址为空表示没有服务器）；相关法搜索是 `correlate_diameter` 和 `correlate_min_score`；校正后图像的最大边长是 `rectify_max_side`；一排焊盘的容差是 `pads_tolerance`；两张图像的比较是 `diff_threshold`、`diff_min_area` 和 `diff_max_changed`。含有令牌的 `vision.cfg` 应保持私密。
 
 ## 🚀 快速开始
 
@@ -155,7 +167,7 @@ cargo run --release --features gui --bin eh3d-vision-gui -- --shot screen.png --
 
 ## 🧪 测试
 
-测试套件有 300 个测试（`cargo test`，CI 在 Windows 和 Linux 上运行）。它们检查正常情况、边界情况和损坏的输入：空文件、乱码和被截断的文件绝不会 panic。CI 还运行 `cargo fmt --check`、把警告当作错误的 `cargo clippy` 以及 `python -I tools/ci_validate.py`。
+测试套件有 390 个测试（`cargo test`，CI 在 Windows 和 Linux 上运行）。它们检查正常情况、边界情况和损坏的输入：空文件、乱码和被截断的文件绝不会 panic。CI 还运行 `cargo fmt --check`、把警告当作错误的 `cargo clippy` 以及 `python -I tools/ci_validate.py`。
 
 ## 🏗️ 构建与发布
 
@@ -184,6 +196,8 @@ EH3D-VISION-STUDIO/
 │   ├── align.rs                                 电路板的旋转、平移和尺寸及其与设计的配对
 │   ├── batch.rs                                 一次处理整个文件夹的图片，并生成 CSV 报告
 │   ├── config.rs                                配置文件：每个调校过的数值
+│   ├── correlate.rs                             通过与所需直径圆盘的相关性找到圆形标记
+│   ├── diff.rs                                  比较同一位置的两张图像：什么变了、在哪里、变了多少
 │   ├── cross.rs                                 十字形基准标记
 │   ├── fiducial.rs                              图像中的圆形标记：阈值、斑点和检查
 │   ├── flatten.rs                               去除图片中不均匀的光照
@@ -198,8 +212,11 @@ EH3D-VISION-STUDIO/
 │   ├── limit.rs                                 带大小上限的文件读取，每种拒绝都有代码
 │   ├── measure.rs                               以毫米测量零件，输出 CSV 和 JSON 文件
 │   ├── offset.rs                                被拾取零件的持放位置、修正量、托盘修正表和吸嘴轴线
+│   ├── pads.rs                                  一排焊盘：间距、间距的变化以及焊盘偏离排线的程度
 │   ├── panels.rs                                窗口面板：镜头、封装、拍摄计划、拾取偏移和图像检查
+│   ├── perspective.rs                           透视校正：根据四个角点，重绘为从正上方看到的图像
 │   ├── scale.rs                                 像素到毫米，以及镜头的径向畸变
+│   ├── server.rs                                通往EH3D服务器的通道：发送结果、读取配置，以及用于测试的内存服务器
 │   ├── square.rs                                方形标记与任意角度旋转的十字
 │   ├── tools.rs                                 侧边栏中针对图像的工具：形状、零件、文件夹报告、由间距求比例
 │   ├── shot.rs                                  窗口的截图模式（--shot）：无需屏幕即可读取和检查其参数
@@ -214,6 +231,8 @@ EH3D-VISION-STUDIO/
 │   ├── strict.rs                                命令行测试：它不认识的选项和词
 │   ├── read_limit.rs                            命令行所读文件的大小上限测试
 │   ├── exchange.rs                              读取图片并写出文件的命令的测试
+│   ├── commands.rs                              correlate、rectify、pads、diff 和 server 命令的测试
+│   ├── fuzz.rs                                  固定种子的随机输入测试：任何情况下都不能崩溃
 │   ├── shot_sample.rs                           示例能在截图窗口中打开的测试
 │   └── vision.rs                                库和命令行的测试
 ├── examples/
@@ -246,6 +265,7 @@ EH3D-VISION-STUDIO/
 * 窗口尚未在屏幕上看过；标记按位置与设计配对，因此旋转很大的电路板或缺失的标记会被拒绝，而不是被猜测。
 * 没有在机器上试过，也没有用大量真实文件验证过，也没有独立审查。
 * 它读取图像文件而不是实时摄像头，只能找圆形、方形和十字形标记，只在测试绘制的图像上试过，没有用真实电路板的照片试过。零件的角度按矩形由其像素测得，因此不是矩形的零件得到的是其长轴的角度。
+* 服务器的路由（每台机器的 `vision/config` 和 `vision/results`）是其 `cam` 插件将提供的路由；目前只针对内存中的服务器和回环地址上的套接字进行测试，`src/server.rs` 这层薄封装将在套件的共享客户端发布后被替换。
 
 **下一步**
 

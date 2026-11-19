@@ -119,6 +119,32 @@
           }
         },
         {
+          "name": "correlate.rs",
+          "desc": {
+            "en": "round marks found by correlation with a disc of the wanted diameter",
+            "es": "marcas redondas halladas por correlación con un disco del diámetro buscado",
+            "de": "runde Marken, durch Korrelation mit einer Scheibe des gesuchten Durchmessers gefunden",
+            "fr": "marques rondes trouvées par corrélation avec un disque du diamètre voulu",
+            "it": "marcatori rotondi trovati per correlazione con un disco del diametro voluto",
+            "ja": "目的の直径の円板との相関で見つける丸いマーク",
+            "zh": "通过与所需直径圆盘的相关性找到圆形标记",
+            "pt": "marcas redondas encontradas por correlação com um disco do diâmetro pretendido"
+          }
+        },
+        {
+          "name": "diff.rs",
+          "desc": {
+            "en": "two pictures of the same place compared: what changed, where and how much",
+            "es": "dos imágenes del mismo sitio comparadas: qué cambió, dónde y cuánto",
+            "de": "zwei Bilder derselben Stelle verglichen: was sich geändert hat, wo und wie stark",
+            "fr": "deux images du même endroit comparées : ce qui a changé, où et de combien",
+            "it": "due immagini dello stesso punto confrontate: cosa è cambiato, dove e di quanto",
+            "ja": "同じ場所の2枚の画像の比較：何が、どこで、どれだけ変わったか",
+            "zh": "比较同一位置的两张图像：什么变了、在哪里、变了多少",
+            "pt": "duas imagens do mesmo sítio comparadas: o que mudou, onde e quanto"
+          }
+        },
+        {
           "name": "cross.rs",
           "desc": {
             "en": "cross-shaped fiducial marks",
@@ -301,6 +327,19 @@
           }
         },
         {
+          "name": "pads.rs",
+          "desc": {
+            "en": "a row of pads: the pitch, how much it varies and how far a pad is from the row",
+            "es": "una fila de pads: el paso, cuánto varía y cuánto se aparta un pad de la fila",
+            "de": "eine Reihe von Pads: der Abstand, seine Schwankung und die Abweichung eines Pads von der Reihe",
+            "fr": "une rangée de pastilles : le pas, sa variation et l'écart d'une pastille à la rangée",
+            "it": "una fila di pad: il passo, quanto varia e quanto un pad si scosta dalla fila",
+            "ja": "パッドの列：ピッチ、そのばらつき、列からのパッドのずれ",
+            "zh": "一排焊盘：间距、间距的变化以及焊盘偏离排线的程度",
+            "pt": "uma fila de pads: o passo, quanto varia e quanto um pad se afasta da fila"
+          }
+        },
+        {
           "name": "panels.rs",
           "desc": {
             "en": "the panels of the window: lens, packages, plan of pictures, pick offsets and picture check",
@@ -314,6 +353,19 @@
           }
         },
         {
+          "name": "perspective.rs",
+          "desc": {
+            "en": "perspective corrected: a picture drawn again as seen from above, from four corners",
+            "es": "perspectiva corregida: la imagen dibujada de nuevo vista desde arriba, desde cuatro esquinas",
+            "de": "Perspektive korrigiert: das Bild neu gezeichnet, von oben gesehen, aus vier Ecken",
+            "fr": "perspective corrigée : l'image redessinée vue d'en haut, à partir de quatre coins",
+            "it": "prospettiva corretta: l'immagine ridisegnata vista dall'alto, da quattro angoli",
+            "ja": "遠近補正：4つの角から、真上から見たように描き直した画像",
+            "zh": "透视校正：根据四个角点，重绘为从正上方看到的图像",
+            "pt": "perspetiva corrigida: a imagem desenhada de novo vista de cima, a partir de quatro cantos"
+          }
+        },
+        {
           "name": "scale.rs",
           "desc": {
             "en": "pixels to millimetres and the radial distortion of the lens",
@@ -324,6 +376,19 @@
             "ja": "ピクセルからミリメートルへ、レンズの放射歪み",
             "zh": "像素到毫米，以及镜头的径向畸变",
             "pt": "de píxeis para milímetros e a distorção radial da objetiva"
+          }
+        },
+        {
+          "name": "server.rs",
+          "desc": {
+            "en": "the way to the EH3D server: results sent, configuration read, a server in memory for tests",
+            "es": "el camino al servidor EH3D: resultados enviados, configuración leída, un servidor en memoria para pruebas",
+            "de": "der Weg zum EH3D-Server: Ergebnisse senden, Konfiguration lesen, ein Server im Speicher für Tests",
+            "fr": "le chemin vers le serveur EH3D : résultats envoyés, configuration lue, un serveur en mémoire pour les tests",
+            "it": "il percorso verso il server EH3D: risultati inviati, configurazione letta, un server in memoria per i test",
+            "ja": "EH3Dサーバーへの経路：結果の送信、設定の読み取り、テスト用のメモリ上サーバー",
+            "zh": "通往EH3D服务器的通道：发送结果、读取配置，以及用于测试的内存服务器",
+            "pt": "o caminho para o servidor EH3D: resultados enviados, configuração lida, um servidor em memória para testes"
           }
         },
         {
@@ -500,6 +565,32 @@
             "ja": "画像を読んでファイルを書くコマンドのテスト",
             "zh": "读取图片并写出文件的命令的测试",
             "pt": "testes dos comandos que leem uma imagem e escrevem um ficheiro"
+          }
+        },
+        {
+          "name": "commands.rs",
+          "desc": {
+            "en": "tests of the commands correlate, rectify, pads, diff and server",
+            "es": "pruebas de las órdenes correlate, rectify, pads, diff y server",
+            "de": "Tests der Befehle correlate, rectify, pads, diff und server",
+            "fr": "tests des commandes correlate, rectify, pads, diff et server",
+            "it": "test dei comandi correlate, rectify, pads, diff e server",
+            "ja": "correlate・rectify・pads・diff・server コマンドのテスト",
+            "zh": "correlate、rectify、pads、diff 和 server 命令的测试",
+            "pt": "testes dos comandos correlate, rectify, pads, diff e server"
+          }
+        },
+        {
+          "name": "fuzz.rs",
+          "desc": {
+            "en": "tests with random input and a fixed seed: nothing may panic",
+            "es": "pruebas con entrada aleatoria y semilla fija: nada debe entrar en pánico",
+            "de": "Tests mit Zufallseingaben und festem Startwert: nichts darf abstürzen",
+            "fr": "tests avec entrées aléatoires et graine fixe : rien ne doit paniquer",
+            "it": "test con input casuale e seme fisso: niente deve andare in panic",
+            "ja": "固定シードのランダム入力によるテスト：パニックしてはならない",
+            "zh": "固定种子的随机输入测试：任何情况下都不能崩溃",
+            "pt": "testes com entrada aleatória e semente fixa: nada pode entrar em pânico"
           }
         },
         {
