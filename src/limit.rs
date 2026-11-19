@@ -43,6 +43,11 @@ pub const UNWRITABLE: &str = "file_unwritable";
 /// Writes `text` to a new file. An existing file is never replaced unless `replace` is true, and even then not when it is a link (a link could lead anywhere); the refusals start with a
 /// code that does not change (`file_exists`, `file_unwritable`).
 pub fn write_text(path: &Path, text: &str, replace: bool) -> Result<(), String> {
+    write_bytes(path, text.as_bytes(), replace)
+}
+
+/// Writes `bytes` to a new file, with the same rules as `write_text` (a picture is written with this).
+pub fn write_bytes(path: &Path, bytes: &[u8], replace: bool) -> Result<(), String> {
     use std::io::Write;
     let shown = path.display();
     let mut options = std::fs::OpenOptions::new();
@@ -67,6 +72,6 @@ pub fn write_text(path: &Path, text: &str, replace: bool) -> Result<(), String> 
             format!("{UNWRITABLE}: {shown}: {e}")
         }
     })?;
-    file.write_all(text.as_bytes())
+    file.write_all(bytes)
         .map_err(|e| format!("{UNWRITABLE}: {shown}: {e}"))
 }

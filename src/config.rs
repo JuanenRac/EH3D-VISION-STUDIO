@@ -14,7 +14,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 66] = [
+pub const KEYS: [&str; 78] = [
     "language",
     "polarity",
     "threshold",
@@ -81,6 +81,18 @@ pub const KEYS: [&str; 66] = [
     "quality_min_mean",
     "quality_max_mean",
     "quality_min_sharpness",
+    "server_address",
+    "server_token",
+    "server_machine",
+    "server_timeout_s",
+    "server_retries",
+    "correlate_diameter",
+    "correlate_min_score",
+    "rectify_max_side",
+    "pads_tolerance",
+    "diff_threshold",
+    "diff_min_area",
+    "diff_max_changed",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -191,6 +203,24 @@ pub struct Config {
     pub quality_min_mean: f64,
     pub quality_max_mean: f64,
     pub quality_min_sharpness: f64,
+    /// The server of the machine: `host:port` (empty means that there is none), the token of this program, the id of the machine, how long one try may take in seconds and how many more
+    /// tries follow a failure on the network.
+    pub server_address: String,
+    pub server_token: String,
+    pub server_machine: String,
+    pub server_timeout_s: u64,
+    pub server_retries: u32,
+    /// `correlate`: the diameter in pixels of the disc that is looked for (the search by correlation needs it) and the least correlation that counts as a mark.
+    pub correlate_diameter: f64,
+    pub correlate_min_score: f64,
+    /// `rectify`: the largest side in pixels of the picture that is made.
+    pub rectify_max_side: usize,
+    /// `pads`: how much the pitch of a row of pads may vary as a share of the median pitch.
+    pub pads_tolerance: f64,
+    /// `diff`: how much a grey level has to differ for a pixel to count as changed, the fewest pixels of a region of changes and the largest share of changed pixels for two pictures to count as the same.
+    pub diff_threshold: u8,
+    pub diff_min_area: u64,
+    pub diff_max_changed: f64,
 }
 
 impl Default for Config {
@@ -263,6 +293,18 @@ impl Default for Config {
             quality_min_mean: 20.0,
             quality_max_mean: 235.0,
             quality_min_sharpness: 0.0,
+            server_address: String::new(),
+            server_token: String::new(),
+            server_machine: String::new(),
+            server_timeout_s: 15,
+            server_retries: 2,
+            correlate_diameter: 20.0,
+            correlate_min_score: 0.8,
+            rectify_max_side: 4096,
+            pads_tolerance: 0.05,
+            diff_threshold: 25,
+            diff_min_area: 4,
+            diff_max_changed: 0.01,
         }
     }
 }
@@ -319,6 +361,33 @@ impl Config {
             min_mean: self.quality_min_mean,
             max_mean: self.quality_max_mean,
             min_sharpness: self.quality_min_sharpness,
+        }
+    }
+
+    /// The settings of the search by correlation that the values make (the polarity is the one of the other searches).
+    pub fn correlate_settings(&self) -> crate::correlate::CorrelateSettings {
+        crate::correlate::CorrelateSettings {
+            polarity: self.polarity,
+            diameter: self.correlate_diameter,
+            min_score: self.correlate_min_score,
+            max_matches: self.max_parts,
+        }
+    }
+
+    /// The settings of the check of a row of pads that the values make (no pitch is asked for: that is an option of the command).
+    pub fn pad_settings(&self) -> crate::pads::PadSettings {
+        crate::pads::PadSettings {
+            tolerance: self.pads_tolerance,
+            expected_pitch_mm: None,
+        }
+    }
+
+    /// The settings of the comparison of two pictures that the values make.
+    pub fn diff_settings(&self) -> crate::diff::DiffSettings {
+        crate::diff::DiffSettings {
+            threshold: self.diff_threshold,
+            min_area: self.diff_min_area,
+            max_changed: self.diff_max_changed,
         }
     }
 
@@ -462,6 +531,25 @@ impl Config {
             "quality_min_mean" => self.quality_min_mean = number(value, key)?,
             "quality_max_mean" => self.quality_max_mean = number(value, key)?,
             "quality_min_sharpness" => self.quality_min_sharpness = number(value, key)?,
+            "server_address" => self.server_address = value.to_string(),
+            "server_token" => self.server_token = value.to_string(),
+            "server_machine" => self.server_machine = value.to_string(),
+            "server_timeout_s" => self.server_timeout_s = count(value, key)? as u64,
+            "server_retries" => {
+                self.server_retries = u32::try_from(count(value, key)?)
+                    .map_err(|_| format!("{key} '{value}' is too large"))?
+            }
+            "correlate_diameter" => self.correlate_diameter = number(value, key)?,
+            "correlate_min_score" => self.correlate_min_score = number(value, key)?,
+            "rectify_max_side" => self.rectify_max_side = count(value, key)?,
+            "pads_tolerance" => self.pads_tolerance = number(value, key)?,
+            "diff_threshold" => {
+                self.diff_threshold = value
+                    .parse::<u8>()
+                    .map_err(|_| format!("{key} '{value}' is not a whole number from 0 to 255"))?
+            }
+            "diff_min_area" => self.diff_min_area = count(value, key)? as u64,
+            "diff_max_changed" => self.diff_max_changed = number(value, key)?,
             "replace_output" => {
                 self.replace_output = match value {
                     "yes" | "true" | "on" => true,
@@ -612,6 +700,21 @@ impl Config {
             return Err("pick_max_turn_deg must be from 0 (not checked) to 90".into());
         }
         crate::quality::check(&self.quality_settings())?;
+        crate::server::ServerSettings::from_config(self).check()?;
+        crate::correlate::check(&self.correlate_settings())
+            .map_err(|e| format!("correlate_diameter and correlate_min_score: {e}"))?;
+        if !(crate::perspective::MIN_SIDE..=crate::perspective::MAX_SIDE_LIMIT)
+            .contains(&self.rectify_max_side)
+        {
+            return Err(format!(
+                "rectify_max_side must be from {} to {}",
+                crate::perspective::MIN_SIDE,
+                crate::perspective::MAX_SIDE_LIMIT
+            ));
+        }
+        crate::pads::check(&self.pad_settings()).map_err(|e| format!("pads_tolerance: {e}"))?;
+        crate::diff::check(&self.diff_settings())
+            .map_err(|e| format!("diff_threshold, diff_min_area and diff_max_changed: {e}"))?;
         if self.ring_size_gap <= 1.0 {
             return Err("ring_size_gap must be above 1".into());
         }
@@ -829,6 +932,29 @@ square_max_size = 20",
 quality_max_mean = 100",
             "quality_max_mean = 300",
             "shots_part_height = -0.5",
+            "server_address = nohost",
+            "server_address = host:0",
+            "server_address = a b:1",
+            "server_token = has space",
+            "server_machine = a/b",
+            "server_timeout_s = 0",
+            "server_timeout_s = 121",
+            "server_timeout_s = soon",
+            "server_retries = 6",
+            "server_retries = -1",
+            "correlate_diameter = 3",
+            "correlate_diameter = 200",
+            "correlate_min_score = 0",
+            "correlate_min_score = 1.1",
+            "rectify_max_side = 1",
+            "rectify_max_side = 16385",
+            "pads_tolerance = 0",
+            "pads_tolerance = 2",
+            "diff_threshold = 255",
+            "diff_threshold = 300",
+            "diff_min_area = 0",
+            "diff_max_changed = 1.5",
+            "diff_max_changed = -0.1",
             "inspect_package = a b",
         ] {
             assert!(Config::parse(text).is_err(), "{text:?} was accepted");

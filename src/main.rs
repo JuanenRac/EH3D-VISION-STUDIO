@@ -8,7 +8,11 @@ use cli_args::{finish, flag, num, switch};
 use eh3d_vision_studio::align::{accept, fit, isocam_args as isocam_lines, pair_nearest};
 use eh3d_vision_studio::batch::{check_detailed, list_pictures, report_csv, summary, NO_MARKS, OK};
 use eh3d_vision_studio::config::Config;
+use eh3d_vision_studio::correlate::{correlate, to_csv as correlate_csv};
 use eh3d_vision_studio::cross::{find_crosses, CrossSettings};
+use eh3d_vision_studio::diff::{
+    compare as diff_compare, mask as diff_mask, to_csv as diff_csv, to_json as diff_json,
+};
 use eh3d_vision_studio::fiducial::{find, refine, Polarity, Settings};
 use eh3d_vision_studio::flatten::flatten;
 use eh3d_vision_studio::image::{from_bytes, Gray};
@@ -18,18 +22,24 @@ use eh3d_vision_studio::inspect::{
 };
 use eh3d_vision_studio::lang::Lang;
 use eh3d_vision_studio::lens::{fit_lens, undistort2};
-use eh3d_vision_studio::limit::{read_limited, read_text_limited, write_text};
+use eh3d_vision_studio::limit::{read_limited, read_text_limited, write_bytes, write_text};
 use eh3d_vision_studio::measure::{measure_parts, to_csv, to_json, Part, PartSettings};
 use eh3d_vision_studio::offset::{
     estimate_nozzle, mirror_parts, nozzle_cfg, pick_offset, pick_offsets, to_csv as offset_csv,
     to_json as offset_json, to_table_csv as offset_table, OffsetSettings,
 };
+use eh3d_vision_studio::pads::{measure_row, to_csv as pads_csv, to_json as pads_json};
+use eh3d_vision_studio::perspective::{parse_corners, rectify};
 use eh3d_vision_studio::points::parse as parse_points;
 use eh3d_vision_studio::quality;
 use eh3d_vision_studio::report::html as report_html;
 use eh3d_vision_studio::ring::find_rings;
 use eh3d_vision_studio::scale::{from_pitch, Scale};
+use eh3d_vision_studio::server::{
+    apply_remote, config_lines, plain_token_warning, Client, ServerSettings,
+};
 use eh3d_vision_studio::shots::{plan as shots_plan, to_csv as shots_csv};
+use eh3d_vision_studio::sim::to_pgm;
 use eh3d_vision_studio::square::{find_squares, find_turned_crosses, ShapeSettings};
 use std::env;
 use std::path::Path;
@@ -51,6 +61,11 @@ const HELP: &str = "eh3d-vision: fiducials in a camera image
   eh3d-vision squares IMAGE [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the square marks found, turned by any angle (centre, side and angle)
   eh3d-vision calibrate IMAGE --pitch-mm D [--light] [--tolerance 0.05] [--flatten PX]   the millimetres of a pixel from a target whose neighbouring marks are D millimetres apart
   eh3d-vision batch FOLDER [--light] [--flatten PX] [--report FILE.csv] [--html FILE.html] [--lang CODE] [--replace]   every PNG and PGM picture of a folder: marks, scores and diameters, or the code of what went wrong, one line each; --html writes a page that stands alone, with a drawing of each picture and the warnings, in the language of --lang or of vision.cfg
+  eh3d-vision correlate IMAGE [--diameter PX] [--min-score S] [--light] [--flatten PX]   the round marks found by sliding a disc of that diameter over the picture and working out the correlation at every place (a mark that the search by threshold loses on uneven light), with the place to a fraction of a pixel and the score
+  eh3d-vision rectify IMAGE --corners X1,Y1,X2,Y2,X3,Y3,X4,Y4 --output FILE.pgm [--size WxH] [--fill V] [--replace]   the picture drawn again as seen from straight above, from the four corners of a rectangle in it (top left, top right, bottom right, bottom left, in pixels)
+  eh3d-vision pads IMAGE [--mm-per-px V] [--expect-pitch MM] [--tolerance F] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   a row of pads: the pitch, how much it varies, how far the pads lie from the row and their size; exit 1 when the pitch varies, a pad is off the row or the pitch is not the one asked for
+  eh3d-vision diff BEFORE AFTER [--threshold V] [--min-area PX] [--max-changed F] [--mask FILE.pgm] [--format csv|json] [--output FILE] [--replace]   two pictures of the same size compared: how many pixels changed, how much, where and in how many regions; exit 1 when more than --max-changed of the pixels changed
+  eh3d-vision server health|config|send KIND ... [--address HOST:PORT] [--machine ID]   the EH3D server of the machine (server_address, server_token and server_machine of vision.cfg): health asks whether it answers, config reads the values of the configuration file that it holds (written as lines for vision.cfg with --output, never over a file without --replace), send quality|offset|pads|diff takes the arguments of the command of that name and sends its result as JSON
 
 IMAGE is a PNG or a PGM file. The CSV files have one point per line: x,y in millimetres, in the same order in both files.";
 
@@ -223,6 +238,126 @@ fn picked_parts(
     } else {
         parts
     })
+}
+
+/// What `pads` and `server send pads` do: the parts of the picture are measured and the row of pads is judged. The text, whether the row passes and a line for the error output.
+fn pads_run(
+    args: &mut Vec<String>,
+    cfg: &Config,
+    json: bool,
+) -> Result<(String, bool, String), String> {
+    let mut s = PartSettings::default();
+    if switch(args, "--light") {
+        s.polarity = Polarity::Light;
+    }
+    let flatten_px = flag(args, "--flatten")?
+        .map(|v| count(&v, "--flatten"))
+        .transpose()?;
+    let mm_per_px = flag(args, "--mm-per-px")?
+        .map(|v| num(&v, "--mm-per-px"))
+        .transpose()?
+        .unwrap_or(cfg.mm_per_px);
+    let mut settings = cfg.pad_settings();
+    if let Some(v) = flag(args, "--tolerance")? {
+        settings.tolerance = num(&v, "--tolerance")?;
+    }
+    settings.expected_pitch_mm = flag(args, "--expect-pitch")?
+        .map(|v| num(&v, "--expect-pitch"))
+        .transpose()?;
+    finish(args, 1)?;
+    let path = args.first().ok_or("pads needs an image")?;
+    if mm_per_px <= 0.0 {
+        return Err(
+            "pads needs the scale: --mm-per-px, or mm_per_px in vision.cfg (the command calibrate works it out)"
+                .into(),
+        );
+    }
+    s.threshold = cfg.threshold;
+    s.min_area_px = cfg.part_min_area;
+    s.max_area_px = cfg.part_max_area;
+    s.max_parts = cfg.max_parts;
+    let img = picture(path, cfg, flatten_px)?;
+    let parts = measure_parts(&img, &s, Scale { mm_per_px })?;
+    let row = measure_row(&parts, &settings)?;
+    let note = format!(
+        "{} pads, pitch {:.4} mm (from {:.4} to {:.4}), {:.4} mm off the row, row at {:+.2} degrees: {}",
+        row.count,
+        row.pitch_mm,
+        row.pitch_min_mm,
+        row.pitch_max_mm,
+        row.row_deviation_mm,
+        row.row_angle_deg,
+        if row.passes() {
+            "good".to_string()
+        } else {
+            format!("refused ({})", row.reasons.join(", "))
+        }
+    );
+    let text = if json {
+        pads_json(&row)
+    } else {
+        pads_csv(&row)
+    };
+    Ok((text, row.passes(), note))
+}
+
+/// What `diff` and `server send diff` do: the two pictures are compared. The text, whether they count as the same and a line for the error output. `--mask` writes the picture of the changes.
+fn diff_run(
+    args: &mut Vec<String>,
+    cfg: &Config,
+    json: bool,
+    replace: bool,
+) -> Result<(String, bool, String), String> {
+    let mut s = cfg.diff_settings();
+    if let Some(v) = flag(args, "--threshold")? {
+        s.threshold = u8::try_from(count(&v, "--threshold")?)
+            .map_err(|_| format!("--threshold '{v}' is not from 0 to 254"))?;
+    }
+    if let Some(v) = flag(args, "--min-area")? {
+        s.min_area = count(&v, "--min-area")? as u64;
+    }
+    if let Some(v) = flag(args, "--max-changed")? {
+        s.max_changed = num(&v, "--max-changed")?;
+    }
+    let mask_file = flag(args, "--mask")?;
+    finish(args, 2)?;
+    let (before, after) = match (args.first(), args.get(1)) {
+        (Some(a), Some(b)) => (a, b),
+        _ => return Err("diff needs two pictures: the one before and the one after".into()),
+    };
+    let a = picture(before, cfg, Some(0))?;
+    let b = picture(after, cfg, Some(0))?;
+    let d = diff_compare(&a, &b, &s)?;
+    if let Some(file) = mask_file {
+        write_bytes(Path::new(&file), &to_pgm(&diff_mask(&a, &b, &s)?), replace)?;
+    }
+    let note = format!(
+        "{} of {} pixels changed ({:.3} percent), {} regions, the largest difference {} levels: {}",
+        d.changed_px,
+        d.total_px,
+        d.changed_share * 100.0,
+        d.regions,
+        d.max_abs,
+        if d.same { "the same" } else { "changed" }
+    );
+    let text = if json { diff_json(&d) } else { diff_csv(&d) };
+    Ok((text, d.same, note))
+}
+
+/// The client of the server for the settings of the configuration file, with `--address` and `--machine` over them.
+fn server_settings(args: &mut Vec<String>, cfg: &Config) -> Result<ServerSettings, String> {
+    let mut s = ServerSettings::from_config(cfg);
+    if let Some(a) = flag(args, "--address")? {
+        s.address = a;
+    }
+    if let Some(m) = flag(args, "--machine")? {
+        s.machine = m;
+    }
+    s.check()?;
+    if let Some(w) = plain_token_warning(&s) {
+        eprintln!("warning: {w}");
+    }
+    Ok(s)
 }
 
 fn run(mut args: Vec<String>) -> Result<(), String> {
@@ -981,6 +1116,197 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 to_csv(&parts)
             };
             deliver(&text, output, replace)
+        }
+        "correlate" => {
+            let cfg = config();
+            let mut s = cfg.correlate_settings();
+            if switch(&mut args, "--light") {
+                s.polarity = Polarity::Light;
+            }
+            if let Some(v) = flag(&mut args, "--diameter")? {
+                s.diameter = num(&v, "--diameter")?;
+            }
+            if let Some(v) = flag(&mut args, "--min-score")? {
+                s.min_score = num(&v, "--min-score")?;
+            }
+            let flatten_px = flag(&mut args, "--flatten")?
+                .map(|v| count(&v, "--flatten"))
+                .transpose()?;
+            finish(&args, 1)?;
+            let path = args.first().ok_or("correlate needs an image")?;
+            let img = picture(path, &cfg, flatten_px)?;
+            let found = correlate(&img, &s)?;
+            print!("{}", correlate_csv(&found));
+            eprintln!(
+                "{} marks of {} pixels with a correlation of {} or more",
+                found.len(),
+                s.diameter,
+                s.min_score
+            );
+            Ok(())
+        }
+        "rectify" => {
+            let replace = switch(&mut args, "--replace");
+            let cfg = config();
+            let corners = parse_corners(
+                &flag(&mut args, "--corners")?
+                    .ok_or("rectify needs --corners X1,Y1,X2,Y2,X3,Y3,X4,Y4")?,
+            )?;
+            let size = flag(&mut args, "--size")?
+                .map(|v| {
+                    let (w, h) = v
+                        .split_once('x')
+                        .ok_or_else(|| format!("--size '{v}' is not WIDTHxHEIGHT"))?;
+                    Ok::<_, String>((count(w, "--size")?, count(h, "--size")?))
+                })
+                .transpose()?;
+            let fill = flag(&mut args, "--fill")?
+                .map(|v| {
+                    v.trim()
+                        .parse::<u8>()
+                        .map_err(|_| format!("--fill '{v}' is not from 0 to 255"))
+                })
+                .transpose()?
+                .unwrap_or(0);
+            let output = flag(&mut args, "--output")?.ok_or("rectify needs --output FILE.pgm")?;
+            finish(&args, 1)?;
+            let path = args.first().ok_or("rectify needs an image")?;
+            let img = picture(path, &cfg, Some(0))?;
+            let out = rectify(&img, &corners, size, fill, cfg.rectify_max_side)?;
+            write_bytes(
+                Path::new(&output),
+                &to_pgm(&out),
+                replace || cfg.replace_output,
+            )?;
+            eprintln!("{} by {} pixels written to {output}", out.w, out.h);
+            Ok(())
+        }
+        "pads" => {
+            let replace = switch(&mut args, "--replace");
+            let cfg = config();
+            let format = flag(&mut args, "--format")?.unwrap_or_else(|| "csv".to_string());
+            let output = flag(&mut args, "--output")?;
+            if !matches!(format.as_str(), "csv" | "json") {
+                return Err(format!("--format '{format}' is not csv or json"));
+            }
+            let (text, passes, note) = pads_run(&mut args, &cfg, format == "json")?;
+            deliver(&text, output, replace || cfg.replace_output)?;
+            eprintln!("{note}");
+            if passes {
+                Ok(())
+            } else {
+                Err("the row of pads is not good".into())
+            }
+        }
+        "diff" => {
+            let replace = switch(&mut args, "--replace");
+            let cfg = config();
+            let format = flag(&mut args, "--format")?.unwrap_or_else(|| "csv".to_string());
+            let output = flag(&mut args, "--output")?;
+            if !matches!(format.as_str(), "csv" | "json") {
+                return Err(format!("--format '{format}' is not csv or json"));
+            }
+            let replace = replace || cfg.replace_output;
+            let (text, same, note) = diff_run(&mut args, &cfg, format == "json", replace)?;
+            deliver(&text, output, replace)?;
+            eprintln!("{note}");
+            if same {
+                Ok(())
+            } else {
+                Err("the pictures are not the same".into())
+            }
+        }
+        "server" => {
+            let replace = switch(&mut args, "--replace");
+            let cfg = config();
+            let settings = server_settings(&mut args, &cfg)?;
+            let output = flag(&mut args, "--output")?;
+            if args.is_empty() {
+                return Err("server needs health, config or send".into());
+            }
+            let sub = args.remove(0);
+            let mut client = Client::tcp(settings).map_err(|e| e.to_string())?;
+            match sub.as_str() {
+                "health" => {
+                    finish(&args, 0)?;
+                    client.health().map_err(|e| e.to_string())?;
+                    println!("ok");
+                    Ok(())
+                }
+                "config" => {
+                    finish(&args, 0)?;
+                    let pairs = client.fetch_config().map_err(|e| e.to_string())?;
+                    let (_, done) = apply_remote(&cfg, &pairs)?;
+                    let taken: Vec<(String, String)> = pairs
+                        .into_iter()
+                        .filter(|p| done.applied.contains(&p.0))
+                        .collect();
+                    deliver(&config_lines(&taken), output, replace || cfg.replace_output)?;
+                    eprintln!(
+                        "{} values from the server, {} left out{}",
+                        done.applied.len(),
+                        done.ignored.len(),
+                        if done.ignored.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" ({})", done.ignored.join(", "))
+                        }
+                    );
+                    Ok(())
+                }
+                "send" => {
+                    if args.is_empty() {
+                        return Err("server send needs quality, offset, pads or diff".into());
+                    }
+                    let kind = args.remove(0);
+                    let (json, passes) = match kind.as_str() {
+                        "quality" => {
+                            finish(&args, 1)?;
+                            let path = args.first().ok_or("server send quality needs an image")?;
+                            let img = picture(path, &cfg, Some(0))?;
+                            let q = quality::measure(&img)?;
+                            let why = quality::reasons(&q, &cfg.quality_settings())?;
+                            (quality::to_json(&q, &why), why.is_empty())
+                        }
+                        "offset" => {
+                            let opts = pick_options("offset", &mut args, &cfg)?;
+                            finish(&args, 1)?;
+                            let path = args.first().ok_or("server send offset needs an image")?;
+                            let (mm, body) = pick_inputs("offset", &opts, &cfg)?;
+                            let parts = picked_parts(path, &cfg, &opts, mm)?;
+                            let held = pick_offset(&parts, &body, &opts.settings)?;
+                            (offset_json(&held, &body), held.passes())
+                        }
+                        "pads" => {
+                            let (text, passes, _) = pads_run(&mut args, &cfg, true)?;
+                            (text, passes)
+                        }
+                        "diff" => {
+                            let (text, same, _) = diff_run(&mut args, &cfg, true, replace)?;
+                            (text, same)
+                        }
+                        other => {
+                            return Err(format!(
+                                "{other}: server send takes quality, offset, pads or diff"
+                            ))
+                        }
+                    };
+                    let id = client
+                        .send_result(&kind, &json)
+                        .map_err(|e| e.to_string())?;
+                    eprintln!(
+                        "the {kind} result was sent{}",
+                        id.map(|i| format!(" as {i}")).unwrap_or_default()
+                    );
+                    // a result that is refused is an error for a script, after it was sent
+                    if passes {
+                        Ok(())
+                    } else {
+                        Err(format!("the {kind} result is not good"))
+                    }
+                }
+                other => Err(format!("{other}: server takes health, config or send")),
+            }
         }
         other => Err(format!("{other}: unknown command (see help)")),
     }
