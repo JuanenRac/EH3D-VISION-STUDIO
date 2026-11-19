@@ -4,6 +4,7 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **The CI and the release build take the shared libraries at their newest releases:** the pins of the sibling repositories in the workflows are raised to the releases the program now needs, so that the build and the binaries of a release use them.
 ## [0.0.5] - Marks found to a fraction of a pixel, uneven light taken out, parts measured in millimetres, cross marks, the scale from a target and a batch report
 
 - **A folder of pictures at once, with a report (`batch::check_picture`, `eh3d-vision batch`):** every PNG and PGM file of a folder (the other files, the folders and the links are left out) is read within `max_file_mib`, searched for marks (with `--light` and `--flatten` as in `find`) and gets one line: `file,status,marks,mean_score,min_score,mean_diameter_px,detail`, as CSV on the output or in the file of `--report`. The status is `ok`, `no_marks`, `picture_unreadable` or the code of the reader of files (`file_too_large`, `file_unreadable`), so one bad picture does not stop the rest; the exit code is 1 when a picture could not be used, after the report is written. A folder with more pictures than `batch_max_files` (500 by default) is refused with `too_many_files`; a report that is there is not written over without `--replace` (`file_exists`); and a file name that starts with `=`, `+`, `-` or `@` is written with a quote in front so that a spreadsheet does not run it as a formula. The new key `batch_max_files` is in `vision.cfg` and `examples/vision.cfg`.
