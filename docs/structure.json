@@ -171,6 +171,19 @@
           }
         },
         {
+          "name": "lens.rs",
+          "desc": {
+            "en": "the two factors of the lens from a grid of marks, refused when they do not fit",
+            "es": "los dos factores de la lente desde una rejilla de marcas, rechazados si no encajan",
+            "de": "die zwei Faktoren des Objektivs aus einem Markenraster, abgelehnt, wenn sie nicht passen",
+            "fr": "les deux facteurs de l'objectif depuis une grille de marques, refusés s'ils ne collent pas",
+            "it": "i due fattori dell'obiettivo da una griglia di segni, rifiutati se non tornano",
+            "ja": "マークのグリッドから求めるレンズの 2 係数（合わなければ拒否）",
+            "zh": "由标记网格求镜头的两个系数，不合适则拒绝",
+            "pt": "os dois fatores da lente a partir de uma grelha de marcas, recusados se não encaixarem"
+          }
+        },
+        {
           "name": "points.rs",
           "desc": {
             "en": "the files of points of a design",

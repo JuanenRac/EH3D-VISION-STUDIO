@@ -8,7 +8,7 @@
 ### Passmarken in einem Kamerabild: Marken, Maßstab und Korrektur einer Platine
 
 <p align="center">
-  <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
+  <img src="https://img.shields.io/badge/License-GPL%213.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Stack-Rust-DEA584.svg" alt="Rust">
   <img src="https://img.shields.io/badge/Languages-8-00E5FF.svg" alt="Languages">
   <img src="https://img.shields.io/badge/Version-0.0.5-0f6cbd.svg" alt="Version">
@@ -17,7 +17,7 @@
 
 ---
 
-**Ehrlichkeitscheck - was heute wirklich läuft:** eine Rust-Bibliothek und ein Kommandozeilenprogramm (`eh3d-vision`) mit 203 Tests, die auf einem Computer laufen: findet runde Passmarken in einem Bild, wandelt Pixel in Millimeter um und berechnet Drehung und Verschiebung, die eine Platine dorthin bringen, wo ihr Entwurf sie haben will. Es hat ein Fenster (mit `--features gui` gebaut, das Programm `eh3d-vision-gui`), das ein Bild öffnet, die Marken mit ihren Koordinaten zeigt, den Maßstab setzt, die Verzeichnung des Objektivs aus einem Raster bestimmt, am Entwurf ausrichtet und die Optionen für ISOCAM exportiert, aber das Fenster wurde noch nicht auf einem Bildschirm angesehen; es wurde an keiner Maschine ausprobiert und nicht an einer Sammlung echter Dateien geprüft.
+**Ehrlichkeitscheck - was heute wirklich läuft:** eine Rust-Bibliothek und ein Kommandozeilenprogramm (`eh3d-vision`) mit 213 Tests, die auf einem Computer laufen: findet runde Passmarken in einem Bild, wandelt Pixel in Millimeter um und berechnet Drehung und Verschiebung, die eine Platine dorthin bringen, wo ihr Entwurf sie haben will. Es hat ein Fenster (mit `--features gui` gebaut, das Programm `eh3d-vision-gui`), das ein Bild öffnet, die Marken mit ihren Koordinaten zeigt, den Maßstab setzt, die Verzeichnung des Objektivs aus einem Raster bestimmt, am Entwurf ausrichtet und die Optionen für ISOCAM exportiert, aber das Fenster wurde noch nicht auf einem Bildschirm angesehen; es wurde an keiner Maschine ausprobiert und nicht an einer Sammlung echter Dateien geprüft.
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | Version | `0.0.5` |
 | Reifegrad | Funktionsfähig |
-| Tests | 203 |
+| Tests | 213 |
 | Technologie-Stack | Rust |
 | Auf echter Hardware | Nicht erprobt: nichts davon lief an einer Maschine |
 
@@ -46,7 +46,7 @@ Jede Zeile ist ein Teil dieses Repositorys, und die Ampel sagt, wie weit er heut
 |---|---|---|
 | Kern | 🟡 | findet runde Passmarken in einem Bild, wandelt Pixel in Millimeter um und berechnet Drehung und Verschiebung, die eine Platine dorthin bringen, wo ihr Entwurf sie haben will; am Computer mit normalen und beschädigten Eingaben getestet, nicht mit einer Sammlung echter Dateien. |
 | Kommandozeile | 🟡 | `eh3d-vision` führt dieselben Funktionen wie die Bibliothek aus und gibt das Ergebnis aus; jeder Fehler kommt als Meldung mit einem Exit-Code ungleich null zurück. |
-| Tests | 🟡 | 203 Tests bestehen (`cargo test`), mit Normalfällen, Grenzfällen und beschädigten Eingaben sowie einer simulierten Kamera über einer Platine, die Rauschen, falsche Belichtung, ein totes oder fehlendes Bild, wie eine Marke aussehenden Staub oder eine abgeschnittene Bilddatei hinzufügt und erneut abgefragt wird. |
+| Tests | 🟡 | 213 Tests bestehen (`cargo test`), mit Normalfällen, Grenzfällen und beschädigten Eingaben sowie einer simulierten Kamera über einer Platine, die Rauschen, falsche Belichtung, ein totes oder fehlendes Bild, wie eine Marke aussehenden Staub oder eine abgeschnittene Bilddatei hinzufügt und erneut abgefragt wird. |
 | Sicherheit | 🟡 | Reines sicheres Rust (`forbid(unsafe_code)`): nichts gerät bei den übergebenen Dateien in Panik und ein schlechter Wert ist ein Fehler mit Begründung; keine unabhängige Prüfung. |
 | Fenster | 🟠 | Geschrieben (egui, `--features gui`, das Programm `eh3d-vision-gui`): ein Bild öffnen oder ablegen, die Marken mit ihren Koordinaten sehen, den Maßstab mit einer Marke bekannter Größe setzen, die Verzeichnung des Objektivs aus einem Raster bestimmen, an einem CSV-Entwurf ausrichten und die Optionen für ISOCAM exportieren; die Logik ist getestet, aber das Fenster wurde noch nicht gebaut oder auf einem Bildschirm angesehen. |
 | Echte Hardware | 🔴 | Nicht erprobt: nichts davon wurde an einer Maschine ausgeführt. |
@@ -89,6 +89,7 @@ Wie die Teile dieses Repositorys zusammenpassen: wer es nutzt, was es enthält u
 * **Teile für andere Programme, als einfache Dateien:** `eh3d-vision measure BILD --mm-per-px V` liefert zu jedem Teil Mitte (mm von der Bildmitte, x nach rechts, y nach oben), Drehung (von -90 ausgeschlossen bis 90 Grad), Länge, Breite und Fläche als CSV (`index,x_mm,y_mm,angle_deg,length_mm,width_mm,area_mm2`) oder als JSON (`--format json`: `format` `eh3d-vision-parts`, `version` 1, `unit`, `image_width_px`, `image_height_px`, `mm_per_px`, `parts`); mit dem lesenden Programm wird sonst nichts geteilt. `--output DATEI` überschreibt nie eine Datei ohne `--replace` und nie einen Link.
 * **Ein Ordner auf einmal:** `eh3d-vision batch ORDNER --report DATEI.csv` liest jedes PNG- und PGM-Bild innerhalb der Größengrenze (höchstens `batch_max_files`) und schreibt je eine Zeile (`file,status,marks,mean_score,min_score,mean_diameter_px,detail`) mit dem Status `ok`, `no_marks`, `picture_unreadable` oder dem Code der Ablehnung; ein Dateiname, den eine Tabellenkalkulation als Formel ausführen würde, wird mit einem Anführungszeichen davor geschrieben.
 * **Quadrate und Kreuze in jedem Winkel:** `eh3d-vision squares BILD` findet quadratische Marken in jedem Drehwinkel (Mitte, Seite und der Winkel gegen den Uhrzeigersinn, wie ihn die Maschine sieht, von -45 ausgeschlossen bis 45 Grad) und `eh3d-vision crosses BILD --turned` findet Kreuze, deren Arme nicht entlang der Achsen liegen; die Mindestfüllung eines Quadrats und die Mindestpunktzahl eines Kreuzes (`square_min_fill`, `cross_min_score`) stehen in `vision.cfg`.
+* **Das Objektiv mit zwei Faktoren, abgelehnt, wenn es nicht passt:** `eh3d-vision lens BILD` berechnet `k1` und `k2` der radialen Verzeichnung aus einem Raster von Marken und gibt die Zeilen `lens_k1 = ...` und `lens_k2 = ...` für `vision.cfg` aus; es lehnt eine Anpassung ab, die die Marken weiter als `lens_max_rms` Pixel von ihrem Gitter lässt (`lens_residual_too_large`), oder einen Faktor über 0,5 (`lens_out_of_range`), und `find --undistort` entzerrt die Orte damit.
 
 ## 🔒 Sicherheit und Schutz
 
@@ -106,9 +107,10 @@ Wie die Teile dieses Repositorys zusammenpassen: wer es nutzt, was es enthält u
 Die Bibliothek ist `eh3d_vision_studio` (`use eh3d_vision_studio::...`); die Kommandozeile ist `eh3d-vision`. Die Befehle sind diese; jeder gibt sein Ergebnis auf der Standardausgabe aus und meldet einen Fehler auf der Fehlerausgabe mit einem Exit-Code ungleich null. Es gibt keinen Netzwerkzugriff.
 
 ```text
-eh3d-vision find IMAGE [--light] [--min-diam PX] [--max-diam PX] [--known-mm D] [--refine] [--flatten PX]   the round marks found (--known-mm gives millimetres, --refine the centre to a fraction of a pixel with a confidence, --flatten takes uneven light out first)
+eh3d-vision find IMAGE [--light] [--min-diam PX] [--max-diam PX] [--known-mm D] [--refine] [--undistort] [--flatten PX]   the round marks found (--known-mm gives millimetres, --refine the centre to a fraction of a pixel with a confidence, --undistort straightens the places with lens_k1 and lens_k2 of vision.cfg, --flatten takes uneven light out first)
 eh3d-vision align DESIGN.csv MEASURED.csv [--scale] [--pair-nearest] [--isocam-args] [--max-rms 0.1] [--max-stretch 0.01]
 eh3d-vision crosses IMAGE [--turned] [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the cross-shaped marks found (plus signs; with --turned the arms may have any angle and the angle is printed)
+eh3d-vision lens IMAGE [--columns C] [--rows R] [--max-rms PX] [--light] [--flatten PX]   the two radial factors of the lens from a grid of marks (columns and rows as grid_columns and grid_rows), refused when the marks stay farther than --max-rms pixels from their lattice
 eh3d-vision squares IMAGE [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the square marks found, turned by any angle (centre, side and angle)
 eh3d-vision calibrate IMAGE --pitch-mm D [--light] [--tolerance 0.05] [--flatten PX]   the millimetres of a pixel from a target whose neighbouring marks are D millimetres apart
 eh3d-vision measure IMAGE [--mm-per-px V] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   the parts of a picture: centre, turn, length, width and area in millimetres, as a CSV or JSON file
@@ -118,7 +120,7 @@ eh3d-vision-gui [IMAGE] [DESIGN.csv]   the window (a build with --features gui);
 
 ## ⚙️ Konfiguration
 
-Die abgestimmten Werte stehen in einer einfachen Datei mit `Schlüssel = Wert`, nicht im Code: `vision.cfg` im Ordner, in dem das Programm startet, oder neben ihm (die Variable `EH3D_VISION_CONFIG` nennt eine andere Datei). Sie legt die Sprache des Fensters fest, ob die Marken dunkel oder hell sind, den Schwellwert, den Bereich des Durchmessers, die Füllung und die Streckung einer Marke, die Größe der Marke, die den Maßstab setzt, die Spalten und Zeilen des Rasters, ob die Ausrichtung die Größe ändern darf, die Grenzen, die eine Ausrichtung einhalten muss, und die größte gelesene Datei. `examples/vision.cfg` listet jeden Schlüssel mit seiner Bedeutung und dem Wert auf, mit dem das Programm startet; fehlt die Datei, gelten diese Werte, und eine Datei mit einem Fehler wird mit ihrer Zeile abgelehnt. In der Kommandozeile werden dieselben Dinge als Optionen angegeben (siehe Schnittstellen). Sie enthält auch die weiteren abgestimmten Werte: die Zuverlässigkeit (`refine_subpixel`, `full_contrast`), das Fenster des Lichts (`flatten_window`), den Maßstab und die Größe eines Teils (`mm_per_px`, `part_min_area`, `part_max_area`, `max_parts`), den Bereich eines Kreuzes (`cross_min_size`, `cross_max_size`, `cross_max_elongation`), die Toleranz eines Targets (`pitch_tolerance`) und die höchste Zahl von Bildern eines Ordners (`batch_max_files`). Die Mindestfüllung eines Quadrats und die Mindestpunktzahl eines in jedem Winkel gedrehten Kreuzes sind `square_min_fill` und `cross_min_score`.
+Die abgestimmten Werte stehen in einer einfachen Datei mit `Schlüssel = Wert`, nicht im Code: `vision.cfg` im Ordner, in dem das Programm startet, oder neben ihm (die Variable `EH3D_VISION_CONFIG` nennt eine andere Datei). Sie legt die Sprache des Fensters fest, ob die Marken dunkel oder hell sind, den Schwellwert, den Bereich des Durchmessers, die Füllung und die Streckung einer Marke, die Größe der Marke, die den Maßstab setzt, die Spalten und Zeilen des Rasters, ob die Ausrichtung die Größe ändern darf, die Grenzen, die eine Ausrichtung einhalten muss, und die größte gelesene Datei. `examples/vision.cfg` listet jeden Schlüssel mit seiner Bedeutung und dem Wert auf, mit dem das Programm startet; fehlt die Datei, gelten diese Werte, und eine Datei mit einem Fehler wird mit ihrer Zeile abgelehnt. In der Kommandozeile werden dieselben Dinge als Optionen angegeben (siehe Schnittstellen). Sie enthält auch die weiteren abgestimmten Werte: die Zuverlässigkeit (`refine_subpixel`, `full_contrast`), das Fenster des Lichts (`flatten_window`), den Maßstab und die Größe eines Teils (`mm_per_px`, `part_min_area`, `part_max_area`, `max_parts`), den Bereich eines Kreuzes (`cross_min_size`, `cross_max_size`, `cross_max_elongation`), die Toleranz eines Targets (`pitch_tolerance`) und die höchste Zahl von Bildern eines Ordners (`batch_max_files`). Die Mindestfüllung eines Quadrats und die Mindestpunktzahl eines in jedem Winkel gedrehten Kreuzes sind `square_min_fill` und `cross_min_score`. Das Objektiv sind `lens_k1` und `lens_k2` (wie `lens` sie berechnet), und der größte Abstand eines Rasters von seinem Gitter nach der Korrektur ist `lens_max_rms`.
 
 ## 🚀 Schnellstart
 
@@ -136,7 +138,7 @@ Um ein Bild des Fensters aufzunehmen, ohne es von Hand zu öffnen, starten Sie e
 
 ## 🧪 Tests
 
-Die Suite hat 203 Tests (`cargo test`, in der CI unter Windows und Linux). Sie prüfen Normalfälle, Grenzfälle und beschädigte Eingaben: leere Dateien, Datenmüll und abgeschnittene Dateien lösen nie eine Panik aus. Die CI führt außerdem `cargo fmt --check`, `cargo clippy` mit Warnungen als Fehlern und `python -I tools/ci_validate.py` aus.
+Die Suite hat 213 Tests (`cargo test`, in der CI unter Windows und Linux). Sie prüfen Normalfälle, Grenzfälle und beschädigte Eingaben: leere Dateien, Datenmüll und abgeschnittene Dateien lösen nie eine Panik aus. Die CI führt außerdem `cargo fmt --check`, `cargo clippy` mit Warnungen als Fehlern und `python -I tools/ci_validate.py` aus.
 
 ## 🏗️ Build und Veröffentlichung
 
@@ -169,6 +171,7 @@ EH3D-VISION-STUDIO/
 │   ├── fiducial.rs                              die runden Marken eines Bildes: Schwellwert, Flecken und Prüfungen
 │   ├── flatten.rs                               ungleichmäßiges Licht aus einem Bild entfernt
 │   ├── grid.rs                                  die Verzeichnung des Objektivs aus einem Raster von Marken
+│   ├── lens.rs                                  die zwei Faktoren des Objektivs aus einem Markenraster, abgelehnt, wenn sie nicht passen
 │   ├── points.rs                                die Punktdateien eines Entwurfs
 │   ├── limit.rs                                 Lesen einer Datei mit Größenlimit und einem Code für jede Ablehnung
 │   ├── measure.rs                               Teile in Millimetern vermessen, CSV- und JSON-Dateien

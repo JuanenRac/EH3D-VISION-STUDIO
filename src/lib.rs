@@ -16,6 +16,7 @@ pub mod grid;
 #[cfg(feature = "gui")]
 pub mod gui;
 pub mod lang;
+pub mod lens;
 pub mod limit;
 pub mod measure;
 pub mod points;

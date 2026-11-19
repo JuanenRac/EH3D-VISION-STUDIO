@@ -572,3 +572,135 @@ fn squares_and_turned_crosses_are_found_with_their_angle() {
     assert!(!missing.status.success() && err(&missing).contains("squares needs an image"));
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// A board of 400 by 300 with a grid of 5 by 4 dark discs 70 pixels apart, seen through a lens with the radial factors `k1` and `k2`; one disc is moved by `shift` pixels along x when asked.
+fn lens_picture(k1: f64, k2: f64, shift: Option<(usize, f64)>) -> Vec<u8> {
+    let (w, h) = (400usize, 300usize);
+    let (centre, norm) = ((200.0f64, 150.0f64), 250.0f64);
+    let mut data = vec![220u8; w * h];
+    for r in 0..4usize {
+        for c in 0..5usize {
+            let ideal = (
+                centre.0 + (c as f64 - 2.0) * 70.0,
+                centre.1 + (r as f64 - 1.5) * 70.0,
+            );
+            // the place where the lens puts the point: the one that the correction takes back to the ideal
+            let mut m = ideal;
+            for _ in 0..200 {
+                let r2 = ((m.0 - centre.0).powi(2) + (m.1 - centre.1).powi(2)) / (norm * norm);
+                let f = 1.0 + k1 * r2 + k2 * r2 * r2;
+                m = (
+                    centre.0 + (ideal.0 - centre.0) / f,
+                    centre.1 + (ideal.1 - centre.1) / f,
+                );
+            }
+            if let Some((index, by)) = shift {
+                if index == r * 5 + c {
+                    m.0 += by;
+                }
+            }
+            for y in 0..h {
+                for x in 0..w {
+                    if (x as f64 - m.0).powi(2) + (y as f64 - m.1).powi(2) <= 49.0 {
+                        data[y * w + x] = 30;
+                    }
+                }
+            }
+        }
+    }
+    pgm(w, h, &data)
+}
+
+/// The number after `name` in a line like `lens_k1 = -0.080000`.
+fn value_of(text: &str, name: &str) -> f64 {
+    let line = text
+        .lines()
+        .find(|l| l.starts_with(&format!("{name} = ")))
+        .unwrap_or_else(|| panic!("no {name} in {text}"));
+    line.split('=').nth(1).unwrap().trim().parse().unwrap()
+}
+
+#[test]
+fn lens_works_out_the_two_factors_and_find_undistort_uses_them() {
+    let dir = scratch("lens");
+    fs::write(dir.join("grid.pgm"), lens_picture(-0.09, 0.03, None)).unwrap();
+    let fit = run(&dir, &["lens", "grid.pgm"]);
+    assert!(fit.status.success(), "{}", err(&fit));
+    let text = out(&fit);
+    let (k1, k2) = (value_of(&text, "lens_k1"), value_of(&text, "lens_k2"));
+    assert!(
+        (k1 + 0.09).abs() < 0.02 && (k2 - 0.03).abs() < 0.03,
+        "{text}"
+    );
+    assert!(text.starts_with("20 marks: k1 "), "{text}");
+    // the grid is another size when the options say so, and a count that does not match is refused
+    let wrong = run(&dir, &["lens", "grid.pgm", "--columns", "4", "--rows", "4"]);
+    assert!(
+        !wrong.status.success() && err(&wrong).contains("needs 16 marks"),
+        "{}",
+        err(&wrong)
+    );
+    // the factors go into the configuration file, and find --undistort straightens the places with them
+    let plain = out(&run(&dir, &["find", "grid.pgm"]));
+    let none = run(&dir, &["find", "grid.pgm", "--undistort"]);
+    assert!(
+        !none.status.success() && err(&none).contains("lens_k1"),
+        "{}",
+        err(&none)
+    );
+    fs::write(
+        dir.join("vision.cfg"),
+        format!("lens_k1 = {k1}\nlens_k2 = {k2}\n"),
+    )
+    .unwrap();
+    let straight = out(&run(&dir, &["find", "grid.pgm", "--undistort"]));
+    assert_ne!(plain, straight);
+    // the corner mark of the picture moves toward the place of the grid: (200 - 140, 150 - 105) = (60, 45)
+    let near = |text: &str| {
+        let line = text.lines().min_by(|a, b| {
+            let d = |l: &str| {
+                let (x, y) = first_point(l);
+                (x - 60.0).hypot(y - 45.0)
+            };
+            d(a).total_cmp(&d(b))
+        });
+        first_point(line.unwrap())
+    };
+    let (px, py) = near(&plain);
+    let (sx, sy) = near(&straight);
+    assert!(
+        (sx - 60.0).hypot(sy - 45.0) < (px - 60.0).hypot(py - 45.0) / 3.0,
+        "{plain}\n{straight}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn lens_refuses_a_wrong_mark_and_a_tolerance_that_is_not_met() {
+    let dir = scratch("lens_refused");
+    fs::write(
+        dir.join("bad.pgm"),
+        lens_picture(-0.09, 0.03, Some((7, 9.0))),
+    )
+    .unwrap();
+    let bad = run(&dir, &["lens", "bad.pgm"]);
+    assert!(
+        !bad.status.success() && err(&bad).contains("lens_residual_too_large"),
+        "{}",
+        err(&bad)
+    );
+    assert!(out(&bad).is_empty());
+    // a wider tolerance, by option or by configuration file, takes it
+    assert!(run(&dir, &["lens", "bad.pgm", "--max-rms", "8"])
+        .status
+        .success());
+    fs::write(dir.join("vision.cfg"), "lens_max_rms = 8\n").unwrap();
+    assert!(run(&dir, &["lens", "bad.pgm"]).status.success());
+    fs::remove_file(dir.join("vision.cfg")).unwrap();
+    fs::write(dir.join("good.pgm"), lens_picture(0.0, 0.0, None)).unwrap();
+    let tight = run(&dir, &["lens", "good.pgm", "--max-rms", "0.0001"]);
+    assert!(!tight.status.success(), "{}", out(&tight));
+    let missing = run(&dir, &["lens"]);
+    assert!(!missing.status.success() && err(&missing).contains("lens needs an image"));
+    let _ = fs::remove_dir_all(&dir);
+}

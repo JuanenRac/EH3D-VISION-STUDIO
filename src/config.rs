@@ -11,7 +11,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 29] = [
+pub const KEYS: [&str; 32] = [
     "language",
     "polarity",
     "threshold",
@@ -41,6 +41,9 @@ pub const KEYS: [&str; 29] = [
     "batch_max_files",
     "square_min_fill",
     "cross_min_score",
+    "lens_k1",
+    "lens_k2",
+    "lens_max_rms",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -93,6 +96,11 @@ pub struct Config {
     pub square_min_fill: f64,
     /// The least score of a cross mark turned by any angle (0 to 1).
     pub cross_min_score: f64,
+    /// The two radial factors of the lens, as `lens` works them out; 0 and 0 mean that the lens is not corrected.
+    pub lens_k1: f64,
+    pub lens_k2: f64,
+    /// The most the marks of a grid may be from their lattice after the correction of the lens, in pixels; a fit above it is refused.
+    pub lens_max_rms: f64,
 }
 
 impl Default for Config {
@@ -128,6 +136,9 @@ impl Default for Config {
             batch_max_files: 500,
             square_min_fill: 0.88,
             cross_min_score: 0.85,
+            lens_k1: 0.0,
+            lens_k2: 0.0,
+            lens_max_rms: 0.5,
         }
     }
 }
@@ -236,6 +247,9 @@ impl Config {
             "batch_max_files" => self.batch_max_files = count(value, key)?,
             "square_min_fill" => self.square_min_fill = number(value, key)?,
             "cross_min_score" => self.cross_min_score = number(value, key)?,
+            "lens_k1" => self.lens_k1 = number(value, key)?,
+            "lens_k2" => self.lens_k2 = number(value, key)?,
+            "lens_max_rms" => self.lens_max_rms = number(value, key)?,
             other => return Err(format!("{other}: unknown key")),
         }
         Ok(())
@@ -308,6 +322,15 @@ impl Config {
         }
         if !(self.cross_min_score > 0.0 && self.cross_min_score <= 1.0) {
             return Err("cross_min_score must be more than 0 and at most 1".into());
+        }
+        let limit = crate::lens::K_LIMIT;
+        if self.lens_k1.abs() > limit || self.lens_k2.abs() > limit {
+            return Err(format!(
+                "lens_k1 and lens_k2 must be between -{limit} and {limit}"
+            ));
+        }
+        if self.lens_max_rms <= 0.0 {
+            return Err("lens_max_rms must be more than 0".into());
         }
         Ok(())
     }
@@ -469,6 +492,10 @@ cross_max_size = 20",
             "square_min_fill = 1.2",
             "cross_min_score = 0",
             "cross_min_score = 2",
+            "lens_k1 = 0.6",
+            "lens_k2 = -0.6",
+            "lens_max_rms = 0",
+            "lens_max_rms = -1",
         ] {
             assert!(Config::parse(text).is_err(), "{text:?} was accepted");
         }

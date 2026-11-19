@@ -12,6 +12,7 @@ use eh3d_vision_studio::cross::{find_crosses, CrossSettings};
 use eh3d_vision_studio::fiducial::{find, refine, Polarity, Settings};
 use eh3d_vision_studio::flatten::flatten;
 use eh3d_vision_studio::image::{from_bytes, Gray};
+use eh3d_vision_studio::lens::{fit_lens, undistort2};
 use eh3d_vision_studio::limit::{read_limited, read_text_limited, write_text};
 use eh3d_vision_studio::measure::{measure_parts, to_csv, to_json, PartSettings};
 use eh3d_vision_studio::points::parse as parse_points;
@@ -23,10 +24,11 @@ use std::process::ExitCode;
 
 const HELP: &str = "eh3d-vision: fiducials in a camera image
 
-  eh3d-vision find IMAGE [--light] [--min-diam PX] [--max-diam PX] [--known-mm D] [--refine] [--flatten PX]   the round marks found (--known-mm gives millimetres, --refine the centre to a fraction of a pixel with a confidence, --flatten takes uneven light out first)
+  eh3d-vision find IMAGE [--light] [--min-diam PX] [--max-diam PX] [--known-mm D] [--refine] [--undistort] [--flatten PX]   the round marks found (--known-mm gives millimetres, --refine the centre to a fraction of a pixel with a confidence, --undistort straightens the places with lens_k1 and lens_k2 of vision.cfg, --flatten takes uneven light out first)
   eh3d-vision align DESIGN.csv MEASURED.csv [--scale] [--pair-nearest] [--isocam-args] [--max-rms 0.1] [--max-stretch 0.01]   the turn and the shift that put the board where it is
   eh3d-vision measure IMAGE [--mm-per-px V] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   the parts of a picture: centre, turn, length, width and area in millimetres, as a CSV or JSON file
   eh3d-vision crosses IMAGE [--turned] [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the cross-shaped marks found (plus signs; with --turned the arms may have any angle and the angle is printed)
+  eh3d-vision lens IMAGE [--columns C] [--rows R] [--max-rms PX] [--light] [--flatten PX]   the two radial factors of the lens from a grid of marks (columns and rows as grid_columns and grid_rows), refused when the marks stay farther than --max-rms pixels from their lattice
   eh3d-vision squares IMAGE [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the square marks found, turned by any angle (centre, side and angle)
   eh3d-vision calibrate IMAGE --pitch-mm D [--light] [--tolerance 0.05] [--flatten PX]   the millimetres of a pixel from a target whose neighbouring marks are D millimetres apart
   eh3d-vision batch FOLDER [--light] [--flatten PX] [--report FILE.csv] [--replace]   every PNG and PGM picture of a folder: marks, scores and diameters, or the code of what went wrong, one line each
@@ -109,6 +111,7 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 s.max_diameter = num(&v, "--max-diam")?;
             }
             let refine_on = switch(&mut args, "--refine");
+            let undistort_on = switch(&mut args, "--undistort");
             let flatten_px = flag(&mut args, "--flatten")?
                 .map(|v| count(&v, "--flatten"))
                 .transpose()?;
@@ -129,11 +132,20 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                     confidence.push(r.confidence);
                 }
             }
+            let centre = (img.w as f64 / 2.0, img.h as f64 / 2.0);
+            if undistort_on {
+                if cfg.lens_k1 == 0.0 && cfg.lens_k2 == 0.0 {
+                    return Err("--undistort needs lens_k1 and lens_k2 in vision.cfg (the command lens works them out)".into());
+                }
+                let norm = centre.0.hypot(centre.1);
+                for f in &mut found {
+                    (f.x, f.y) = undistort2((f.x, f.y), centre, cfg.lens_k1, cfg.lens_k2, norm);
+                }
+            }
             let scale = match (known, found.first()) {
                 (Some(mm), Some(f)) => Some(Scale::from_known_diameter(f.diameter, mm)?),
                 _ => None,
             };
-            let centre = (img.w as f64 / 2.0, img.h as f64 / 2.0);
             for (i, f) in found.iter().enumerate() {
                 let sure = confidence
                     .get(i)
@@ -282,6 +294,53 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 p.spread * 100.0
             );
             println!("mm_per_px = {:.6}", p.scale.mm_per_px);
+            Ok(())
+        }
+        "lens" => {
+            let mut settings = Settings::default();
+            if switch(&mut args, "--light") {
+                settings.polarity = Polarity::Light;
+            }
+            let flatten_px = flag(&mut args, "--flatten")?
+                .map(|v| count(&v, "--flatten"))
+                .transpose()?;
+            let cfg = config();
+            let columns = flag(&mut args, "--columns")?
+                .map(|v| count(&v, "--columns"))
+                .transpose()?
+                .unwrap_or(cfg.grid_columns);
+            let rows = flag(&mut args, "--rows")?
+                .map(|v| count(&v, "--rows"))
+                .transpose()?
+                .unwrap_or(cfg.grid_rows);
+            let max_rms = flag(&mut args, "--max-rms")?
+                .map(|v| num(&v, "--max-rms"))
+                .transpose()?
+                .unwrap_or(cfg.lens_max_rms);
+            finish(&args, 1)?;
+            let path = args.first().ok_or("lens needs an image")?;
+            settings.min_diameter = cfg.min_diameter;
+            settings.max_diameter = cfg.max_diameter;
+            settings.min_fill = cfg.min_fill;
+            settings.max_elongation = cfg.max_elongation;
+            let img = picture(path, &cfg, flatten_px)?;
+            let marks: Vec<(f64, f64)> =
+                find(&img, &settings)?.iter().map(|f| (f.x, f.y)).collect();
+            let centre = (img.w as f64 / 2.0, img.h as f64 / 2.0);
+            let l = fit_lens(
+                &marks,
+                columns,
+                rows,
+                centre,
+                centre.0.hypot(centre.1),
+                max_rms,
+            )?;
+            println!(
+                "{} marks: k1 {:.5}, k2 {:.5}; before the correction they were {:.3} px from their lattice, after it {:.3} px",
+                l.marks, l.k1, l.k2, l.rms_before, l.rms_after
+            );
+            println!("lens_k1 = {:.6}", l.k1);
+            println!("lens_k2 = {:.6}", l.k2);
             Ok(())
         }
         "squares" => {
