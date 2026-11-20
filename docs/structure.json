@@ -106,6 +106,19 @@
           }
         },
         {
+          "name": "board.rs",
+          "desc": {
+            "en": "the scale from a board of squares: along x, along y and from the side, with a report",
+            "es": "la escala desde un tablero de cuadrados: a lo largo de x, de y y desde el lado, con informe",
+            "de": "der Maßstab von einem Brett aus Quadraten: entlang x, entlang y und von der Seite, mit Bericht",
+            "fr": "l'échelle depuis une planche de carrés : selon x, selon y et d'après le côté, avec rapport",
+            "it": "la scala da una tavola di quadrati: lungo x, lungo y e dal lato, con rapporto",
+            "ja": "正方形の盤からのスケール：x 方向・y 方向・辺から、レポートつき",
+            "zh": "由方块棋盘得到比例：沿 x、沿 y 和由边长，附报告",
+            "pt": "a escala a partir de um tabuleiro de quadrados: ao longo de x, de y e a partir do lado, com relatório"
+          }
+        },
+        {
           "name": "config.rs",
           "desc": {
             "en": "the configuration file: every tuned value",
@@ -181,6 +194,19 @@
             "ja": "画像のムラのある照明を取り除く",
             "zh": "去除图片中不均匀的光照",
             "pt": "a luz irregular retirada de uma imagem"
+          }
+        },
+        {
+          "name": "footprint.rs",
+          "desc": {
+            "en": "each pad judged against the size of the design, with a tolerance in millimetres",
+            "es": "cada pad juzgado frente al tamaño del diseño, con una tolerancia en milímetros",
+            "de": "jedes Pad gegen die Größe des Entwurfs beurteilt, mit Toleranz in Millimetern",
+            "fr": "chaque pastille jugée contre la taille du dessin, avec une tolérance en millimètres",
+            "it": "ogni pad giudicato rispetto alla dimensione del progetto, con una tolleranza in millimetri",
+            "ja": "各パッドを設計寸法と照らして判定（許容差はミリメートル）",
+            "zh": "每个焊盘与设计尺寸比较判定，容差以毫米计",
+            "pt": "cada pad julgado contra o tamanho do desenho, com uma tolerância em milímetros"
           }
         },
         {
@@ -327,6 +353,19 @@
           }
         },
         {
+          "name": "orientation.rs",
+          "desc": {
+            "en": "which way a part with a mark is held, from the direction of the mark",
+            "es": "en qué sentido está sujeta una pieza con marca, por la dirección de la marca",
+            "de": "wie ein Bauteil mit Markierung gehalten wird, aus der Richtung der Markierung",
+            "fr": "dans quel sens est tenue une pièce marquée, d'après la direction de la marque",
+            "it": "in che verso è tenuto un pezzo con segno, dalla direzione del segno",
+            "ja": "マーク付き部品の向き（マークの方向から）",
+            "zh": "带标记零件的朝向（由标记的方向得出）",
+            "pt": "em que sentido está uma peça com marca, pela direção da marca"
+          }
+        },
+        {
           "name": "pads.rs",
           "desc": {
             "en": "a row of pads: the pitch, how much it varies and how far a pad is from the row",
@@ -381,14 +420,27 @@
         {
           "name": "server.rs",
           "desc": {
-            "en": "the way to the EH3D server: results sent, configuration read, a server in memory for tests",
-            "es": "el camino al servidor EH3D: resultados enviados, configuración leída, un servidor en memoria para pruebas",
-            "de": "der Weg zum EH3D-Server: Ergebnisse senden, Konfiguration lesen, ein Server im Speicher für Tests",
-            "fr": "le chemin vers le serveur EH3D : résultats envoyés, configuration lue, un serveur en mémoire pour les tests",
-            "it": "il percorso verso il server EH3D: risultati inviati, configurazione letta, un server in memoria per i test",
-            "ja": "EH3Dサーバーへの経路：結果の送信、設定の読み取り、テスト用のメモリ上サーバー",
-            "zh": "通往EH3D服务器的通道：发送结果、读取配置，以及用于测试的内存服务器",
-            "pt": "o caminho para o servidor EH3D: resultados enviados, configuração lida, um servidor em memória para testes"
+            "en": "the way to the EH3D server by the shared client, and a server in memory for tests",
+            "es": "el camino al servidor EH3D por el cliente compartido y un servidor en memoria para pruebas",
+            "de": "der Weg zum EH3D-Server über den gemeinsamen Client und ein Server im Speicher für Tests",
+            "fr": "le chemin vers le serveur EH3D par le client partagé et un serveur en mémoire pour les tests",
+            "it": "il percorso verso il server EH3D tramite il client condiviso e un server in memoria per i test",
+            "ja": "共有クライアントによる EH3D サーバーへの経路と、テスト用のメモリ上のサーバー",
+            "zh": "通过共享客户端连接 EH3D 服务器，以及测试用的内存服务器",
+            "pt": "o caminho até ao servidor EH3D pelo cliente partilhado e um servidor em memória para testes"
+          }
+        },
+        {
+          "name": "sharpmap.rs",
+          "desc": {
+            "en": "a map of where the picture is sharp: a grid of cells, the weak ones and the tilt",
+            "es": "un mapa de dónde es nítida la imagen: una rejilla de celdas, las débiles y la inclinación",
+            "de": "eine Karte, wo das Bild scharf ist: ein Raster aus Zellen, die schwachen und die Neigung",
+            "fr": "une carte de la netteté de l'image : une grille de cellules, les faibles et l'inclinaison",
+            "it": "una mappa di dove l'immagine è nitida: una griglia di celle, le deboli e l'inclinazione",
+            "ja": "画像の鮮明さの地図：セルの格子、弱いセル、傾き",
+            "zh": "图像清晰度分布图：格子、较弱的格子和倾斜",
+            "pt": "um mapa de onde a imagem é nítida: uma grelha de células, as fracas e a inclinação"
           }
         },
         {
@@ -454,6 +506,19 @@
             "ja": "ファイルを開くウィンドウのファイル一覧",
             "zh": "打开文件窗口的文件列表",
             "pt": "a lista de ficheiros da janela que abre um ficheiro"
+          }
+        },
+        {
+          "name": "checks.rs",
+          "desc": {
+            "en": "window panels for correlation, straightening, a row of pads and comparing pictures",
+            "es": "paneles de la ventana: correlación, enderezado, fila de pads y comparación de imágenes",
+            "de": "Fensterbereiche für Korrelation, Entzerren, Pad-Reihe und Bildvergleich",
+            "fr": "panneaux de la fenêtre : corrélation, redressement, rangée de pastilles, comparaison",
+            "it": "pannelli della finestra: correlazione, raddrizzamento, fila di pad, confronto",
+            "ja": "ウィンドウのパネル：相関、補正、パッド列、画像の比較",
+            "zh": "窗口面板：相关法、校正、焊盘排、图像比较",
+            "pt": "painéis da janela: correlação, endireitamento, fila de pads, comparação de imagens"
           }
         },
         {
@@ -578,6 +643,19 @@
             "ja": "correlate・rectify・pads・diff・server コマンドのテスト",
             "zh": "correlate、rectify、pads、diff 和 server 命令的测试",
             "pt": "testes dos comandos correlate, rectify, pads, diff e server"
+          }
+        },
+        {
+          "name": "analysis.rs",
+          "desc": {
+            "en": "tests of the commands orientation, footprint, sharpmap and board",
+            "es": "pruebas de las órdenes orientation, footprint, sharpmap y board",
+            "de": "Tests der Befehle orientation, footprint, sharpmap und board",
+            "fr": "tests des commandes orientation, footprint, sharpmap et board",
+            "it": "test dei comandi orientation, footprint, sharpmap e board",
+            "ja": "コマンド orientation、footprint、sharpmap、board のテスト",
+            "zh": "命令 orientation、footprint、sharpmap 和 board 的测试",
+            "pt": "testes dos comandos orientation, footprint, sharpmap e board"
           }
         },
         {
