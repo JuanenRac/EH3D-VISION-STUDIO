@@ -14,7 +14,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 79] = [
+pub const KEYS: [&str; 90] = [
     "language",
     "polarity",
     "threshold",
@@ -94,6 +94,17 @@ pub const KEYS: [&str; 79] = [
     "diff_threshold",
     "diff_min_area",
     "diff_max_changed",
+    "orientation_body_contrast",
+    "orientation_mark_contrast",
+    "orientation_min_mark_px",
+    "orientation_tolerance_deg",
+    "footprint_tolerance_mm",
+    "sharpmap_cells",
+    "sharpmap_min_share",
+    "sharpmap_min_contrast",
+    "board_square_mm",
+    "board_max_aspect",
+    "board_max_spread",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -224,6 +235,22 @@ pub struct Config {
     pub diff_threshold: u8,
     pub diff_min_area: u64,
     pub diff_max_changed: f64,
+    /// `orientation`: how much a pixel must differ from the board to be the part and from the body to be the mark (grey levels), the fewest pixels of a mark and how far the mark may point from
+    /// the wanted direction, in degrees.
+    pub orientation_body_contrast: f64,
+    pub orientation_mark_contrast: f64,
+    pub orientation_min_mark_px: u64,
+    pub orientation_tolerance_deg: f64,
+    /// `footprint`: how far the sides of a pad may be from the design, in millimetres.
+    pub footprint_tolerance_mm: f64,
+    /// `sharpmap`: the cells on each side of the map, the share of the median sharpness below which a cell is weak, and the contrast below which a cell is empty.
+    pub sharpmap_cells: usize,
+    pub sharpmap_min_share: f64,
+    pub sharpmap_min_contrast: f64,
+    /// `board`: the side of a square of the board in millimetres (0: not known; the pitch is `pitch_mm`), and how far the scales along x and y and the distances between neighbours may differ.
+    pub board_square_mm: f64,
+    pub board_max_aspect: f64,
+    pub board_max_spread: f64,
 }
 
 impl Default for Config {
@@ -309,6 +336,17 @@ impl Default for Config {
             diff_threshold: 25,
             diff_min_area: 4,
             diff_max_changed: 0.01,
+            orientation_body_contrast: 30.0,
+            orientation_mark_contrast: 40.0,
+            orientation_min_mark_px: 4,
+            orientation_tolerance_deg: 10.0,
+            footprint_tolerance_mm: 0.05,
+            sharpmap_cells: 8,
+            sharpmap_min_share: 0.5,
+            sharpmap_min_contrast: 3.0,
+            board_square_mm: 0.0,
+            board_max_aspect: 0.02,
+            board_max_spread: 0.05,
         }
     }
 }
@@ -392,6 +430,36 @@ impl Config {
             threshold: self.diff_threshold,
             min_area: self.diff_min_area,
             max_changed: self.diff_max_changed,
+        }
+    }
+
+    /// The settings of the reading of the way a part is held that the values make (the direction asked for is not in the file).
+    pub fn orientation_settings(&self) -> crate::orientation::OrientationSettings {
+        crate::orientation::OrientationSettings {
+            body_contrast: self.orientation_body_contrast,
+            mark_contrast: self.orientation_mark_contrast,
+            min_mark_px: self.orientation_min_mark_px,
+            tolerance_deg: self.orientation_tolerance_deg,
+            expected_deg: None,
+        }
+    }
+
+    /// The settings of the map of sharpness that the values make.
+    pub fn sharp_settings(&self) -> crate::sharpmap::SharpSettings {
+        crate::sharpmap::SharpSettings {
+            cells: self.sharpmap_cells,
+            min_share: self.sharpmap_min_share,
+            min_contrast: self.sharpmap_min_contrast,
+        }
+    }
+
+    /// The settings of the scale from a board of squares that the values make (`pitch_mm` is the distance between the centres).
+    pub fn board_settings(&self) -> crate::board::BoardSettings {
+        crate::board::BoardSettings {
+            square_mm: self.board_square_mm,
+            pitch_mm: self.pitch_mm,
+            max_aspect: self.board_max_aspect,
+            max_spread: self.board_max_spread,
         }
     }
 
@@ -555,6 +623,17 @@ impl Config {
             }
             "diff_min_area" => self.diff_min_area = count(value, key)? as u64,
             "diff_max_changed" => self.diff_max_changed = number(value, key)?,
+            "orientation_body_contrast" => self.orientation_body_contrast = number(value, key)?,
+            "orientation_mark_contrast" => self.orientation_mark_contrast = number(value, key)?,
+            "orientation_min_mark_px" => self.orientation_min_mark_px = count(value, key)? as u64,
+            "orientation_tolerance_deg" => self.orientation_tolerance_deg = number(value, key)?,
+            "footprint_tolerance_mm" => self.footprint_tolerance_mm = number(value, key)?,
+            "sharpmap_cells" => self.sharpmap_cells = count(value, key)?,
+            "sharpmap_min_share" => self.sharpmap_min_share = number(value, key)?,
+            "sharpmap_min_contrast" => self.sharpmap_min_contrast = number(value, key)?,
+            "board_square_mm" => self.board_square_mm = number(value, key)?,
+            "board_max_aspect" => self.board_max_aspect = number(value, key)?,
+            "board_max_spread" => self.board_max_spread = number(value, key)?,
             "replace_output" => {
                 self.replace_output = match value {
                     "yes" | "true" | "on" => true,
@@ -720,6 +799,22 @@ impl Config {
         crate::pads::check(&self.pad_settings()).map_err(|e| format!("pads_tolerance: {e}"))?;
         crate::diff::check(&self.diff_settings())
             .map_err(|e| format!("diff_threshold, diff_min_area and diff_max_changed: {e}"))?;
+        crate::orientation::check(&self.orientation_settings())?;
+        if !(self.footprint_tolerance_mm.is_finite() && self.footprint_tolerance_mm > 0.0) {
+            return Err("footprint_tolerance_mm must be more than 0".into());
+        }
+        crate::sharpmap::check(&self.sharp_settings())?;
+        if !(self.board_square_mm.is_finite() && self.board_square_mm >= 0.0) {
+            return Err("board_square_mm must be 0 (not known) or more".into());
+        }
+        for (v, name) in [
+            (self.board_max_aspect, "board_max_aspect"),
+            (self.board_max_spread, "board_max_spread"),
+        ] {
+            if !(v.is_finite() && v > 0.0 && v <= 1.0) {
+                return Err(format!("{name} must be more than 0 and at most 1"));
+            }
+        }
         if self.ring_size_gap <= 1.0 {
             return Err("ring_size_gap must be above 1".into());
         }
@@ -948,6 +1043,24 @@ quality_max_mean = 100",
             "server_retries = 6",
             "server_retries = -1",
             "server_mdns = sometimes",
+            "orientation_body_contrast = 0",
+            "orientation_body_contrast = 256",
+            "orientation_mark_contrast = 0",
+            "orientation_min_mark_px = 0",
+            "orientation_min_mark_px = -1",
+            "orientation_tolerance_deg = 91",
+            "footprint_tolerance_mm = 0",
+            "footprint_tolerance_mm = -0.1",
+            "sharpmap_cells = 1",
+            "sharpmap_cells = 65",
+            "sharpmap_min_share = 0",
+            "sharpmap_min_share = 1.1",
+            "sharpmap_min_contrast = 256",
+            "board_square_mm = -1",
+            "board_max_aspect = 0",
+            "board_max_aspect = 2",
+            "board_max_spread = 0",
+            "board_max_spread = nan",
             "correlate_diameter = 3",
             "correlate_diameter = 200",
             "correlate_min_score = 0",

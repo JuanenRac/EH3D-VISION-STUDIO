@@ -7,6 +7,9 @@ mod cli_args;
 use cli_args::{finish, flag, num, switch};
 use eh3d_vision_studio::align::{accept, fit, isocam_args as isocam_lines, pair_nearest};
 use eh3d_vision_studio::batch::{check_detailed, list_pictures, report_csv, summary, NO_MARKS, OK};
+use eh3d_vision_studio::board::{
+    report as board_report, scale_from_squares, to_csv as board_csv, to_json as board_json,
+};
 use eh3d_vision_studio::config::Config;
 use eh3d_vision_studio::correlate::{correlate, to_csv as correlate_csv};
 use eh3d_vision_studio::cross::{find_crosses, CrossSettings};
@@ -15,6 +18,9 @@ use eh3d_vision_studio::diff::{
 };
 use eh3d_vision_studio::fiducial::{find, refine, Polarity, Settings};
 use eh3d_vision_studio::flatten::flatten;
+use eh3d_vision_studio::footprint::{
+    judge as footprint_judge, to_csv as footprint_csv, to_json as footprint_json, FootprintSettings,
+};
 use eh3d_vision_studio::image::{from_bytes, Gray};
 use eh3d_vision_studio::inspect::{
     find_package, judge, parse_table, summary as inspect_summary, to_csv as inspect_csv,
@@ -28,6 +34,9 @@ use eh3d_vision_studio::offset::{
     estimate_nozzle, mirror_parts, nozzle_cfg, pick_offset, pick_offsets, to_csv as offset_csv,
     to_json as offset_json, to_table_csv as offset_table, OffsetSettings,
 };
+use eh3d_vision_studio::orientation::{
+    analyse as orientation_analyse, to_csv as orientation_csv, to_json as orientation_json,
+};
 use eh3d_vision_studio::pads::{measure_row, to_csv as pads_csv, to_json as pads_json};
 use eh3d_vision_studio::perspective::{parse_corners, rectify};
 use eh3d_vision_studio::points::parse as parse_points;
@@ -38,6 +47,9 @@ use eh3d_vision_studio::scale::{from_pitch, Scale};
 use eh3d_vision_studio::server::{
     apply_remote, check_link, config_lines, describe, link_settings, plain_token_warning, sc,
     Client,
+};
+use eh3d_vision_studio::sharpmap::{
+    heat as sharp_heat, sharp_map, to_csv as sharp_csv, to_json as sharp_json,
 };
 use eh3d_vision_studio::shots::{plan as shots_plan, to_csv as shots_csv};
 use eh3d_vision_studio::sim::to_pgm;
@@ -66,7 +78,11 @@ const HELP: &str = "eh3d-vision: fiducials in a camera image
   eh3d-vision rectify IMAGE --corners X1,Y1,X2,Y2,X3,Y3,X4,Y4 --output FILE.pgm [--size WxH] [--fill V] [--replace]   the picture drawn again as seen from straight above, from the four corners of a rectangle in it (top left, top right, bottom right, bottom left, in pixels)
   eh3d-vision pads IMAGE [--mm-per-px V] [--expect-pitch MM] [--tolerance F] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   a row of pads: the pitch, how much it varies, how far the pads lie from the row and their size; exit 1 when the pitch varies, a pad is off the row or the pitch is not the one asked for
   eh3d-vision diff BEFORE AFTER [--threshold V] [--min-area PX] [--max-changed F] [--mask FILE.pgm] [--format csv|json] [--output FILE] [--replace]   two pictures of the same size compared: how many pixels changed, how much, where and in how many regions; exit 1 when more than --max-changed of the pixels changed
-  eh3d-vision server health|config|send KIND ... [--address HOST:PORT] [--machine ID]   the EH3D server of the machine (server_address, server_token and server_machine of vision.cfg): health asks whether it answers, config reads the values of the configuration file that it holds (written as lines for vision.cfg with --output, never over a file without --replace), send quality|offset|pads|diff takes the arguments of the command of that name and sends its result as JSON
+  eh3d-vision orientation IMAGE [--expect-deg D] [--tolerance DEG] [--body-contrast V] [--mark-contrast V] [--min-mark-px N] [--mm-per-px V] [--format csv|json] [--output FILE] [--replace]   which way a part with a mark on it (the band of a diode, the dot of pin 1) is held: the direction from the middle of the part to the mark, the quarter of a turn it is nearest to and how far from it, and how far from the wanted direction; exit 1 when there is no mark, it is in the middle, or it points off the wanted direction (or off a quarter of a turn when none is asked for)
+  eh3d-vision footprint IMAGE --pad-length MM --pad-width MM [--tolerance MM] [--count N] [--mm-per-px V] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   each pad of a picture judged on its own against the size of the design, with a tolerance in millimetres: one line per pad with the differences; exit 1 when a pad is off or the count is not the one asked for
+  eh3d-vision sharpmap IMAGE [--cells N] [--min-share F] [--heat FILE.pgm] [--format csv|json] [--output FILE] [--replace]   a map of where the picture is sharp: a grid of cells with the sharpness of each, the weak ones, the tilt along x and y and (with --heat) a picture of the map; exit 1 when a cell is much less sharp than the median
+  eh3d-vision board IMAGE [--square-mm D] [--pitch-mm D] [--max-aspect F] [--max-spread F] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--report FILE.txt] [--replace]   the millimetres of a pixel from a board of squares (D is the side or the distance between centres), along x, along y and from the side, with a report; exit 1 when the pixels are not square, the distances between neighbours differ or the side and the pitch do not agree
+  eh3d-vision server health|config|send KIND ... [--address HOST:PORT] [--machine ID]   the EH3D server of the machine (server_address, server_token, server_machine and server_mdns of vision.cfg): health asks whether it answers, config reads the values of the configuration file that the server keeps for the machine (written as lines for vision.cfg with --output, never over a file without --replace), send quality|offset|pads|diff|orientation|footprint|sharpmap|board takes the arguments of the command of that name and keeps its result as JSON on the server
 
 IMAGE is a PNG or a PGM file. The CSV files have one point per line: x,y in millimetres, in the same order in both files.";
 
@@ -343,6 +359,232 @@ fn diff_run(
     );
     let text = if json { diff_json(&d) } else { diff_csv(&d) };
     Ok((text, d.same, note))
+}
+
+/// What `orientation` and `server send orientation` do: the part of the picture is read for the way it is held. The text, whether the part is good and a line for the error output.
+fn orientation_run(
+    args: &mut Vec<String>,
+    cfg: &Config,
+    json: bool,
+) -> Result<(String, bool, String), String> {
+    let mut s = cfg.orientation_settings();
+    if let Some(v) = flag(args, "--expect-deg")? {
+        s.expected_deg = Some(num(&v, "--expect-deg")?);
+    }
+    if let Some(v) = flag(args, "--tolerance")? {
+        s.tolerance_deg = num(&v, "--tolerance")?;
+    }
+    if let Some(v) = flag(args, "--body-contrast")? {
+        s.body_contrast = num(&v, "--body-contrast")?;
+    }
+    if let Some(v) = flag(args, "--mark-contrast")? {
+        s.mark_contrast = num(&v, "--mark-contrast")?;
+    }
+    if let Some(v) = flag(args, "--min-mark-px")? {
+        s.min_mark_px = count(&v, "--min-mark-px")? as u64;
+    }
+    let mm_per_px = flag(args, "--mm-per-px")?
+        .map(|v| num(&v, "--mm-per-px"))
+        .transpose()?
+        .unwrap_or(cfg.mm_per_px);
+    finish(args, 1)?;
+    let path = args.first().ok_or("orientation needs an image")?;
+    if mm_per_px <= 0.0 {
+        return Err(
+            "orientation needs the scale: --mm-per-px, or mm_per_px in vision.cfg (the command calibrate works it out)"
+                .into(),
+        );
+    }
+    let img = picture(path, cfg, Some(0))?;
+    let o = orientation_analyse(&img, mm_per_px, &s)?;
+    let note = format!(
+        "mark of {} pixels {:.3} mm from the middle, pointing {:+.1} degrees (quarter {:+.0}, {:+.1} off it){}: {}",
+        o.mark_px,
+        o.distance_mm,
+        o.direction_deg,
+        o.quarter_deg,
+        o.skew_deg,
+        o.error_deg
+            .map(|e| format!(", {e:+.1} off the wanted direction"))
+            .unwrap_or_default(),
+        if o.passes() {
+            "good".to_string()
+        } else {
+            format!("refused ({})", o.reasons.join(", "))
+        }
+    );
+    let text = if json {
+        orientation_json(&o)
+    } else {
+        orientation_csv(&o)
+    };
+    Ok((text, o.passes(), note))
+}
+
+/// What `footprint` and `server send footprint` do: the pads of the picture are measured and each is judged against the design.
+fn footprint_run(
+    args: &mut Vec<String>,
+    cfg: &Config,
+    json: bool,
+) -> Result<(String, bool, String), String> {
+    let mut s = PartSettings::default();
+    if switch(args, "--light") {
+        s.polarity = Polarity::Light;
+    }
+    let flatten_px = flag(args, "--flatten")?
+        .map(|v| count(&v, "--flatten"))
+        .transpose()?;
+    let mm_per_px = flag(args, "--mm-per-px")?
+        .map(|v| num(&v, "--mm-per-px"))
+        .transpose()?
+        .unwrap_or(cfg.mm_per_px);
+    let length_mm = flag(args, "--pad-length")?
+        .map(|v| num(&v, "--pad-length"))
+        .transpose()?
+        .ok_or("footprint needs --pad-length, the longer side of a pad in millimetres")?;
+    let width_mm = flag(args, "--pad-width")?
+        .map(|v| num(&v, "--pad-width"))
+        .transpose()?
+        .ok_or("footprint needs --pad-width, the shorter side of a pad in millimetres")?;
+    let tolerance_mm = flag(args, "--tolerance")?
+        .map(|v| num(&v, "--tolerance"))
+        .transpose()?
+        .unwrap_or(cfg.footprint_tolerance_mm);
+    let expected_count = flag(args, "--count")?
+        .map(|v| count(&v, "--count"))
+        .transpose()?;
+    finish(args, 1)?;
+    let path = args.first().ok_or("footprint needs an image")?;
+    if mm_per_px <= 0.0 {
+        return Err(
+            "footprint needs the scale: --mm-per-px, or mm_per_px in vision.cfg (the command calibrate works it out)"
+                .into(),
+        );
+    }
+    s.threshold = cfg.threshold;
+    s.min_area_px = cfg.part_min_area;
+    s.max_area_px = cfg.part_max_area;
+    s.max_parts = cfg.max_parts;
+    let img = picture(path, cfg, flatten_px)?;
+    let parts = measure_parts(&img, &s, Scale { mm_per_px })?;
+    let design = FootprintSettings {
+        length_mm,
+        width_mm,
+        tolerance_mm,
+        expected_count,
+    };
+    let f = footprint_judge(&parts, &design)?;
+    let note = format!(
+        "{} pads, {} good, the worst side {:.4} mm off the design (mean {:+.4} mm long, {:+.4} mm wide): {}",
+        f.pads.len(),
+        f.pads_ok(),
+        f.worst_mm,
+        f.mean_d_length_mm,
+        f.mean_d_width_mm,
+        if f.passes() {
+            "good".to_string()
+        } else {
+            format!("refused ({})", f.reasons.join(", "))
+        }
+    );
+    let text = if json {
+        footprint_json(&f)
+    } else {
+        footprint_csv(&f)
+    };
+    Ok((text, f.passes(), note))
+}
+
+/// What `sharpmap` and `server send sharpmap` do: the picture is cut into cells and the sharpness of each is worked out. `--heat` writes the picture of the map.
+fn sharpmap_run(
+    args: &mut Vec<String>,
+    cfg: &Config,
+    json: bool,
+    replace: bool,
+) -> Result<(String, bool, String), String> {
+    let mut s = cfg.sharp_settings();
+    if let Some(v) = flag(args, "--cells")? {
+        s.cells = count(&v, "--cells")?;
+    }
+    if let Some(v) = flag(args, "--min-share")? {
+        s.min_share = num(&v, "--min-share")?;
+    }
+    let heat_file = flag(args, "--heat")?;
+    finish(args, 1)?;
+    let path = args.first().ok_or("sharpmap needs an image")?;
+    let img = picture(path, cfg, Some(0))?;
+    let m = sharp_map(&img, &s)?;
+    if let Some(file) = heat_file {
+        let hot = sharp_heat(&m, img.w, img.h)?;
+        write_bytes(Path::new(&file), &to_pgm(&hot), replace)?;
+    }
+    let note = format!(
+        "{} cells, {} weak, {} empty, the sharpness from {:.1} to {:.1} (median {:.1}), tilt {:+.2} along x and {:+.2} along y: {}",
+        m.cells.len(),
+        m.weak,
+        m.empty,
+        m.min,
+        m.max,
+        m.median,
+        m.tilt_x,
+        m.tilt_y,
+        if m.passes() {
+            "even".to_string()
+        } else {
+            format!("refused ({})", m.reasons.join(", "))
+        }
+    );
+    let text = if json { sharp_json(&m) } else { sharp_csv(&m) };
+    Ok((text, m.passes(), note))
+}
+
+/// What `board` and `server send board` do: the squares of the picture give the scale along x and along y. `--report` writes the report for a person. The text, whether the board is good
+/// and the report for the error output.
+fn board_run(
+    args: &mut Vec<String>,
+    cfg: &Config,
+    json: bool,
+    replace: bool,
+) -> Result<(String, bool, String), String> {
+    let mut shapes = ShapeSettings::default();
+    if switch(args, "--light") {
+        shapes.polarity = Polarity::Light;
+    }
+    let flatten_px = flag(args, "--flatten")?
+        .map(|v| count(&v, "--flatten"))
+        .transpose()?;
+    shape_settings(&mut shapes, cfg, true);
+    let mut s = cfg.board_settings();
+    if let Some(v) = flag(args, "--square-mm")? {
+        s.square_mm = num(&v, "--square-mm")?;
+    }
+    if let Some(v) = flag(args, "--pitch-mm")? {
+        s.pitch_mm = num(&v, "--pitch-mm")?;
+    }
+    if let Some(v) = flag(args, "--max-aspect")? {
+        s.max_aspect = num(&v, "--max-aspect")?;
+    }
+    if let Some(v) = flag(args, "--max-spread")? {
+        s.max_spread = num(&v, "--max-spread")?;
+    }
+    if let Some(v) = flag(args, "--min-size")? {
+        shapes.min_size = num(&v, "--min-size")?;
+    }
+    if let Some(v) = flag(args, "--max-size")? {
+        shapes.max_size = num(&v, "--max-size")?;
+    }
+    let report_file = flag(args, "--report")?;
+    finish(args, 1)?;
+    let path = args.first().ok_or("board needs an image")?;
+    let img = picture(path, cfg, flatten_px)?;
+    let squares = find_squares(&img, &shapes)?;
+    let b = scale_from_squares(&squares, &s)?;
+    let report = board_report(&b, &s);
+    if let Some(file) = report_file {
+        write_text(Path::new(&file), &report, replace)?;
+    }
+    let text = if json { board_json(&b) } else { board_csv(&b) };
+    Ok((text, b.passes(), report))
 }
 
 /// The client of the server for the settings of the configuration file, with `--address` and `--machine` over them.
@@ -1217,6 +1459,76 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 Err("the pictures are not the same".into())
             }
         }
+        "orientation" => {
+            let replace = switch(&mut args, "--replace");
+            let cfg = config();
+            let format = flag(&mut args, "--format")?.unwrap_or_else(|| "csv".to_string());
+            let output = flag(&mut args, "--output")?;
+            if !matches!(format.as_str(), "csv" | "json") {
+                return Err(format!("--format '{format}' is not csv or json"));
+            }
+            let (text, passes, note) = orientation_run(&mut args, &cfg, format == "json")?;
+            deliver(&text, output, replace || cfg.replace_output)?;
+            eprintln!("{note}");
+            if passes {
+                Ok(())
+            } else {
+                Err("the part is not held right".into())
+            }
+        }
+        "footprint" => {
+            let replace = switch(&mut args, "--replace");
+            let cfg = config();
+            let format = flag(&mut args, "--format")?.unwrap_or_else(|| "csv".to_string());
+            let output = flag(&mut args, "--output")?;
+            if !matches!(format.as_str(), "csv" | "json") {
+                return Err(format!("--format '{format}' is not csv or json"));
+            }
+            let (text, passes, note) = footprint_run(&mut args, &cfg, format == "json")?;
+            deliver(&text, output, replace || cfg.replace_output)?;
+            eprintln!("{note}");
+            if passes {
+                Ok(())
+            } else {
+                Err("the footprint is not good".into())
+            }
+        }
+        "sharpmap" => {
+            let replace = switch(&mut args, "--replace");
+            let cfg = config();
+            let format = flag(&mut args, "--format")?.unwrap_or_else(|| "csv".to_string());
+            let output = flag(&mut args, "--output")?;
+            if !matches!(format.as_str(), "csv" | "json") {
+                return Err(format!("--format '{format}' is not csv or json"));
+            }
+            let replace = replace || cfg.replace_output;
+            let (text, passes, note) = sharpmap_run(&mut args, &cfg, format == "json", replace)?;
+            deliver(&text, output, replace)?;
+            eprintln!("{note}");
+            if passes {
+                Ok(())
+            } else {
+                Err("the picture is not sharp everywhere".into())
+            }
+        }
+        "board" => {
+            let replace = switch(&mut args, "--replace");
+            let cfg = config();
+            let format = flag(&mut args, "--format")?.unwrap_or_else(|| "csv".to_string());
+            let output = flag(&mut args, "--output")?;
+            if !matches!(format.as_str(), "csv" | "json") {
+                return Err(format!("--format '{format}' is not csv or json"));
+            }
+            let replace = replace || cfg.replace_output;
+            let (text, passes, report) = board_run(&mut args, &cfg, format == "json", replace)?;
+            deliver(&text, output, replace)?;
+            eprint!("{report}");
+            if passes {
+                Ok(())
+            } else {
+                Err("the board does not give a good scale".into())
+            }
+        }
         "server" => {
             let replace = switch(&mut args, "--replace");
             let cfg = config();
@@ -1257,7 +1569,7 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 }
                 "send" => {
                     if args.is_empty() {
-                        return Err("server send needs quality, offset, pads or diff".into());
+                        return Err("server send needs quality, offset, pads, diff, orientation, footprint, sharpmap or board".into());
                     }
                     let kind = args.remove(0);
                     let (json, passes) = match kind.as_str() {
@@ -1286,9 +1598,25 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                             let (text, same, _) = diff_run(&mut args, &cfg, true, replace)?;
                             (text, same)
                         }
+                        "orientation" => {
+                            let (text, passes, _) = orientation_run(&mut args, &cfg, true)?;
+                            (text, passes)
+                        }
+                        "footprint" => {
+                            let (text, passes, _) = footprint_run(&mut args, &cfg, true)?;
+                            (text, passes)
+                        }
+                        "sharpmap" => {
+                            let (text, passes, _) = sharpmap_run(&mut args, &cfg, true, replace)?;
+                            (text, passes)
+                        }
+                        "board" => {
+                            let (text, passes, _) = board_run(&mut args, &cfg, true, replace)?;
+                            (text, passes)
+                        }
                         other => {
                             return Err(format!(
-                                "{other}: server send takes quality, offset, pads or diff"
+                                "{other}: server send takes quality, offset, pads, diff, orientation, footprint, sharpmap or board"
                             ))
                         }
                     };
