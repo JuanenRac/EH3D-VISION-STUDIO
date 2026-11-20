@@ -10,6 +10,9 @@ use eh3d_vision_studio::batch::{check_detailed, list_pictures, report_csv, summa
 use eh3d_vision_studio::board::{
     report as board_report, scale_from_squares, to_csv as board_csv, to_json as board_json,
 };
+use eh3d_vision_studio::charuco::detect::detect as charuco_detect;
+use eh3d_vision_studio::charuco::solve::{calibrate as charuco_calibrate, Check};
+use eh3d_vision_studio::charuco::{card as charuco_card, Dictionary};
 use eh3d_vision_studio::config::Config;
 use eh3d_vision_studio::convention::{
     blob_findings, document, fiducial_findings, focus_finding, validate, Finding, Source,
@@ -101,6 +104,8 @@ const HELP: &str = "eh3d-vision: fiducials in a camera image
   eh3d-vision edge IMAGE --from X,Y --to X,Y [--step PX] [--max-uncertainty PX] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   where an edge is, to a fraction of a pixel, along a line laid across it (from a point on one side to a point on the other, both inside the picture), with the uncertainty of the position (one standard deviation, from the noise of the two flat grounds and the slope of the edge), the contrast and the width of the transition; exit 1 when the uncertainty is above the limit
   eh3d-vision histogram IMAGE [--bins N] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   the histogram of the grey levels in 8 to 256 groups and the thresholds that Otsu, isodata and the triangle method pick, how much of the variance two groups explain and whether the three agree (the value for `threshold` of vision.cfg when the automatic one is not good)
   eh3d-vision refcheck REFERENCE PICTURE [--tolerance MASK.pgm] [--threshold V] [--min-area PX] [--max-changed F] [--map FILE.pgm] [--format csv|json] [--output FILE] [--replace]   a picture compared with a reference of the same size through a mask of tolerance (a mask pixel at 0 keeps the general threshold, 1 to 254 allows that many levels more, 255 is not looked at): the pixels outside the tolerance, how much they pass it, in how many regions and where; --map writes them as a picture; exit 1 when the share is above the limit
+  eh3d-vision charuco card [--lang CODE] [--output FILE.svg] [--replace]   the board of calibration (squares and markers, calib_squares_x, calib_squares_y, calib_square_mm and calib_marker_seed of vision.cfg) as a drawing in millimetres to print at 100 %, with the guide in the language
+  eh3d-vision charuco calibrate IMAGE [--check-mm D] [--allow-unchecked] [--output FILE.cal] [--replace]   the calibration of the camera from a picture of that board: the markers are read, the corners found, the map from pixels to millimetres fitted three ways and refused when the residual, the gap between the methods or the distance D measured with a ruler between the two outer corners of a row (calib_check_mm) do not hold; without D the calibration is refused unless --allow-unchecked or calib_allow_unchecked
   eh3d-vision server health|config|discover|check|detect|send KIND ... [--address HOST:PORT] [--machine ID]   the EH3D server of the machine (server_address, server_token, server_machine and server_mdns of vision.cfg): health asks whether it answers, config reads the values of the configuration file that the server keeps for the machine (written as lines for vision.cfg with --output, never over a file without --replace), discover lists the servers that answer on the local network (only with server_mdns = on and a program built with the feature mdns; they are candidates for the person to choose, never connected to by themselves), check FILE tells whether a result follows the convention of the server (schema, kind, picture, findings, units, evidence), detect fiducials|barcode|focus|blobs IMAGE [--seed N] [--artifact] asks the simulated station of the server for a result about the picture (evidence simulator), send quality|offset|pads|diff|orientation|footprint|sharpmap|board takes the arguments of the command of that name and keeps its result as JSON on the server, and send fiducials|focus|blobs IMAGE [--evidence camera|picture|simulator] [--max-findings N] keeps the result in the convention of the server with its schema
 
 IMAGE is a PNG or a PGM file. The CSV files have one point per line: x,y in millimetres, in the same order in both files.";
@@ -788,6 +793,53 @@ fn discovery_client(settings: sc::Settings) -> Result<Client, String> {
 #[cfg(not(feature = "mdns"))]
 fn discovery_client(_settings: sc::Settings) -> Result<Client, String> {
     Err("this program was built without the search of the local network (build it with --features mdns)".into())
+}
+
+/// What `charuco card` and `charuco calibrate` do. The calibration of a picture file has the evidence `picture`: only a camera makes it `camera`.
+fn charuco_run(args: &mut Vec<String>, cfg: &Config, replace: bool) -> Result<(), String> {
+    let output = flag(args, "--output")?;
+    if args.is_empty() {
+        return Err("charuco needs card or calibrate".into());
+    }
+    let what = args.remove(0);
+    let spec = cfg.board_spec();
+    let dict = Dictionary::for_board(&spec)?;
+    match what.as_str() {
+        "card" => {
+            let lang = match flag(args, "--lang")? {
+                Some(code) => Lang::from_code(&code).ok_or_else(|| {
+                    format!("--lang '{code}' is not one of en, es, de, fr, it, ja, zh, pt")
+                })?,
+                None => Lang::from_setting(&cfg.language),
+            };
+            finish(args, 0)?;
+            deliver(&charuco_card::svg(&spec, &dict, lang)?, output, replace)
+        }
+        "calibrate" => {
+            let mut settings = cfg.calib_settings();
+            if let Some(v) = flag(args, "--check-mm")? {
+                settings.check_mm = num(&v, "--check-mm")?;
+            }
+            if switch(args, "--allow-unchecked") {
+                settings.allow_unchecked = true;
+            }
+            finish(args, 1)?;
+            let path = args.first().ok_or("charuco calibrate needs an image")?;
+            let img = picture(path, cfg, None)?;
+            let found = charuco_detect(&img, &spec, &dict).map_err(|e| e.to_string())?;
+            let cal = charuco_calibrate(&found, &spec, &settings).map_err(|e| e.to_string())?;
+            let ruler = match cal.check {
+                Check::NotMeasured => "not checked against a ruler".to_string(),
+                Check::Measured { error_mm, .. } => format!("ruler {error_mm:+.3} mm"),
+            };
+            eprintln!(
+                "{} corners, {:.5} mm per pixel, {:.3} px left (largest {:.3}), methods {:.2} % of a square apart, {ruler}, evidence {}",
+                cal.corners, cal.mm_per_px, cal.rms_px, cal.max_px, cal.gap * 100.0, cal.evidence
+            );
+            deliver(&cal.to_text(), output, replace)
+        }
+        other => Err(format!("charuco {other}: it is card or calibrate")),
+    }
 }
 
 fn run(mut args: Vec<String>) -> Result<(), String> {
@@ -1811,6 +1863,11 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
             } else {
                 Err("the board does not give a good scale".into())
             }
+        }
+        "charuco" => {
+            let replace = switch(&mut args, "--replace");
+            let cfg = config();
+            charuco_run(&mut args, &cfg, replace || cfg.replace_output)
         }
         "server" => {
             let replace = switch(&mut args, "--replace");

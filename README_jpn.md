@@ -17,7 +17,7 @@
 
 ---
 
-**正直さの確認 - 現在実際に動くもの：** Rust ライブラリとコマンドライン プログラム（`eh3d-vision`）で、コンピューター上で実行される 516 件のテストがあります：画像から丸い基準マークを見つけ、画素をミリメートルに変換し、基板を設計どおりの位置に合わせる回転と移動量を計算します。ウィンドウ（`--features gui` でビルドする `eh3d-vision-gui` プログラム）があり、画像を開き、マークを座標つきで表示し、スケールを設定し、グリッドからレンズの歪みを求め、設計と位置合わせして ISOCAM 用のオプションを書き出しますが、ウィンドウはまだ画面で確認していません。機械では試しておらず、実際のファイルの集まりでも確認していません。
+**正直さの確認 - 現在実際に動くもの：** Rust ライブラリとコマンドライン プログラム（`eh3d-vision`）で、コンピューター上で実行される 678 件のテストがあります：画像から丸い基準マークを見つけ、画素をミリメートルに変換し、基板を設計どおりの位置に合わせる回転と移動量を計算します。ウィンドウ（`--features gui` でビルドする `eh3d-vision-gui` プログラム）があり、画像を開き、マークを座標つきで表示し、スケールを設定し、グリッドからレンズの歪みを求め、設計と位置合わせして ISOCAM 用のオプションを書き出しますが、ウィンドウはまだ画面で確認していません。機械では試しておらず、実際のファイルの集まりでも確認していません。
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | バージョン | `0.1.1` |
 | 成熟度 | 機能する |
-| テスト | 516 |
+| テスト | 678 |
 | 技術スタック | Rust |
 | 実機での動作 | 未試験：ここにあるものは機械で動かしたことがありません |
 
@@ -46,9 +46,10 @@
 |---|---|---|
 | コア | 🟡 | 画像から丸い基準マークを見つけ、画素をミリメートルに変換し、基板を設計どおりの位置に合わせる回転と移動量を計算します。コンピューター上で通常入力と破損入力でテスト済み。実際のファイルの集まりでは未確認。 |
 | コマンドライン | 🟡 | `eh3d-vision` はライブラリと同じ関数を実行して結果を表示します。エラーはメッセージと 0 以外の終了コードで返ります。 |
-| テスト | 🟡 | 516 件のテストが通ります（`cargo test`）。通常ケース、境界ケース、破損入力に加え、ノイズ、誤った露出、無効または欠落したフレーム、マークに見えるほこり、途切れた画像ファイルを加え、再取得される基板上の模擬カメラを含みます。 |
-| セキュリティ | 🟡 | 安全な Rust のみ（`forbid(unsafe_code)`）。受け取ったファイルでパニックせず、不正な値は理由付きのエラーになります。独立したレビューはありません。 |
+| テスト | 🟡 | 678 件のテストが通ります（`cargo test`）。通常ケース、境界ケース、破損入力に加え、ノイズ、誤った露出、無効または欠落したフレーム、マークに見えるほこり、途切れた画像ファイルを加え、再取得される基板上の模擬カメラを含みます。 |
+| セキュリティ | 🟡 | 安全な Rust のみ（`forbid(unsafe_code)`；unsafe はカメラのバックエンドを専用機能でビルドしたときの小さな部分だけ）。受け取ったファイルでパニックせず、不正な値は理由付きのエラーになります。独立したレビューはありません。 |
 | ウィンドウ | 🟠 | 作成済み（egui、`--features gui`、プログラム `eh3d-vision-gui`）：画像を開く／ドロップする、マークを座標つきで見る、大きさが既知のマークでスケールを設定する、グリッドからレンズの歪みを求める、CSV の設計と位置合わせする、ISOCAM 用オプションを書き出す。ロジックはテスト済みですが、まだビルドも画面での確認もしていません。 |
+| ライブカメラ | 🟠 | カメラ層、校正ボード、基板の位置合わせは書かれ、模擬カメラと模擬ステージで試験済みです。Windows、V4L2、libcamera のバックエンドは骨組みで、実際のカメラ、レンズ、基板では何も動かしていません。 |
 | 実機 | 🔴 | 未試験：ここにあるものは機械で実行したことがありません。 |
 | ドキュメント | 🟡 | 8 言語の README、変更履歴、`docs/` から描いた 2 枚の図。 |
 
@@ -86,7 +87,7 @@ EH3D-VISION-STUDIO は EH3D Fabrication Suite のプログラムの一つです�
 * **破損入力のテスト：** 空のファイル、ゴミデータ、巨大な数値、途中で切れたファイルも与え、どれもパニックしてはいけません。
 * **推測しない：** 意味のない値は、どの値かと理由を示すエラーになり、見かけだけ正しい結果にはなりません。
 * **読み込むファイルのサイズ上限：** コマンドラインは、画像や点のファイルが `vision.cfg` の `max_file_mib`（既定は 64 MiB）以下のときだけ読み込みます。それより大きいファイルはコード `file_too_large` とファイル名で、読めないファイルは `file_unreadable` で、テキストでない点のファイルは `file_not_text` で拒否され、何も読み込まれません。
-* **unsafe コードなし：** ライブラリとプログラムに `#![forbid(unsafe_code)]`。
+* **既定のビルドに unsafe コードなし：** ライブラリとプログラムに `#![forbid(unsafe_code)]`。ライブカメラのバックエンドだけが、専用の機能でビルドしたときに小さな unsafe 部分（数回の呼び出しで、構造体のサイズはビルド時に検査）を持ちます。
 * **ISOCAM 用のマーク：** `align --isocam-args` は各マークの組を `eh3d-isocam` のオプション `--fiducial 設計X,設計Y,測定X,測定Y` として出力します。
 * **ウィンドウ：** `--features gui` でプログラム `eh3d-vision-gui` としてビルドします（Windows ではコンソールなしで開きます）。PNG または PGM の画像をズームと移動つきで開き、編集できる値でマークを見つけ、座標つきで描画し、大きさが既知のマークでスケールを設定し、マークのグリッドからレンズの歪みを求め、CSV ファイルの設計と位置合わせし（マークは位置で対応付けるので順序は関係ありません）、位置合わせが合格のときだけ ISOCAM のオプション `--fiducial` を書き出します。8 言語に対応し、ネットワークは不要です。
 * **設定ファイル：** `vision.cfg` に調整されるすべての値（マークの見た目、ターゲットのグリッド、合格する位置合わせの限度、読み込む最大ファイル）を書きます。間違いは行番号つきで拒否され、`examples/vision.cfg` がすべてを一覧にしています。
@@ -128,6 +129,9 @@ EH3D-VISION-STUDIO は EH3D Fabrication Suite のプログラムの一つです�
 * **レンズの残差（マークごと）:** `eh3d-vision lens 画像 --residuals` は、格子の各マークについて、補正前と補正後に本来の位置からどれだけずれているか、最も遠いマーク、中心からの距離の 3 つの帯、外側の帯と内側の帯の比を書き出します。比が 1 をはるかに超える場合、2 つの放射項ではそのレンズに足りない（またはターゲットが平らでない）ことを示します。
 * **ウィンドウの追加機能:** サイドパネルには、サーバーの設定（`eh3d-view` のスイート共通パネル：アドレス、トークン、機械、再試行、ネットワーク検索のスイッチ、ログインとセッション）、隅の接続状態、サーバー検索（スイッチがオンのときだけ、別スレッドで、選べる候補付き）、3 つの切れ目付きのヒストグラム、4 つの数値で決める線に沿ったエッジ、許容マスク付きの基準画像との照合、そして各パネルの見出しの下に畳まれたヘルプ行（8 言語）があります。ウィンドウはまだ画面で確認していません。
 * **固定シードのテスト：** `tests/fuzz.rs` は、時計を読まない生成器で、任意の大きさの画像、任意の位置の角、任意の大きさのパッド、任意の位置の正方形、壊れた設定ファイル、JSON、Base64、HTTP 応答を与えます。パニックしてはならず、出てくるものは意味を持たなければなりません。ウィンドウのパネルも同様にランダムな画像を通します。 `tests/fuzz_camera.rs` は、任意の画像の任意の線に沿ったエッジ、ヒストグラム、任意のマスクによる基準画像との照合、任意のマークの残差、そして切り詰め・改変・でたらめな内容にした規約の文書について、同じことを行います。
+* **トレイトの背後にあるライブカメラ（模擬カメラでのみ試験済み、`src/capture/`）：** カメラは名前と変わらないキー（`vendor:product:serial@port`）で一覧され、形式（YUYV、モーションJPEG、RGB、グレー）で開かれ、カウンタと元のバイト列付きのフレームを返します。13個のプロパティにはそれぞれ範囲があり、無い場合はカメラがそう答えます。USBバスの負荷（`capture_usb_mbps`）、黒・固着・欠落・途切れたフレーム、照明のちらつきを検出し、新しいフレームは秒数ではなく枚数で待ち、ログは関数に渡されます。模擬カメラはわざと故障します。Windows、V4L2、libcamera のバックエンドは機能 `mfoundation`、`v4l2`、`libcamera`（既定では無効）の背後にある骨組みで、実機では試していません。モーションJPEGのフレームは検査しますが、まだデコードしません。
+* **番号付きマーカーの校正ボード（`src/charuco/`）：** `eh3d-vision charuco card` は白いマスにマーカーを持つチェス盤をミリメートル単位で描き、100 % で印刷できます。`eh3d-vision charuco calibrate IMAGE` はマーカーを読み、どの回転でも角を画素の小数精度で見つけ、画素からミリメートルへの変換を3通り（ホモグラフィ、アフィン、相似）で当てはめます。角に残る誤差が大きいとき（`calib_max_residual_px`）、方法ごとの角の位置が離れすぎるとき（`calib_max_method_gap`）、または1行の両端の外側の角の間を定規で測った距離（`calib_check_mm`）と合わないときは拒否されます。定規の値が無い場合は `calib_allow_unchecked` で許可しない限り使われません。唯一のオフセットは `camera_offset_x_mm`、`camera_offset_y_mm`、`camera_offset_deg` のもので、模擬フレームから作った校正は実際のカメラには使えません。
+* **見て、動かし、また見て基板を正しい位置に置く（`src/boardaim.rs`）：** 変わらない姿勢からフィデューシャルを見て、回転とずれを求め、ステージに逆向きの移動を指示します（1回あたり `align_max_step_mm` と `align_max_step_deg` を、合計で `align_max_total_mm` を超えません）。移動後に撮られたフレームを待ってからもう一度見て、基板が `align_tolerance_mm` と `align_tolerance_deg` の内側に入るまで続けます。何かおかしいときは最も安全な状態（通常のステップ、半分のステップ、保持、中止）の方向にしか進みません。誤差が増えるとステップを半分にし、さらに増えれば止め、マークが無い、黒や同じフレーム、上限到達、ステージの失敗でも移動を止めます。模擬ステージでのみ実行しています。
 
 ## 🔒 セキュリティと安全
 
@@ -136,7 +140,7 @@ EH3D-VISION-STUDIO は EH3D Fabrication Suite のプログラムの一つです�
 | 破損・途中切れ・空のファイル | パニックなし：テストは有効な入力をあらゆる位置で切り、ゴミデータも与えます |
 | 意味のない数値（負、無限、極端に大きい） | 値を示すエラーで拒否され、もっともらしい値に丸められることはありません |
 | 別のファイルに上書きしてしまうレポートや計測ファイル | ファイルがない場所にしか書きません。上書きには `--replace` が必要で、リンク越しには決して書きません |
-| 安全でないメモリ使用 | `forbid(unsafe_code)` の安全な Rust のみ |
+| 安全でないメモリ使用 | `forbid(unsafe_code)` の安全な Rust のみ；unsafe はカメラのバックエンドを専用機能でビルドしたときの小さな部分だけ |
 | トークンが出てはならない所に表示・送信される | トークンは表示されず、結果にも入りません。サーバーが送る値は全部か何もかで、接続のキー（`server_*`）はサーバーから受け取りません。ローカルでないアドレスへ平文 HTTP で送られるトークンには警告が出ます |
 
 **防御していないこと：** エラーなく作られた結果は、検証された結果ではありません。ここには機械の限界を知るものはなく、プログラムは独立したレビューを受けていません。脆弱性は非公開で報告してください（[SECURITY.md](SECURITY.md) 参照）。
@@ -171,13 +175,15 @@ eh3d-vision board IMAGE [--square-mm D] [--pitch-mm D] [--max-aspect F] [--max-s
 eh3d-vision edge IMAGE --from X,Y --to X,Y [--step PX] [--max-uncertainty PX] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   where an edge is, to a fraction of a pixel, along a line laid across it (from a point on one side to a point on the other, both inside the picture), with the uncertainty of the position (one standard deviation, from the noise of the two flat grounds and the slope of the edge), the contrast and the width of the transition; exit 1 when the uncertainty is above the limit
 eh3d-vision histogram IMAGE [--bins N] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   the histogram of the grey levels in 8 to 256 groups and the thresholds that Otsu, isodata and the triangle method pick, how much of the variance two groups explain and whether the three agree (the value for `threshold` of vision.cfg when the automatic one is not good)
 eh3d-vision refcheck REFERENCE PICTURE [--tolerance MASK.pgm] [--threshold V] [--min-area PX] [--max-changed F] [--map FILE.pgm] [--format csv|json] [--output FILE] [--replace]   a picture compared with a reference of the same size through a mask of tolerance (a mask pixel at 0 keeps the general threshold, 1 to 254 allows that many levels more, 255 is not looked at): the pixels outside the tolerance, how much they pass it, in how many regions and where; --map writes them as a picture; exit 1 when the share is above the limit
+eh3d-vision charuco card [--lang CODE] [--output FILE.svg] [--replace]   the board of calibration (squares and markers, calib_squares_x, calib_squares_y, calib_square_mm and calib_marker_seed of vision.cfg) as a drawing in millimetres to print at 100 %, with the guide in the language
+eh3d-vision charuco calibrate IMAGE [--check-mm D] [--allow-unchecked] [--output FILE.cal] [--replace]   the calibration of the camera from a picture of that board: the markers are read, the corners found, the map from pixels to millimetres fitted three ways and refused when the residual, the gap between the methods or the distance D measured with a ruler between the two outer corners of a row (calib_check_mm) do not hold; without D the calibration is refused unless --allow-unchecked or calib_allow_unchecked
 eh3d-vision server health|config|discover|check|detect|send KIND ... [--address HOST:PORT] [--machine ID]   the EH3D server of the machine (server_address, server_token, server_machine and server_mdns of vision.cfg): health asks whether it answers, config reads the values of the configuration file that the server keeps for the machine (written as lines for vision.cfg with --output, never over a file without --replace), discover lists the servers that answer on the local network (only with server_mdns = on and a program built with the feature mdns; they are candidates for the person to choose, never connected to by themselves), check FILE tells whether a result follows the convention of the server (schema, kind, picture, findings, units, evidence), detect fiducials|barcode|focus|blobs IMAGE [--seed N] [--artifact] asks the simulated station of the server for a result about the picture (evidence simulator), send quality|offset|pads|diff|orientation|footprint|sharpmap|board takes the arguments of the command of that name and keeps its result as JSON on the server, and send fiducials|focus|blobs IMAGE [--evidence camera|picture|simulator] [--max-findings N] keeps the result in the convention of the server with its schema
 eh3d-vision-gui [IMAGE] [DESIGN.csv]   the window (a build with --features gui); on Windows it opens with no console
 ```
 
 ## ⚙️ 設定
 
-調整される値はコードではなく、単純な `キー = 値` のファイルに書きます。プログラムを起動したフォルダー、またはプログラムの隣の `vision.cfg` です（変数 `EH3D_VISION_CONFIG` で別のファイルを指定できます）。ウィンドウの言語、マークが暗いか明るいか、しきい値、直径の範囲、マークの充填率と細長さ、スケールを決めるマークの大きさ、グリッドの列数と行数、位置合わせでサイズの変更を許すか、位置合わせが満たすべき限度、読み込む最大ファイルを設定します。`examples/vision.cfg` はすべてのキーを意味と起動時の値つきで一覧にしています。ファイルがなければその値が使われ、間違いのあるファイルは行番号つきで拒否されます。コマンドラインでは同じことをオプションで指定します（インターフェースを参照）。また、その他の調整値も保持します。信頼度（`refine_subpixel`、`full_contrast`）、照明のウィンドウ（`flatten_window`）、スケールと部品の大きさ（`mm_per_px`、`part_min_area`、`part_max_area`、`max_parts`）、十字の範囲（`cross_min_size`、`cross_max_size`、`cross_max_elongation`）、ターゲットの許容差（`pitch_tolerance`）、フォルダ内の画像の最大数（`batch_max_files`）です。 正方形の最小の充填率と、任意の角度の十字の最小スコアは `square_min_fill` と `cross_min_score` です。 正方形の辺の範囲と、その枠が幅よりどれだけ長くてよいかは、十字のものとは別に `square_min_size`、`square_max_size`、`square_max_elongation` です。 レンズは `lens_k1` と `lens_k2`（`lens` が求める値）で、補正後にグリッドが格子から離れてよい最大値は `lens_max_rms` です。 `inspect` が読むパッケージの表は `package_table`、部品がパッケージから外れてよい最大値と回転の最大値は `inspect_tolerance` と `inspect_max_angle` です。 HTML レポートが画像に警告を出すスコアのしきい値は `report_low_score` です。 スケールを決めるターゲットのマーク間隔は `pitch_mm`、書き出すファイルが既存のファイルに上書きしてよいかは `replace_output`（既定は no）です。 `shots` の計画で隣り合う画像の重なりと部品の周りの余白は `shots_overlap` と `shots_margin` です。 ウィンドウがレンズの格子を描くかどうかは `show_lens_grid` です。 `inspect` とウィンドウが部品を照合するパッケージは `inspect_package`、`shots` とウィンドウが撮影を計画する部品のサイズは `shots_part_width` と `shots_part_height` です（0 と 0 ならパッケージの本体）。 リングマークには、外径の範囲（`ring_min_diameter`、`ring_max_diameter`）、内径と外径の比の範囲（`ring_min_ratio`、`ring_max_ratio`）、帯の最小充填率（`ring_min_fill`）、細長さ（`ring_max_elongation`）、2 種類の大きさを分ける直径（`ring_split`、0 で自動）、大きさの間隔（`ring_size_gap`）があります。 ピックした部品の画像でのノズル軸は `nozzle_x_mm` と `nozzle_y_mm`、保持してよい最大距離と最大回転は `pick_max_offset_mm` と `pick_max_turn_deg` です（0 は確認しない）。 正しく保持された部品の回転は `nominal_angle_deg`、カメラが部品を鏡像で見るかどうかは `pick_mirror`、画像のチェックは `quality_check` と下限 `quality_min_contrast`、`quality_min_mean`、`quality_max_mean`、`quality_min_sharpness`（0：確認しない）です。 サーバーは `server_address`、`server_token`、`server_machine`、`server_timeout_s`、`server_retries` です（アドレスが空ならサーバーなし）。相関による検索は `correlate_diameter` と `correlate_min_score`、補正した画像の最大の辺は `rectify_max_side`、パッド列の許容差は `pads_tolerance`、2 枚の画像の比較は `diff_threshold`、`diff_min_area`、`diff_max_changed` です。サーバーをローカルネットワークで探すかどうかは `server_mdns` です（既定はオフ）。マーク付き部品の読み取りは `orientation_body_contrast`、`orientation_mark_contrast`、`orientation_min_mark_px`、`orientation_tolerance_deg`、パッドの許容差は `footprint_tolerance_mm`、鮮明さの地図は `sharpmap_cells`、`sharpmap_min_share`、`sharpmap_min_contrast`、盤からのスケールは `board_square_mm`（中心間の距離は `pitch_mm`）、`board_max_aspect`、`board_max_spread` です。トークンを含む `vision.cfg` は非公開にしてください。 ピント確認の結果で 50 点にあたる鮮鋭度は `focus_reference`、エッジの線に沿った間隔と位置の不確かさの上限は `edge_step_px` と `edge_max_uncertainty_px` です。
+調整される値はコードではなく、単純な `キー = 値` のファイルに書きます。プログラムを起動したフォルダー、またはプログラムの隣の `vision.cfg` です（変数 `EH3D_VISION_CONFIG` で別のファイルを指定できます）。ウィンドウの言語、マークが暗いか明るいか、しきい値、直径の範囲、マークの充填率と細長さ、スケールを決めるマークの大きさ、グリッドの列数と行数、位置合わせでサイズの変更を許すか、位置合わせが満たすべき限度、読み込む最大ファイルを設定します。`examples/vision.cfg` はすべてのキーを意味と起動時の値つきで一覧にしています。ファイルがなければその値が使われ、間違いのあるファイルは行番号つきで拒否されます。コマンドラインでは同じことをオプションで指定します（インターフェースを参照）。また、その他の調整値も保持します。信頼度（`refine_subpixel`、`full_contrast`）、照明のウィンドウ（`flatten_window`）、スケールと部品の大きさ（`mm_per_px`、`part_min_area`、`part_max_area`、`max_parts`）、十字の範囲（`cross_min_size`、`cross_max_size`、`cross_max_elongation`）、ターゲットの許容差（`pitch_tolerance`）、フォルダ内の画像の最大数（`batch_max_files`）です。 正方形の最小の充填率と、任意の角度の十字の最小スコアは `square_min_fill` と `cross_min_score` です。 正方形の辺の範囲と、その枠が幅よりどれだけ長くてよいかは、十字のものとは別に `square_min_size`、`square_max_size`、`square_max_elongation` です。 レンズは `lens_k1` と `lens_k2`（`lens` が求める値）で、補正後にグリッドが格子から離れてよい最大値は `lens_max_rms` です。 `inspect` が読むパッケージの表は `package_table`、部品がパッケージから外れてよい最大値と回転の最大値は `inspect_tolerance` と `inspect_max_angle` です。 HTML レポートが画像に警告を出すスコアのしきい値は `report_low_score` です。 スケールを決めるターゲットのマーク間隔は `pitch_mm`、書き出すファイルが既存のファイルに上書きしてよいかは `replace_output`（既定は no）です。 `shots` の計画で隣り合う画像の重なりと部品の周りの余白は `shots_overlap` と `shots_margin` です。 ウィンドウがレンズの格子を描くかどうかは `show_lens_grid` です。 `inspect` とウィンドウが部品を照合するパッケージは `inspect_package`、`shots` とウィンドウが撮影を計画する部品のサイズは `shots_part_width` と `shots_part_height` です（0 と 0 ならパッケージの本体）。 リングマークには、外径の範囲（`ring_min_diameter`、`ring_max_diameter`）、内径と外径の比の範囲（`ring_min_ratio`、`ring_max_ratio`）、帯の最小充填率（`ring_min_fill`）、細長さ（`ring_max_elongation`）、2 種類の大きさを分ける直径（`ring_split`、0 で自動）、大きさの間隔（`ring_size_gap`）があります。 ピックした部品の画像でのノズル軸は `nozzle_x_mm` と `nozzle_y_mm`、保持してよい最大距離と最大回転は `pick_max_offset_mm` と `pick_max_turn_deg` です（0 は確認しない）。 正しく保持された部品の回転は `nominal_angle_deg`、カメラが部品を鏡像で見るかどうかは `pick_mirror`、画像のチェックは `quality_check` と下限 `quality_min_contrast`、`quality_min_mean`、`quality_max_mean`、`quality_min_sharpness`（0：確認しない）です。 サーバーは `server_address`、`server_token`、`server_machine`、`server_timeout_s`、`server_retries` です（アドレスが空ならサーバーなし）。相関による検索は `correlate_diameter` と `correlate_min_score`、補正した画像の最大の辺は `rectify_max_side`、パッド列の許容差は `pads_tolerance`、2 枚の画像の比較は `diff_threshold`、`diff_min_area`、`diff_max_changed` です。サーバーをローカルネットワークで探すかどうかは `server_mdns` です（既定はオフ）。マーク付き部品の読み取りは `orientation_body_contrast`、`orientation_mark_contrast`、`orientation_min_mark_px`、`orientation_tolerance_deg`、パッドの許容差は `footprint_tolerance_mm`、鮮明さの地図は `sharpmap_cells`、`sharpmap_min_share`、`sharpmap_min_contrast`、盤からのスケールは `board_square_mm`（中心間の距離は `pitch_mm`）、`board_max_aspect`、`board_max_spread` です。トークンを含む `vision.cfg` は非公開にしてください。 ピント確認の結果で 50 点にあたる鮮鋭度は `focus_reference`、エッジの線に沿った間隔と位置の不確かさの上限は `edge_step_px` と `edge_max_uncertainty_px` です。ライブカメラ、校正ボード、基板の位置合わせには専用のキー（`capture_*`、`calib_*`、`camera_offset_*`、`align_*`）があります。どれにも範囲があり、範囲外の値は拒否され、キーが関わるエラーはそのキーを名指しします。
 
 ## 🚀 クイックスタート
 
@@ -195,7 +201,7 @@ cargo run --release --features gui --bin eh3d-vision-gui -- --shot screen.png --
 
 ## 🧪 テスト
 
-テストは 516 件あります（`cargo test`、CI では Windows と Linux で実行）。通常ケース、境界ケース、破損入力を確認し、空のファイル、ゴミデータ、途中で切れたファイルでもパニックしません。CI は `cargo fmt --check`、警告をエラーにした `cargo clippy`、`python -I tools/ci_validate.py` も実行します。
+テストは 678 件あります（`cargo test`、CI では Windows と Linux で実行）。通常ケース、境界ケース、破損入力を確認し、空のファイル、ゴミデータ、途中で切れたファイルでもパニックしません。CI は `cargo fmt --check`、警告をエラーにした `cargo clippy`、`python -I tools/ci_validate.py` も実行します。
 
 ## 🏗️ ビルドとリリース
 
@@ -224,6 +230,9 @@ EH3D-VISION-STUDIO/
 │   ├── align.rs                                 基板の回転・シフト・サイズと設計との対応付け
 │   ├── batch.rs                                 フォルダ内の画像をまとめて処理し、CSV レポートを出力
 │   ├── board.rs                                 正方形の盤からのスケール：x 方向・y 方向・辺から、レポートつき
+│   ├── boardaim.rs                              設計どおりに基板を置く：見て、動かし、また見る。常に最も安全な状態へ
+│   ├── capture/                                 ライブカメラ：トレイト、形式、プロパティ、USB帯域、ストリームの状態、模擬カメラ
+│   ├── charuco/                                 番号付きマーカーの校正ボード：角、校正、ファイル、印刷用カード
 │   ├── config.rs                                設定ファイル：調整されたすべての値
 │   ├── correlate.rs                             目的の直径の円板との相関で見つける丸いマーク
 │   ├── diff.rs                                  同じ場所の2枚の画像の比較：何が、どこで、どれだけ変わったか
@@ -272,9 +281,11 @@ EH3D-VISION-STUDIO/
 │   ├── exchange.rs                              画像を読んでファイルを書くコマンドのテスト
 │   ├── commands.rs                              correlate・rectify・pads・diff・server コマンドのテスト
 │   ├── analysis.rs                              コマンド orientation、footprint、sharpmap、board のテスト
+│   ├── capture.rs                               模擬カメラでのライブカメラ・校正・位置合わせとコマンド
 │   ├── fuzz.rs                                  固定シードのランダム入力によるテスト：パニックしてはならない
 │   ├── camera.rs                                プログラムとして実行する新コマンド：edge、histogram、refcheck、残差、server
 │   ├── fuzz_camera.rs                           新しい測定と規約に対する固定シードのランダム入力
+│   ├── fuzz_capture.rs                          フレーム読み取り・校正ファイル・位置合わせの固定シードのランダム入力
 │   ├── shot_sample.rs                           サンプルが画像用ウィンドウで開くことのテスト
 │   └── vision.rs                                ライブラリとコマンドラインのテスト
 ├── examples/
@@ -306,7 +317,7 @@ EH3D-VISION-STUDIO/
 
 * ウィンドウはまだ画面で確認していません。マークは位置で設計と対応付けるため、大きく回転した基板や欠けたマークは推測せずに拒否されます。
 * 機械でも実際のファイルの集まりでも試しておらず、独立したレビューも受けていません。
-* 読むのは画像ファイルでライブカメラではなく、見つけるのは丸いマーク、四角いマーク、十字形のマークだけで、テストが描いた画像で試しただけで、実際の基板の写真では試していません。部品の回転はその画素から長方形として測るため、長方形でない部品には長軸の回転が与えられます。
+* 読むのは画像ファイルで、ライブカメラは模擬でのみ動き（Windows、V4L2、libcamera のバックエンドは実機で試していない骨組み）、見つけるのは丸いマーク、四角いマーク、十字形のマークだけで、テストが描いた画像で試しただけで、実際の基板の写真では試していません。部品の回転はその画素から長方形として測るため、長方形でない部品には長軸の回転が与えられます。
 * サーバーにはビジョン用のプラグインがないため、プログラムはストアのアーティファクト（結果は `POST /api/v1/artifacts`、機械の設定は `GET /api/v1/artifacts` と `GET /api/v1/artifacts/{id}`）を、独自の名前と形式（`vision-<kind>.json`、`vision-<machine>.cfg`）で使います。現時点ではメモリ上のサーバーとループバックのソケットに対してのみテストしており、mDNS によるサーバー検索（`server_mdns`）はリゾルバーを組み込んでいないスイッチです。
 
 **次のステップ**
@@ -314,6 +325,7 @@ EH3D-VISION-STUDIO/
 * 機械のライブカメラ（EH3D-NODE-BUNGARD-AUX）を読み取り、実際の基板の写真で試し、新しいマークの学習をウィンドウに加える。
 * ウィンドウを画面で確認して仕上げる。
 * 実際のファイルとスイートの他のプログラムで試す。
+* ライブのバックエンド（Media Foundation、V4L2、libcamera からのフレームとモーションJPEGのデコーダ）を書き、校正ボードを実際のレンズで、位置合わせを実際のステージで試す。
 
 ## 🌍 言語
 

@@ -14,7 +14,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 93] = [
+pub const KEYS: [&str; 126] = [
     "language",
     "polarity",
     "threshold",
@@ -108,6 +108,39 @@ pub const KEYS: [&str; 93] = [
     "board_square_mm",
     "board_max_aspect",
     "board_max_spread",
+    "capture_backend",
+    "capture_camera",
+    "capture_format",
+    "capture_profile",
+    "capture_log_level",
+    "capture_usb_mbps",
+    "capture_mjpeg_bits_px",
+    "capture_black_mean",
+    "capture_frozen_frames",
+    "capture_flicker_max",
+    "capture_powerline_hz",
+    "capture_settle_frames",
+    "capture_grab_tries",
+    "calib_squares_x",
+    "calib_squares_y",
+    "calib_square_mm",
+    "calib_marker_seed",
+    "calib_min_corners",
+    "calib_max_residual_px",
+    "calib_max_method_gap",
+    "calib_check_mm",
+    "calib_check_tol_mm",
+    "calib_allow_unchecked",
+    "camera_offset_x_mm",
+    "camera_offset_y_mm",
+    "camera_offset_deg",
+    "align_tolerance_mm",
+    "align_tolerance_deg",
+    "align_max_step_mm",
+    "align_max_step_deg",
+    "align_max_total_mm",
+    "align_max_steps",
+    "align_gain",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -260,6 +293,47 @@ pub struct Config {
     pub board_square_mm: f64,
     pub board_max_aspect: f64,
     pub board_max_spread: f64,
+    /// `capture`: the backend of the live camera (`auto`, `sim`, `v4l2`, `mfoundation`, `libcamera`), the camera by its identifier (empty: the first), the format as `640x480@30:yuyv` (empty: chosen),
+    /// the settings of the camera as `exposure=120 gain=10 focus=auto`, and the level of the log.
+    pub capture_backend: String,
+    pub capture_camera: String,
+    pub capture_format: String,
+    pub capture_profile: String,
+    pub capture_log_level: String,
+    /// `capture`: what a USB bus carries (megabits a second) and the bits for each pixel of a motion JPEG stream.
+    pub capture_usb_mbps: f64,
+    pub capture_mjpeg_bits_px: f64,
+    /// `capture`: the mean brightness below which a frame is black, the frames in a row that are the same for a stream to be frozen, the depth of the flicker that is allowed and the frequency of the mains.
+    pub capture_black_mean: f64,
+    pub capture_frozen_frames: usize,
+    pub capture_flicker_max: f64,
+    pub capture_powerline_hz: u32,
+    /// `capture`: the frames thrown away after a change and the most frames asked while waiting.
+    pub capture_settle_frames: usize,
+    pub capture_grab_tries: usize,
+    /// `calib`: the board of calibration (squares each way, the side of a square in millimetres, the seed of the markers) and what is asked of the calibration.
+    pub calib_squares_x: usize,
+    pub calib_squares_y: usize,
+    pub calib_square_mm: f64,
+    pub calib_marker_seed: u64,
+    pub calib_min_corners: usize,
+    pub calib_max_residual_px: f64,
+    pub calib_max_method_gap: f64,
+    pub calib_check_mm: f64,
+    pub calib_check_tol_mm: f64,
+    pub calib_allow_unchecked: bool,
+    /// `camera`: where the middle of the picture is in the frame of the machine, in millimetres, and how the camera is turned, in degrees. This is the only offset there is.
+    pub camera_offset_x_mm: f64,
+    pub camera_offset_y_mm: f64,
+    pub camera_offset_deg: f64,
+    /// `align`: the tolerance, the limit of a step and of the whole move, the most moves and the share of the correction asked of each move.
+    pub align_tolerance_mm: f64,
+    pub align_tolerance_deg: f64,
+    pub align_max_step_mm: f64,
+    pub align_max_step_deg: f64,
+    pub align_max_total_mm: f64,
+    pub align_max_steps: usize,
+    pub align_gain: f64,
 }
 
 impl Default for Config {
@@ -359,6 +433,39 @@ impl Default for Config {
             board_square_mm: 0.0,
             board_max_aspect: 0.02,
             board_max_spread: 0.05,
+            capture_backend: "auto".into(),
+            capture_camera: String::new(),
+            capture_format: String::new(),
+            capture_profile: String::new(),
+            capture_log_level: "warn".into(),
+            capture_usb_mbps: 320.0,
+            capture_mjpeg_bits_px: 2.0,
+            capture_black_mean: 4.0,
+            capture_frozen_frames: 5,
+            capture_flicker_max: 0.02,
+            capture_powerline_hz: 50,
+            capture_settle_frames: 3,
+            capture_grab_tries: 30,
+            calib_squares_x: 8,
+            calib_squares_y: 6,
+            calib_square_mm: 5.0,
+            calib_marker_seed: 1,
+            calib_min_corners: 12,
+            calib_max_residual_px: 0.5,
+            calib_max_method_gap: 0.02,
+            calib_check_mm: 0.0,
+            calib_check_tol_mm: 0.05,
+            calib_allow_unchecked: false,
+            camera_offset_x_mm: 0.0,
+            camera_offset_y_mm: 0.0,
+            camera_offset_deg: 0.0,
+            align_tolerance_mm: 0.05,
+            align_tolerance_deg: 0.1,
+            align_max_step_mm: 2.0,
+            align_max_step_deg: 2.0,
+            align_max_total_mm: 10.0,
+            align_max_steps: 6,
+            align_gain: 1.0,
         }
     }
 }
@@ -480,6 +587,76 @@ impl Config {
             pitch_mm: self.pitch_mm,
             max_aspect: self.board_max_aspect,
             max_spread: self.board_max_spread,
+        }
+    }
+
+    /// The budget of a USB bus that the values make.
+    pub fn budget_settings(&self) -> crate::capture::budget::BudgetSettings {
+        crate::capture::budget::BudgetSettings {
+            usb_mbps: self.capture_usb_mbps,
+            mjpeg_bits_px: self.capture_mjpeg_bits_px,
+        }
+    }
+
+    /// The judging of a stream that the values make.
+    pub fn health_settings(&self) -> crate::capture::health::HealthSettings {
+        crate::capture::health::HealthSettings {
+            black_mean: self.capture_black_mean,
+            frozen_frames: self.capture_frozen_frames,
+            flicker_max: self.capture_flicker_max,
+            powerline_hz: self.capture_powerline_hz,
+        }
+    }
+
+    /// The wait for new frames that the values make.
+    pub fn settle_settings(&self) -> crate::capture::settle::SettleSettings {
+        crate::capture::settle::SettleSettings {
+            frames: self.capture_settle_frames,
+            tries: self.capture_grab_tries,
+        }
+    }
+
+    /// The board of calibration that the values make.
+    pub fn board_spec(&self) -> crate::charuco::BoardSpec {
+        crate::charuco::BoardSpec {
+            cols: self.calib_squares_x,
+            rows: self.calib_squares_y,
+            square_mm: self.calib_square_mm,
+            seed: self.calib_marker_seed,
+        }
+    }
+
+    /// What is asked of a calibration that the values make.
+    pub fn calib_settings(&self) -> crate::charuco::solve::Settings {
+        crate::charuco::solve::Settings {
+            min_corners: self.calib_min_corners,
+            max_residual_px: self.calib_max_residual_px,
+            max_method_gap: self.calib_max_method_gap,
+            check_mm: self.calib_check_mm,
+            check_tol_mm: self.calib_check_tol_mm,
+            allow_unchecked: self.calib_allow_unchecked,
+        }
+    }
+
+    /// The offset of the camera that the values make.
+    pub fn camera_offset(&self) -> crate::charuco::solve::CameraOffset {
+        crate::charuco::solve::CameraOffset {
+            x_mm: self.camera_offset_x_mm,
+            y_mm: self.camera_offset_y_mm,
+            deg: self.camera_offset_deg,
+        }
+    }
+
+    /// The alignment of a board that the values make.
+    pub fn aim_settings(&self) -> crate::boardaim::AimSettings {
+        crate::boardaim::AimSettings {
+            tolerance_mm: self.align_tolerance_mm,
+            tolerance_deg: self.align_tolerance_deg,
+            max_step_mm: self.align_max_step_mm,
+            max_step_deg: self.align_max_step_deg,
+            max_total_mm: self.align_max_total_mm,
+            max_steps: self.align_max_steps,
+            gain: self.align_gain,
         }
     }
 
@@ -657,6 +834,42 @@ impl Config {
             "board_square_mm" => self.board_square_mm = number(value, key)?,
             "board_max_aspect" => self.board_max_aspect = number(value, key)?,
             "board_max_spread" => self.board_max_spread = number(value, key)?,
+            "capture_backend" => self.capture_backend = value.to_string(),
+            "capture_camera" => self.capture_camera = value.to_string(),
+            "capture_format" => self.capture_format = value.to_string(),
+            "capture_profile" => self.capture_profile = value.to_string(),
+            "capture_log_level" => self.capture_log_level = value.to_string(),
+            "capture_usb_mbps" => self.capture_usb_mbps = number(value, key)?,
+            "capture_mjpeg_bits_px" => self.capture_mjpeg_bits_px = number(value, key)?,
+            "capture_black_mean" => self.capture_black_mean = number(value, key)?,
+            "capture_frozen_frames" => self.capture_frozen_frames = count(value, key)?,
+            "capture_flicker_max" => self.capture_flicker_max = number(value, key)?,
+            "capture_powerline_hz" => {
+                self.capture_powerline_hz = u32::try_from(count(value, key)?)
+                    .map_err(|_| format!("{key} '{value}' is too large"))?
+            }
+            "capture_settle_frames" => self.capture_settle_frames = count(value, key)?,
+            "capture_grab_tries" => self.capture_grab_tries = count(value, key)?,
+            "calib_squares_x" => self.calib_squares_x = count(value, key)?,
+            "calib_squares_y" => self.calib_squares_y = count(value, key)?,
+            "calib_square_mm" => self.calib_square_mm = number(value, key)?,
+            "calib_marker_seed" => self.calib_marker_seed = count(value, key)? as u64,
+            "calib_min_corners" => self.calib_min_corners = count(value, key)?,
+            "calib_max_residual_px" => self.calib_max_residual_px = number(value, key)?,
+            "calib_max_method_gap" => self.calib_max_method_gap = number(value, key)?,
+            "calib_check_mm" => self.calib_check_mm = number(value, key)?,
+            "calib_check_tol_mm" => self.calib_check_tol_mm = number(value, key)?,
+            "calib_allow_unchecked" => self.calib_allow_unchecked = yes_no(value, key)?,
+            "camera_offset_x_mm" => self.camera_offset_x_mm = number(value, key)?,
+            "camera_offset_y_mm" => self.camera_offset_y_mm = number(value, key)?,
+            "camera_offset_deg" => self.camera_offset_deg = number(value, key)?,
+            "align_tolerance_mm" => self.align_tolerance_mm = number(value, key)?,
+            "align_tolerance_deg" => self.align_tolerance_deg = number(value, key)?,
+            "align_max_step_mm" => self.align_max_step_mm = number(value, key)?,
+            "align_max_step_deg" => self.align_max_step_deg = number(value, key)?,
+            "align_max_total_mm" => self.align_max_total_mm = number(value, key)?,
+            "align_max_steps" => self.align_max_steps = count(value, key)?,
+            "align_gain" => self.align_gain = number(value, key)?,
             "replace_output" => {
                 self.replace_output = match value {
                     "yes" | "true" | "on" => true,
@@ -842,6 +1055,7 @@ impl Config {
                 return Err(format!("{name} must be more than 0 and at most 1"));
             }
         }
+        self.validate_capture().map_err(|e| e.to_string())?;
         if self.ring_size_gap <= 1.0 {
             return Err("ring_size_gap must be above 1".into());
         }
@@ -855,6 +1069,46 @@ impl Config {
             return Err("shots_margin must be 0 or more".into());
         }
         Ok(())
+    }
+
+    /// The values of the live camera, the calibration and the alignment of a board, each checked by the module that uses it; the error names the key.
+    fn validate_capture(&self) -> Result<(), crate::capture::CapError> {
+        use crate::capture::{choice, CameraId, CapError, Code};
+        choice::check_backend(&self.capture_backend)?;
+        if !self.capture_camera.is_empty() {
+            CameraId::parse(&self.capture_camera)?;
+        }
+        choice::parse_format(&self.capture_format)?;
+        choice::parse_profile(&self.capture_profile)?;
+        if crate::capture::log::Level::from_name(&self.capture_log_level).is_none() {
+            return Err(CapError::with_key(
+                Code::BackendUnavailable,
+                "capture_log_level",
+                "it must be error, warn, info or debug",
+            ));
+        }
+        crate::capture::budget::check_settings(&self.budget_settings())?;
+        crate::capture::health::check(&self.health_settings())?;
+        crate::capture::settle::check(&self.settle_settings())?;
+        self.board_spec()
+            .check()
+            .map_err(|e| CapError::with_key(Code::CalibFewCorners, "calib_squares_x", e))?;
+        crate::charuco::solve::check_settings(&self.calib_settings())?;
+        let off = |v: f64, max: f64, key: &'static str| {
+            if v.is_finite() && v.abs() <= max {
+                Ok(())
+            } else {
+                Err(CapError::with_key(
+                    Code::CalibResidual,
+                    key,
+                    format!("it must be from -{max} to {max}"),
+                ))
+            }
+        };
+        off(self.camera_offset_x_mm, 1000.0, "camera_offset_x_mm")?;
+        off(self.camera_offset_y_mm, 1000.0, "camera_offset_y_mm")?;
+        off(self.camera_offset_deg, 360.0, "camera_offset_deg")?;
+        crate::boardaim::check(&self.aim_settings())
     }
 
     /// The values of a text: lines of `key = value`, blank lines and lines that start with `#` left out. A key that is written twice, an unknown key or a bad value is an error with the line.
@@ -1109,6 +1363,42 @@ quality_max_mean = 100",
             "diff_min_area = 0",
             "diff_max_changed = 1.5",
             "diff_max_changed = -0.1",
+            "capture_backend = directshow",
+            "capture_camera = nonsense",
+            "capture_format = 640x480",
+            "capture_profile = colour=3",
+            "capture_log_level = loud",
+            "capture_usb_mbps = 5",
+            "capture_mjpeg_bits_px = 0.1",
+            "capture_black_mean = 300",
+            "capture_frozen_frames = 1",
+            "capture_flicker_max = 0",
+            "capture_powerline_hz = 55",
+            "capture_settle_frames = 500",
+            "capture_grab_tries = 0",
+            "capture_grab_tries = 2
+capture_settle_frames = 3",
+            "calib_squares_x = 2",
+            "calib_squares_y = 30",
+            "calib_square_mm = 0.5",
+            "calib_marker_seed = -1",
+            "calib_min_corners = 3",
+            "calib_max_residual_px = 0",
+            "calib_max_method_gap = 2",
+            "calib_check_mm = -5",
+            "calib_check_tol_mm = 0",
+            "calib_allow_unchecked = maybe",
+            "camera_offset_x_mm = 2000",
+            "camera_offset_y_mm = nan",
+            "camera_offset_deg = 361",
+            "align_tolerance_mm = 0",
+            "align_tolerance_deg = 6",
+            "align_max_step_mm = 51",
+            "align_max_step_deg = 0",
+            "align_max_total_mm = 501",
+            "align_max_steps = 0",
+            "align_gain = 0.05",
+            "align_gain = 1.5",
             "inspect_package = a b",
         ] {
             assert!(Config::parse(text).is_err(), "{text:?} was accepted");

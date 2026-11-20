@@ -119,6 +119,45 @@
           }
         },
         {
+          "name": "boardaim.rs",
+          "desc": {
+            "en": "a board put where its design says: look, move, look again, always toward the safest state",
+            "es": "una placa puesta donde dice su diseño: mirar, mover, volver a mirar, siempre hacia lo más seguro",
+            "de": "eine Platine an ihren Platz: schauen, bewegen, wieder schauen, stets zum Sichersten",
+            "fr": "une carte placée où son dessin le dit : regarder, déplacer, regarder, toujours vers le plus sûr",
+            "it": "una scheda messa dove dice il disegno: guardare, muovere, guardare, sempre verso il più sicuro",
+            "ja": "設計どおりに基板を置く：見て、動かし、また見る。常に最も安全な状態へ",
+            "zh": "把电路板放到设计规定的位置：看、动、再看，始终趋向最安全的状态",
+            "pt": "uma placa posta onde o desenho diz: ver, mover, ver outra vez, sempre rumo ao mais seguro"
+          }
+        },
+        {
+          "name": "capture/",
+          "desc": {
+            "en": "the live camera: trait, formats, properties, USB budget, stream health, the simulated camera",
+            "es": "la cámara en vivo: trait, formatos, propiedades, presupuesto USB, estado del flujo, simulada",
+            "de": "die Live-Kamera: Trait, Formate, Eigenschaften, USB-Budget, Stromzustand, simulierte Kamera",
+            "fr": "la caméra en direct : trait, formats, propriétés, budget USB, santé du flux, caméra simulée",
+            "it": "la telecamera dal vivo: trait, formati, proprietà, budget USB, salute del flusso, simulata",
+            "ja": "ライブカメラ：トレイト、形式、プロパティ、USB帯域、ストリームの状態、模擬カメラ",
+            "zh": "实时相机：trait、格式、属性、USB 带宽预算、流的健康状况、模拟相机",
+            "pt": "a câmara em direto: trait, formatos, propriedades, orçamento USB, saúde do fluxo, simulada"
+          }
+        },
+        {
+          "name": "charuco/",
+          "desc": {
+            "en": "the calibration board with numbered markers: its corners, the calibration, its file, the card",
+            "es": "el tablero de calibración con marcadores numerados: esquinas, calibración, fichero y tarjeta",
+            "de": "das Kalibriermuster mit nummerierten Markern: Ecken, Kalibrierung, Datei und Karte",
+            "fr": "la mire d'étalonnage à marqueurs numérotés : coins, étalonnage, fichier et carte",
+            "it": "la scacchiera di calibrazione con marcatori numerati: angoli, calibrazione, file e scheda",
+            "ja": "番号付きマーカーの校正ボード：角、校正、ファイル、印刷用カード",
+            "zh": "带编号标记的标定板：角点、标定、文件与打印卡片",
+            "pt": "o tabuleiro de calibração com marcadores numerados: cantos, calibração, ficheiro e cartão"
+          }
+        },
+        {
           "name": "config.rs",
           "desc": {
             "en": "the configuration file: every tuned value",
@@ -737,6 +776,19 @@
           }
         },
         {
+          "name": "capture.rs",
+          "desc": {
+            "en": "live camera, calibration and alignment on the simulated camera, and the command",
+            "es": "cámara en vivo, calibración y alineación con la cámara simulada, y el comando",
+            "de": "Live-Kamera, Kalibrierung und Ausrichtung mit simulierter Kamera, und der Befehl",
+            "fr": "caméra en direct, étalonnage et alignement sur la caméra simulée, et la commande",
+            "it": "telecamera dal vivo, calibrazione e allineamento su quella simulata, e il comando",
+            "ja": "模擬カメラでのライブカメラ・校正・位置合わせとコマンド",
+            "zh": "在模拟相机上测试实时相机、标定、对位以及命令",
+            "pt": "câmara em direto, calibração e alinhamento na câmara simulada, e o comando"
+          }
+        },
+        {
           "name": "fuzz.rs",
           "desc": {
             "en": "tests with random input and a fixed seed: nothing may panic",
@@ -773,6 +825,19 @@
             "ja": "新しい測定と規約に対する固定シードのランダム入力",
             "zh": "针对新测量和约定格式的固定种子随机输入",
             "pt": "entrada aleatória com semente fixa para as leituras novas e a convenção"
+          }
+        },
+        {
+          "name": "fuzz_capture.rs",
+          "desc": {
+            "en": "random input with a fixed seed for frame readers, calibration files, alignment",
+            "es": "entrada aleatoria con semilla fija para lectores de imagen, calibración, alineación",
+            "de": "Zufallseingaben mit festem Seed für Bildleser, Kalibrierdateien, Ausrichtung",
+            "fr": "entrées aléatoires à graine fixe pour lecteurs d'image, étalonnage, alignement",
+            "it": "input casuale con seme fisso per lettori di fotogrammi, calibrazione, allineamento",
+            "ja": "フレーム読み取り・校正ファイル・位置合わせの固定シードのランダム入力",
+            "zh": "针对画面读取、标定文件、对位的固定种子随机输入",
+            "pt": "entrada aleatória com semente fixa para leitores de imagem, calibração, alinhamento"
           }
         },
         {

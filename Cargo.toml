@@ -27,6 +27,10 @@ required-features = ["gui"]
 default = []
 # the window (egui, with the icon of the program): `cargo run --release --features gui --bin eh3d-vision-gui`
 gui = ["dep:eframe", "dep:png", "dep:eh3d-view", "eh3d-view/gui"]
+# the backends of live cameras: thin, off by default (the simulated camera is always there); each also needs its own system (Linux for v4l2 and libcamera, Windows for mfoundation)
+v4l2 = []
+mfoundation = []
+libcamera = []
 # the search for servers on the local network (the resolver of the shared client; it still asks nothing of the network unless `server_mdns = on`)
 mdns = ["eh3d-serverclient/mdns"]
 

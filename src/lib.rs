@@ -1,6 +1,14 @@
 // EH3D-VISION-STUDIO - fiducials in a camera image.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
-#![forbid(unsafe_code)]
+// unsafe code is forbidden, except in the thin backends of live cameras that are built only with their own feature
+#![cfg_attr(
+    not(any(feature = "v4l2", feature = "mfoundation", feature = "libcamera")),
+    forbid(unsafe_code)
+)]
+#![cfg_attr(
+    any(feature = "v4l2", feature = "mfoundation", feature = "libcamera"),
+    deny(unsafe_code)
+)]
 //! Finds round fiducial marks in an image, turns pixels into millimetres and works out how far a board is from where its design puts it. Built with the `gui` feature it also has a window.
 
 /// The reader of PGM and PNG pictures, kept in EH3D-COMMON because the other programs that work from a picture read them the same way.
@@ -8,7 +16,10 @@ pub use eh3d_image as image;
 pub mod align;
 pub mod batch;
 pub mod board;
+pub mod boardaim;
 pub mod browse;
+pub mod capture;
+pub mod charuco;
 pub mod checks;
 pub mod config;
 pub mod convention;
