@@ -92,7 +92,7 @@ jobs:
         run: cargo test --all-targets
         working-directory: EH3D-VISION-STUDIO
       - name: Tests of the search of the local network
-        run: cargo test --features mdns --lib server::
+        run: "cargo test --features mdns --lib server::"
         working-directory: EH3D-VISION-STUDIO
 
   main-against-main:
