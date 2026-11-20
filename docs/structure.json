@@ -171,6 +171,19 @@
           }
         },
         {
+          "name": "edge.rs",
+          "desc": {
+            "en": "an edge to a fraction of a pixel along a line, with its uncertainty",
+            "es": "un borde con fracción de píxel a lo largo de una línea, con su incertidumbre",
+            "de": "eine Kante auf einen Bruchteil eines Pixels entlang einer Linie, mit Unsicherheit",
+            "fr": "un bord à une fraction de pixel le long d'une ligne, avec son incertitude",
+            "it": "un bordo a una frazione di pixel lungo una linea, con la sua incertezza",
+            "ja": "線に沿ったサブピクセルのエッジと不確かさ",
+            "zh": "沿线的亚像素边缘及其不确定度",
+            "pt": "uma aresta com fração de píxel ao longo de uma linha, com a sua incerteza"
+          }
+        },
+        {
           "name": "fiducial.rs",
           "desc": {
             "en": "the round marks of a picture: threshold, spots and checks",
@@ -285,6 +298,32 @@
             "ja": "測定に使える画像かどうか：シャープネス・コントラスト・平均レベル",
             "zh": "图像是否足以用于测量：清晰度、对比度和平均灰度",
             "pt": "se uma imagem chega para medir: a sua nitidez, contraste e nível médio"
+          }
+        },
+        {
+          "name": "reference.rs",
+          "desc": {
+            "en": "a picture against a reference through a mask of tolerance",
+            "es": "una imagen contra una referencia con una máscara de tolerancia",
+            "de": "ein Bild gegen eine Referenz durch eine Toleranzmaske",
+            "fr": "une image contre une référence par un masque de tolérance",
+            "it": "un'immagine contro un riferimento con una maschera di tolleranza",
+            "ja": "許容マスクによる基準画像との照合",
+            "zh": "通过容差掩码与参考图像比较",
+            "pt": "uma imagem contra uma referência com uma máscara de tolerância"
+          }
+        },
+        {
+          "name": "histogram.rs",
+          "desc": {
+            "en": "the histogram and the cuts of Otsu, isodata and the triangle method",
+            "es": "el histograma y los cortes de Otsu, isodata y el método del triángulo",
+            "de": "das Histogramm und die Schnitte nach Otsu, Isodata und Dreiecksverfahren",
+            "fr": "l'histogramme et les coupures d'Otsu, d'isodata et du triangle",
+            "it": "l'istogramma e i tagli di Otsu, isodata e del metodo del triangolo",
+            "ja": "ヒストグラムと大津・isodata・三角形法の切れ目",
+            "zh": "直方图及 Otsu、isodata、三角形法的分割点",
+            "pt": "o histograma e os cortes de Otsu, isodata e do método do triângulo"
           }
         },
         {
@@ -431,6 +470,32 @@
           }
         },
         {
+          "name": "convention.rs",
+          "desc": {
+            "en": "the vision result of the server's convention: make it, check it, SHA-256",
+            "es": "el resultado de visión en la convención del servidor: crearlo, comprobarlo, SHA-256",
+            "de": "das Vision-Ergebnis in der Konvention des Servers: erzeugen, prüfen, SHA-256",
+            "fr": "le résultat de vision selon la convention du serveur : le faire, le vérifier, SHA-256",
+            "it": "il risultato di visione nella convenzione del server: crearlo, verificarlo, SHA-256",
+            "ja": "サーバー規約の画像結果：作成、検査、SHA-256",
+            "zh": "服务器约定格式的视觉结果：生成、检查、SHA-256",
+            "pt": "o resultado de visão na convenção do servidor: fazê-lo, verificá-lo, SHA-256"
+          }
+        },
+        {
+          "name": "station.rs",
+          "desc": {
+            "en": "the simulated vision station of the server: the job, its answer, a port",
+            "es": "la estación de visión simulada del servidor: el trabajo, su respuesta, un port",
+            "de": "die simulierte Vision-Station des Servers: Auftrag, Antwort, eine Portierung",
+            "fr": "la station de vision simulée du serveur : le travail, sa réponse, un portage",
+            "it": "la stazione di visione simulata del server: il lavoro, la risposta, un porting",
+            "ja": "サーバーの模擬ビジョンステーション：ジョブ、応答、移植",
+            "zh": "服务器的模拟视觉工位：作业、应答、移植",
+            "pt": "a estação de visão simulada do servidor: o trabalho, a resposta, uma portagem"
+          }
+        },
+        {
           "name": "sharpmap.rs",
           "desc": {
             "en": "a map of where the picture is sharp: a grid of cells, the weak ones and the tilt",
@@ -519,6 +584,19 @@
             "ja": "ウィンドウのパネル：相関、補正、パッド列、画像の比較",
             "zh": "窗口面板：相关法、校正、焊盘排、图像比较",
             "pt": "painéis da janela: correlação, endireitamento, fila de pads, comparação de imagens"
+          }
+        },
+        {
+          "name": "readings.rs",
+          "desc": {
+            "en": "window panels: histogram, edge, reference, and the server settings",
+            "es": "paneles de la ventana: histograma, borde, referencia y ajustes del servidor",
+            "de": "Fensterbereiche: Histogramm, Kante, Referenz und Servereinstellungen",
+            "fr": "panneaux de la fenêtre : histogramme, bord, référence et réglages du serveur",
+            "it": "pannelli della finestra: istogramma, bordo, riferimento e impostazioni del server",
+            "ja": "ウィンドウのパネル：ヒストグラム、エッジ、基準、サーバー設定",
+            "zh": "窗口面板：直方图、边缘、参考比较和服务器设置",
+            "pt": "painéis da janela: histograma, aresta, referência e definições do servidor"
           }
         },
         {
@@ -669,6 +747,32 @@
             "ja": "固定シードのランダム入力によるテスト：パニックしてはならない",
             "zh": "固定种子的随机输入测试：任何情况下都不能崩溃",
             "pt": "testes com entrada aleatória e semente fixa: nada pode entrar em pânico"
+          }
+        },
+        {
+          "name": "camera.rs",
+          "desc": {
+            "en": "the new commands run as a program: edge, histogram, refcheck, lens residuals, server",
+            "es": "las órdenes nuevas ejecutadas como programa: edge, histogram, refcheck, residuos, server",
+            "de": "die neuen Befehle als Programm: edge, histogram, refcheck, Residuen, server",
+            "fr": "les nouvelles commandes lancées comme programme : edge, histogram, refcheck, résidus, server",
+            "it": "i nuovi comandi eseguiti come programma: edge, histogram, refcheck, residui, server",
+            "ja": "プログラムとして実行する新コマンド：edge、histogram、refcheck、残差、server",
+            "zh": "作为程序运行的新命令：edge、histogram、refcheck、残差、server",
+            "pt": "os novos comandos executados como programa: edge, histogram, refcheck, resíduos, server"
+          }
+        },
+        {
+          "name": "fuzz_camera.rs",
+          "desc": {
+            "en": "random input with a fixed seed for the new readings and the convention",
+            "es": "entrada aleatoria con semilla fija para las lecturas nuevas y la convención",
+            "de": "Zufallseingaben mit festem Seed für die neuen Messungen und die Konvention",
+            "fr": "entrées aléatoires à graine fixe pour les nouvelles mesures et la convention",
+            "it": "input casuale con seme fisso per le nuove letture e la convenzione",
+            "ja": "新しい測定と規約に対する固定シードのランダム入力",
+            "zh": "针对新测量和约定格式的固定种子随机输入",
+            "pt": "entrada aleatória com semente fixa para as leituras novas e a convenção"
           }
         },
         {

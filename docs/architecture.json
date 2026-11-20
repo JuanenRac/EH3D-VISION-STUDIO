@@ -2,7 +2,7 @@
   "repo": "EH3D-VISION-STUDIO",
   "ecosystem": "eh3d",
   "tagline": "Fiducials found, pixels turned into millimetres, a board put right.",
-  "description": "EH3D-VISION-STUDIO is a Rust library and command line that find round fiducial marks in a picture and work out the turn and the shift that put a board where its design says. Built with the gui feature it also has a window (egui) that opens a picture, shows the marks, sets the scale, fits the distortion of the lens and aligns with the design. It also finds cross-shaped marks, takes uneven light out, measures parts into CSV or JSON files and reports on a folder of pictures. It also corrects perspective, finds marks by correlation, compares two pictures, measures a row of pads and can send its results to the EH3D server of a machine. It has no live camera yet.",
+  "description": "EH3D-VISION-STUDIO is a Rust library and command line that find round fiducial marks in a picture and work out the turn and the shift that put a board where its design says. Built with the gui feature it also has a window (egui) that opens a picture, shows the marks, sets the scale, fits the distortion of the lens and aligns with the design. It also finds cross-shaped marks, takes uneven light out, measures parts into CSV or JSON files and reports on a folder of pictures. It also corrects perspective, finds marks by correlation, compares two pictures, measures a row of pads keeps its results on the EH3D server of a machine in the convention of the server, reads an edge to a fraction of a pixel with its uncertainty, shows a histogram with the automatic thresholds and checks a picture against a reference through a mask of tolerance. It has no live camera yet.",
   "columns": [
     "WHO USES IT",
     "THIS REPOSITORY",
@@ -182,7 +182,7 @@
     }
   ],
   "legend": {
-    "tested": "covered by tests on a computer (445 tests)",
+    "tested": "covered by tests on a computer (516 tests)",
     "config": "planned, not used today",
     "external": "a person, a file or another repository",
     "untested": "written, not built or looked at on a screen yet"
