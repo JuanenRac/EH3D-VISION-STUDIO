@@ -14,7 +14,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 78] = [
+pub const KEYS: [&str; 79] = [
     "language",
     "polarity",
     "threshold",
@@ -86,6 +86,7 @@ pub const KEYS: [&str; 78] = [
     "server_machine",
     "server_timeout_s",
     "server_retries",
+    "server_mdns",
     "correlate_diameter",
     "correlate_min_score",
     "rectify_max_side",
@@ -210,6 +211,8 @@ pub struct Config {
     pub server_machine: String,
     pub server_timeout_s: u64,
     pub server_retries: u32,
+    /// Whether the server is looked for on the local network (off by default; the program asks nothing of the network unless this is on and a resolver is linked in).
+    pub server_mdns: bool,
     /// `correlate`: the diameter in pixels of the disc that is looked for (the search by correlation needs it) and the least correlation that counts as a mark.
     pub correlate_diameter: f64,
     pub correlate_min_score: f64,
@@ -298,6 +301,7 @@ impl Default for Config {
             server_machine: String::new(),
             server_timeout_s: 15,
             server_retries: 2,
+            server_mdns: false,
             correlate_diameter: 20.0,
             correlate_min_score: 0.8,
             rectify_max_side: 4096,
@@ -539,6 +543,7 @@ impl Config {
                 self.server_retries = u32::try_from(count(value, key)?)
                     .map_err(|_| format!("{key} '{value}' is too large"))?
             }
+            "server_mdns" => self.server_mdns = yes_no(value, key)?,
             "correlate_diameter" => self.correlate_diameter = number(value, key)?,
             "correlate_min_score" => self.correlate_min_score = number(value, key)?,
             "rectify_max_side" => self.rectify_max_side = count(value, key)?,
@@ -700,7 +705,7 @@ impl Config {
             return Err("pick_max_turn_deg must be from 0 (not checked) to 90".into());
         }
         crate::quality::check(&self.quality_settings())?;
-        crate::server::ServerSettings::from_config(self).check()?;
+        crate::server::link_settings(self)?;
         crate::correlate::check(&self.correlate_settings())
             .map_err(|e| format!("correlate_diameter and correlate_min_score: {e}"))?;
         if !(crate::perspective::MIN_SIDE..=crate::perspective::MAX_SIDE_LIMIT)
@@ -942,6 +947,7 @@ quality_max_mean = 100",
             "server_timeout_s = soon",
             "server_retries = 6",
             "server_retries = -1",
+            "server_mdns = sometimes",
             "correlate_diameter = 3",
             "correlate_diameter = 200",
             "correlate_min_score = 0",

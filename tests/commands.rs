@@ -1,6 +1,6 @@
 //! The commands `correlate`, `rectify`, `pads`, `diff` and `server`, run as a program on pictures that the tests draw: what they print, what they write, their exit codes and what they refuse.
 
-use eh3d_vision_studio::server::{Request, SimServer, Transport};
+use eh3d_vision_studio::server::SimServer;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -452,7 +452,6 @@ fn serve(sim: SimServer, connections: usize) -> (String, std::thread::JoinHandle
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap().to_string();
     let handle = std::thread::spawn(move || {
-        let mut sim = sim;
         for _ in 0..connections {
             let (mut s, _) = listener.accept().unwrap();
             s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
@@ -489,14 +488,12 @@ fn serve(sim: SimServer, connections: usize) -> (String, std::thread::JoinHandle
                 .trim()
                 .to_string();
             let reply = sim
-                .send(&Request {
-                    address: "sim",
+                .handle(
                     method,
                     path,
-                    token: &token,
-                    body: if body.is_empty() { None } else { Some(body) },
-                    timeout: Duration::from_secs(1),
-                })
+                    &token,
+                    if body.is_empty() { None } else { Some(body) },
+                )
                 .unwrap();
             let answer = format!(
                 "HTTP/1.1 {} X\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -537,7 +534,8 @@ fn server_health_asks_the_server_and_prints_ok() {
 fn server_config_writes_the_values_that_the_server_holds_as_lines_for_the_file() {
     let dir = scratch("server_config");
     let sim = SimServer::new(REMOTE);
-    let (address, handle) = serve(sim, 2);
+    // the list of the artifacts and then the one that holds the configuration: two requests for each run
+    let (address, handle) = serve(sim, 4);
     with_server(&dir, &address, SimServer::PROGRAM_TOKEN);
     let o = run(&dir, &["server", "config"]);
     assert!(o.status.success(), "{}", err(&o));
@@ -572,11 +570,11 @@ fn server_send_sends_the_result_of_the_command_and_the_verdict_is_the_exit_code(
     let a = write(&dir, "a.pgm", &pgm(40, 30, &[200; 1200]));
     let o = run(&dir, &["server", "send", "quality", &good]);
     assert!(o.status.success(), "{}", err(&o));
-    assert!(err(&o).contains("the quality result was sent as r1"));
+    assert!(err(&o).contains("the quality result was sent as a-2"));
     // a picture that is refused is still sent, and the exit code is 1
     let o = run(&dir, &["server", "send", "quality", &flat]);
     assert_eq!(o.status.code(), Some(1));
-    assert!(err(&o).contains("sent as r2"));
+    assert!(err(&o).contains("sent as a-3"));
     let o = run(
         &dir,
         &["server", "send", "pads", &row, "--mm-per-px", "0.04"],
@@ -585,22 +583,21 @@ fn server_send_sends_the_result_of_the_command_and_the_verdict_is_the_exit_code(
     let o = run(&dir, &["server", "send", "diff", &a, &a]);
     handle.join().unwrap();
     assert!(o.status.success(), "{}", err(&o));
-    let results = sim.results();
-    assert_eq!(results.len(), 4);
+    let kept = sim.stored();
+    assert_eq!(kept.len(), 4);
     assert!(
-        results[0].contains("\"kind\": \"quality\"")
-            && results[0].contains("\"verdict\": \"pass\"")
+        kept[0].data.contains("\"verdict\": \"pass\"") && kept[0].name == "vision-quality.json"
     );
-    assert!(results[1].contains("\"verdict\": \"fail\"") && results[1].contains("flat"));
-    assert!(results[2].contains("\"kind\": \"pads\"") && results[2].contains("eh3d-vision-pads"));
-    assert!(results[3].contains("\"kind\": \"diff\"") && results[3].contains("eh3d-vision-diff"));
-    assert!(results
+    assert!(kept[1].data.contains("\"verdict\": \"fail\"") && kept[1].data.contains("flat"));
+    assert!(kept[2].data.contains("eh3d-vision-pads") && kept[2].kind == "pads");
+    assert!(kept[3].data.contains("eh3d-vision-diff") && kept[3].kind == "diff");
+    assert!(kept.iter().all(|r| r.machine == "bench"
+        && r.format == "application/json"
+        && r.tool == "eh3d-vision"));
+    // the token never goes in what is kept
+    assert!(kept
         .iter()
-        .all(|r| r.contains("\"machine\": \"bench\"") && r.contains("\"app\": \"vision-studio\"")));
-    // the token never goes in the body
-    assert!(results
-        .iter()
-        .all(|r| !r.contains(SimServer::PROGRAM_TOKEN)));
+        .all(|r| !r.data.contains(SimServer::PROGRAM_TOKEN)));
 }
 
 #[test]

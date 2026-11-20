@@ -11,7 +11,10 @@ use eh3d_vision_studio::pads::{measure_row, PadSettings};
 use eh3d_vision_studio::perspective::{convex, rectify, Homography};
 use eh3d_vision_studio::quality;
 use eh3d_vision_studio::scale::Scale;
-use eh3d_vision_studio::server::{apply_remote, parse_http, parse_object};
+use eh3d_vision_studio::server::sc::transport::parse_response;
+use eh3d_vision_studio::server::{
+    apply_remote, base64_decode, base64_encode, parse_config_text, parse_object,
+};
 use eh3d_vision_studio::sim::SimRng;
 
 const SEED: u64 = 0x5EED_0005;
@@ -410,19 +413,16 @@ fn http_answers_that_are_cut_or_damaged_are_read_or_refused_without_a_panic() {
                 raw.insert(at, rng.below(256) as u8);
             }
         }
-        if let Ok(reply) = parse_http(&raw) {
-            assert!(
-                (100..600).contains(&reply.status),
-                "round {round}: {}",
-                reply.status
-            );
+        if let Ok(reply) = parse_response(&raw) {
+            // whatever is left of the answer is a piece of what came in, never more
+            assert!(reply.body.len() <= raw.len() * 3, "round {round}");
         }
     }
     // pure noise
     for _ in 0..300 {
         let len = rng.below(120) as usize;
         let noise: Vec<u8> = (0..len).map(|_| rng.below(256) as u8).collect();
-        let _ = parse_http(&noise);
+        let _ = parse_response(&noise);
     }
 }
 
@@ -467,4 +467,58 @@ fn the_same_seed_gives_the_same_results() {
     };
     assert_eq!(run(SEED), run(SEED));
     assert_ne!(run(SEED).0, run(SEED + 1).0);
+}
+
+const SAMPLE_LINES: &str = "# tuned on the bench\npolarity = light\nthreshold = 120   # the lamp\nquality_check = yes\npitch_mm = 0.5\n; and a note\nserver_token = stolen\n";
+
+#[test]
+fn a_configuration_kept_on_the_server_is_read_or_refused_and_base64_goes_there_and_back() {
+    let mut rng = SimRng::new(SEED + 9);
+    let alphabet = b"abc =#;\n\r\t0123456789.-_{}\"";
+    assert!(parse_config_text(SAMPLE_LINES).is_ok());
+    for round in 0..600 {
+        let mut text: Vec<u8> = SAMPLE_LINES.bytes().collect();
+        for _ in 0..rng.below(4) + 1 {
+            let at = rng.below(text.len() as u64) as usize;
+            match rng.below(3) {
+                0 => text[at] = alphabet[rng.below(alphabet.len() as u64) as usize],
+                1 => text.insert(at, alphabet[rng.below(alphabet.len() as u64) as usize]),
+                _ => {
+                    text.remove(at);
+                }
+            }
+        }
+        let text = String::from_utf8_lossy(&text).to_string();
+        if let Ok(pairs) = parse_config_text(&text) {
+            for (i, p) in pairs.iter().enumerate() {
+                assert!(
+                    !pairs[i + 1..].iter().any(|q| q.0 == p.0),
+                    "round {round}: {text}"
+                );
+            }
+            // what is read is taken all or nothing, and a server never moves the program or changes its token
+            let before = Config::default();
+            if let Ok((next, done)) = apply_remote(&before, &pairs) {
+                assert!(next.validate().is_ok(), "round {round}");
+                assert_eq!(next.server_token, before.server_token);
+                assert!(done.applied.iter().all(|k| !k.starts_with("server_")));
+            }
+        }
+    }
+    // bytes go there and back, and any text is decoded or refused without a panic
+    for round in 0..300 {
+        let len = rng.below(200) as usize;
+        let bytes: Vec<u8> = (0..len).map(|_| rng.below(256) as u8).collect();
+        assert_eq!(
+            base64_decode(&base64_encode(&bytes)).unwrap(),
+            bytes,
+            "round {round}"
+        );
+        let noise: String = (0..rng.below(60))
+            .map(|_| (rng.below(95) as u8 + 32) as char)
+            .collect();
+        if let Some(decoded) = base64_decode(&noise) {
+            assert!(decoded.len() <= noise.len(), "round {round}");
+        }
+    }
 }

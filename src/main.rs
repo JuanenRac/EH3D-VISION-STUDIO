@@ -36,7 +36,8 @@ use eh3d_vision_studio::report::html as report_html;
 use eh3d_vision_studio::ring::find_rings;
 use eh3d_vision_studio::scale::{from_pitch, Scale};
 use eh3d_vision_studio::server::{
-    apply_remote, config_lines, plain_token_warning, Client, ServerSettings,
+    apply_remote, check_link, config_lines, describe, link_settings, plain_token_warning, sc,
+    Client,
 };
 use eh3d_vision_studio::shots::{plan as shots_plan, to_csv as shots_csv};
 use eh3d_vision_studio::sim::to_pgm;
@@ -345,15 +346,15 @@ fn diff_run(
 }
 
 /// The client of the server for the settings of the configuration file, with `--address` and `--machine` over them.
-fn server_settings(args: &mut Vec<String>, cfg: &Config) -> Result<ServerSettings, String> {
-    let mut s = ServerSettings::from_config(cfg);
+fn server_settings(args: &mut Vec<String>, cfg: &Config) -> Result<sc::Settings, String> {
+    let mut s = link_settings(cfg)?;
     if let Some(a) = flag(args, "--address")? {
-        s.address = a;
+        s.set("server_address", &a).map_err(|e| e.to_string())?;
     }
     if let Some(m) = flag(args, "--machine")? {
-        s.machine = m;
+        s.set("server_machine", &m).map_err(|e| e.to_string())?;
     }
-    s.check()?;
+    check_link(&s)?;
     if let Some(w) = plain_token_warning(&s) {
         eprintln!("warning: {w}");
     }
@@ -1225,17 +1226,17 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 return Err("server needs health, config or send".into());
             }
             let sub = args.remove(0);
-            let mut client = Client::tcp(settings).map_err(|e| e.to_string())?;
+            let mut client = Client::tcp(settings).map_err(|e| describe(&e))?;
             match sub.as_str() {
                 "health" => {
                     finish(&args, 0)?;
-                    client.health().map_err(|e| e.to_string())?;
+                    client.health().map_err(|e| describe(&e))?;
                     println!("ok");
                     Ok(())
                 }
                 "config" => {
                     finish(&args, 0)?;
-                    let pairs = client.fetch_config().map_err(|e| e.to_string())?;
+                    let pairs = client.fetch_config().map_err(|e| describe(&e))?;
                     let (_, done) = apply_remote(&cfg, &pairs)?;
                     let taken: Vec<(String, String)> = pairs
                         .into_iter()
@@ -1291,9 +1292,7 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                             ))
                         }
                     };
-                    let id = client
-                        .send_result(&kind, &json)
-                        .map_err(|e| e.to_string())?;
+                    let id = client.send_result(&kind, &json).map_err(|e| describe(&e))?;
                     eprintln!(
                         "the {kind} result was sent{}",
                         id.map(|i| format!(" as {i}")).unwrap_or_default()

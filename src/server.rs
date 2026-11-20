@@ -1,66 +1,33 @@
-//! The way to the EH3D server: this program can send what it measures (the quality of a picture, the offset of a picked part, the rows of pads, the difference of two pictures) to the
-//! server of the machine it is on and read the values of its configuration file from the server, so that the machine and the program agree. The address, the token of the program and
-//! the id of the machine are in the configuration file with the same keys the other programs of the suite use (`server_address`, `server_token`, `server_machine`, `server_timeout_s`,
-//! `server_retries`), not in the code.
+//! The way to the EH3D server: this program can keep what it measures (the quality of a picture, the offset of a picked part, the rows of pads, the difference of two pictures, the
+//! polarity of a part, the footprint of a pad, the map of sharpness) on the server of the machine it is on and read the values of its configuration file from the server, so that the
+//! machine and the program agree. The address, the token of the program and the id of the machine are in the configuration file with the same keys the other programs of the suite use
+//! (`server_address`, `server_token`, `server_machine`, `server_timeout_s`, `server_retries`, `server_mdns`), not in the code.
 //!
-//! This is a thin layer with no dependency: the plain HTTP/1.1 requests, the retries and the error codes follow what the shared client of the suite does, so that it can be replaced by that
-//! client when it is published. The routes below are the ones the `cam` plugin of the server will serve (it is in development; nothing is served today): `GET
-//! /api/v1/machines/{machine}/vision/config` gives the values of the configuration file as a JSON object and `POST /api/v1/machines/{machine}/vision/results` takes a result. The
-//! server in memory (`SimServer`) answers those routes so that the whole path is tested without a network.
+//! The link itself is the one client of the suite (`eh3d-serverclient` of EH3D-COMMON): the same keys with the same ranges, retries with growing pauses (a `POST` is never sent twice), a
+//! state of the link, a token that is never printed and the refusals of the server by their code in the language of the person. What is this program's own is here: which routes it
+//! uses and the shape of what it keeps there.
+//!
+//! The server has no plugin of vision, so this program uses the routes that exist and that every program of the suite may use, the artifacts of the store (`docs/PROJECT_STORE.md` of the
+//! server): a result is kept with `POST /api/v1/artifacts` (the JSON that the command writes, as `vision-<kind>.json`, with the machine and the kind in its `params`), and the values of the
+//! configuration file are read from the newest artifact `vision-<machine>.cfg` of the format [`CONFIG_FORMAT`] (`GET /api/v1/artifacts?format=...` and `GET /api/v1/artifacts/{id}`),
+//! written as the lines of `vision.cfg` or as a JSON object. The server in memory ([`SimServer`]) answers those routes so that the whole path is tested without a network.
 
 use crate::config::{Config, KEYS};
 use crate::inspect::json_string;
 use std::collections::VecDeque;
-use std::io::{Read, Write};
-use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+
+pub use eh3d_serverclient as sc;
+pub use sc::{ClientError, Link};
 
 /// The start of every route of the server.
 pub const API: &str = "/api/v1";
-/// The name this program gives itself in what it sends.
+/// The name this program gives itself in what it keeps.
 pub const APP: &str = "vision-studio";
-/// The most bytes read from one answer of the server.
-pub const MAX_ANSWER_BYTES: usize = 1 << 20;
-
-/// Where the server is and who this program is on it.
-#[derive(Clone, PartialEq, Eq)]
-pub struct ServerSettings {
-    /// `host:port`; empty means that there is no server and nothing is sent.
-    pub address: String,
-    /// The token of this program (never shown, never logged).
-    pub token: String,
-    /// The id of the machine the results are for.
-    pub machine: String,
-    /// How long one try may take, in seconds (1 to 120).
-    pub timeout_s: u64,
-    /// How many more tries after a failure on the network (0 to 5).
-    pub retries: u32,
-}
-
-impl std::fmt::Debug for ServerSettings {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ServerSettings")
-            .field("address", &self.address)
-            .field("token", &if self.token.is_empty() { "" } else { "***" })
-            .field("machine", &self.machine)
-            .field("timeout_s", &self.timeout_s)
-            .field("retries", &self.retries)
-            .finish()
-    }
-}
-
-impl Default for ServerSettings {
-    fn default() -> Self {
-        ServerSettings {
-            address: String::new(),
-            token: String::new(),
-            machine: String::new(),
-            timeout_s: 15,
-            retries: 2,
-        }
-    }
-}
+/// The media type of a configuration file kept on the server.
+pub const CONFIG_FORMAT: &str = "text/x-eh3d-vision-config";
+/// The media type of a result kept on the server.
+pub const RESULT_FORMAT: &str = "application/json";
 
 /// Whether a text can go into a path as it is: letters, digits, `_` and `-`, from 1 to 64.
 pub fn safe_segment(s: &str) -> bool {
@@ -69,393 +36,327 @@ pub fn safe_segment(s: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
 }
 
-impl ServerSettings {
-    /// The settings of the configuration file.
-    pub fn from_config(c: &Config) -> ServerSettings {
-        ServerSettings {
-            address: c.server_address.clone(),
-            token: c.server_token.clone(),
-            machine: c.server_machine.clone(),
-            timeout_s: c.server_timeout_s,
-            retries: c.server_retries,
-        }
-    }
+/// The settings of the link that the configuration file describes (an empty address means that there is no server).
+pub fn link_settings(c: &Config) -> Result<sc::Settings, String> {
+    let mut s = sc::Settings::default();
+    let put = |s: &mut sc::Settings, key: &str, value: &str| {
+        s.set(key, value).map(|_| ()).map_err(|e| e.to_string())
+    };
+    put(&mut s, "server_address", &c.server_address)?;
+    put(&mut s, "server_token", &c.server_token)?;
+    put(&mut s, "server_machine", &c.server_machine)?;
+    put(&mut s, "server_timeout_s", &c.server_timeout_s.to_string())?;
+    put(&mut s, "server_retries", &c.server_retries.to_string())?;
+    put(
+        &mut s,
+        "server_mdns",
+        if c.server_mdns { "on" } else { "off" },
+    )?;
+    check_link(&s)?;
+    Ok(s)
+}
 
-    /// Whether there is a server to talk to.
-    pub fn enabled(&self) -> bool {
-        !self.address.is_empty()
-    }
-
-    /// Whether the values make sense; the reason, naming the key, when they do not. An empty address is fine (there is no server).
-    pub fn check(&self) -> Result<(), String> {
-        if !self.address.is_empty() {
-            let ok = self.address.len() <= 255
-                && self
-                    .address
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || ".-_:[]".contains(c))
-                && self.address.rsplit_once(':').is_some_and(|(host, port)| {
-                    !host.is_empty() && port.parse::<u16>().is_ok_and(|p| p > 0)
-                });
-            if !ok {
-                return Err(
-                    "server_address must be host:port (letters, digits and . - _ only, a port from 1 to 65535) or empty".into(),
-                );
-            }
-        }
-        if self.token.len() > 512 || self.token.chars().any(|c| c.is_control() || c == ' ') {
+/// Whether the values make sense for this program; the reason, naming the key, when they do not. An empty address is fine (there is no server).
+pub fn check_link(s: &sc::Settings) -> Result<(), String> {
+    let address = s.server_address.as_str();
+    if !address.is_empty() {
+        let ok = address.len() <= 255
+            && address
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || ".-_:[]".contains(c))
+            && address.rsplit_once(':').is_some_and(|(host, port)| {
+                !host.is_empty() && port.parse::<u16>().is_ok_and(|p| p > 0)
+            });
+        if !ok {
             return Err(
-                "server_token must be text without spaces or control characters, up to 512 characters"
-                    .into(),
+                "server_address must be host:port (letters, digits and . - _ only, a port from 1 to 65535) or empty".into(),
             );
         }
-        if !self.machine.is_empty() && !safe_segment(&self.machine) {
-            return Err(
-                "server_machine must be letters, digits, _ and - only, from 1 to 64 characters"
-                    .into(),
-            );
-        }
-        if !(1..=120).contains(&self.timeout_s) {
-            return Err("server_timeout_s must be from 1 to 120".into());
-        }
-        if self.retries > 5 {
-            return Err("server_retries must be from 0 to 5".into());
-        }
-        Ok(())
     }
+    let token = s.server_token.expose();
+    if token.len() > 512 || token.chars().any(|c| c.is_control() || c == ' ') {
+        return Err(
+            "server_token must be text without spaces or control characters, up to 512 characters"
+                .into(),
+        );
+    }
+    if !s.server_machine.is_empty() && !safe_segment(&s.server_machine) {
+        return Err(
+            "server_machine must be letters, digits, _ and - only, from 1 to 64 characters".into(),
+        );
+    }
+    Ok(())
 }
 
 /// A warning for a token that would go over plain HTTP to an address that is not on this computer or on a private network; `None` when there is nothing to warn of.
-pub fn plain_token_warning(s: &ServerSettings) -> Option<String> {
-    if s.token.is_empty() || s.address.is_empty() {
+pub fn plain_token_warning(s: &sc::Settings) -> Option<String> {
+    if s.server_token.is_empty() || s.server_address.is_empty() {
         return None;
     }
-    let host = s
-        .address
-        .rsplit_once(':')
-        .map_or(s.address.as_str(), |h| h.0);
-    let host = host
-        .trim_matches(|c| c == '[' || c == ']')
-        .to_ascii_lowercase();
-    let private = host == "localhost"
-        || host == "::1"
-        || host.ends_with(".local")
-        || host.starts_with("127.")
-        || host.starts_with("10.")
-        || host.starts_with("192.168.")
-        || host
-            .strip_prefix("172.")
-            .and_then(|r| r.split('.').next())
-            .and_then(|n| n.parse::<u8>().ok())
-            .is_some_and(|n| (16..=31).contains(&n));
-    (!private).then(|| {
+    sc::plain_token_warning(&s.server_address).then(|| {
+        let host = s
+            .server_address
+            .rsplit_once(':')
+            .map_or(s.server_address.as_str(), |h| h.0);
         format!("the token goes over plain HTTP to {host}, which is not a local address; put the server behind HTTPS")
     })
 }
 
-/// What went wrong with a request.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ServerError {
-    /// The settings do not allow the request (no server, no machine, a value out of its range).
-    Config(String),
-    /// The server did not answer, after this many tries.
-    Unreachable { error: String, attempts: u32 },
-    /// 401: the token is missing or is not accepted.
-    Unauthorized,
-    /// 403: the token is accepted but does not allow this.
-    Forbidden,
-    /// Any other answer of 400 or more, with the code and the detail the server gave.
-    Server {
-        status: u16,
-        code: String,
-        detail: String,
-    },
-    /// The answer is not what was expected.
-    BadReply(String),
-}
-
-impl std::fmt::Display for ServerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ServerError::Config(m) => write!(f, "server_config: {m}"),
-            ServerError::Unreachable { error, attempts } => {
-                write!(f, "server_unreachable: {error} (after {attempts} tries)")
-            }
-            ServerError::Unauthorized => {
-                write!(
-                    f,
-                    "unauthorized: the server does not accept the token of this program"
-                )
-            }
-            ServerError::Forbidden => {
-                write!(
-                    f,
-                    "forbidden: the token of this program does not allow this"
-                )
-            }
-            ServerError::Server {
-                status,
-                code,
-                detail,
-            } => {
-                if detail.is_empty() {
-                    write!(f, "{code}: the server answered {status}")
-                } else {
-                    write!(f, "{code}: {detail} ({status})")
-                }
-            }
-            ServerError::BadReply(m) => write!(f, "bad_reply: {m}"),
+/// What a failure says on the command line: the kind or the code of the server, then the text in English.
+pub fn describe(e: &ClientError) -> String {
+    let word = match e {
+        ClientError::Config(_) => "server_config".to_string(),
+        ClientError::Unreachable { .. } => "server_unreachable".to_string(),
+        ClientError::Unauthorized { .. } => "unauthorized".to_string(),
+        ClientError::Forbidden { .. } => "forbidden".to_string(),
+        ClientError::Server { status, code, .. } => {
+            code.clone().unwrap_or_else(|| format!("http_{status}"))
         }
+        ClientError::BadReply(_) => "bad_reply".to_string(),
+    };
+    let text = e.text(sc::Lang::En);
+    match e {
+        ClientError::Unreachable { attempts, .. } => {
+            format!("{word}: {text} (after {attempts} tries)")
+        }
+        ClientError::Server { detail, .. } if !detail.is_empty() && !text.contains(detail) => {
+            format!("{word}: {text}: {detail}")
+        }
+        _ => format!("{word}: {text}"),
     }
 }
 
-/// The state of the link, as the last request left it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Link {
-    /// Nothing has been sent yet.
-    Unknown,
-    /// The server answered.
-    Connected,
-    /// The last request did not reach the server.
-    Disconnected,
-    /// The server answered but does not accept the token.
-    LoggedOut,
-}
-
-/// A request on its way to the server.
-pub struct Request<'a> {
-    pub address: &'a str,
-    pub method: &'a str,
-    pub path: &'a str,
-    /// The token to send as a bearer token; empty sends none.
-    pub token: &'a str,
-    pub body: Option<&'a str>,
-    pub timeout: Duration,
-}
-
-/// What the server answered.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Reply {
-    pub status: u16,
-    pub body: String,
-}
-
-/// How a request failed before there was an answer.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Fail {
-    /// The connection could not be made: nothing was sent.
-    NoConnection(String),
-    /// The time ran out, so the server may have got the request.
-    Timeout(String),
-    /// The connection broke or the answer was cut, so the server may have got the request.
-    Broken(String),
-}
-
-/// How a request travels: plain HTTP/1.1, or a server in memory for the tests.
-pub trait Transport {
-    fn send(&mut self, request: &Request<'_>) -> Result<Reply, Fail>;
-}
-
-/// The client: the settings, the way the requests travel and the state of the link.
+/// The client of this program: the client of the suite with the routes of this program on top.
 pub struct Client {
-    settings: ServerSettings,
-    transport: Box<dyn Transport>,
-    pause: Box<dyn FnMut(Duration)>,
-    link: Link,
-}
-
-fn idempotent(method: &str) -> bool {
-    matches!(method, "GET" | "HEAD" | "PUT" | "DELETE" | "OPTIONS")
-}
-
-/// The pause before try number `attempt + 1`: 200 ms, 400 ms, 800 ms... up to 2 s.
-pub fn backoff(attempt: u32) -> Duration {
-    Duration::from_millis((200u64 << attempt.saturating_sub(1).min(4)).min(2000))
+    inner: sc::Client,
 }
 
 impl Client {
     /// A client for these settings that sends its requests over `transport`. The settings must be valid and have an address.
     pub fn new(
-        settings: ServerSettings,
-        transport: Box<dyn Transport>,
-    ) -> Result<Client, ServerError> {
-        settings.check().map_err(ServerError::Config)?;
-        if !settings.enabled() {
-            return Err(ServerError::Config(
+        settings: sc::Settings,
+        transport: Box<dyn sc::Transport>,
+    ) -> Result<Client, ClientError> {
+        check_link(&settings).map_err(ClientError::Config)?;
+        if !settings.is_configured() {
+            return Err(ClientError::Config(
                 "server_address is not set (in vision.cfg or with --address)".into(),
             ));
         }
         Ok(Client {
-            settings,
-            transport,
-            pause: Box::new(std::thread::sleep),
-            link: Link::Unknown,
+            inner: sc::Client::new(settings, transport),
         })
     }
 
     /// A client that talks plain HTTP over the network.
-    pub fn tcp(settings: ServerSettings) -> Result<Client, ServerError> {
-        Client::new(settings, Box::new(TcpTransport::default()))
+    pub fn tcp(settings: sc::Settings) -> Result<Client, ClientError> {
+        let transport = sc::TcpTransport::new(settings.server_address.clone());
+        Client::new(settings, Box::new(transport))
     }
 
     /// Changes what is done to wait between two tries (the tests do not wait).
-    pub fn with_pause(mut self, pause: Box<dyn FnMut(Duration)>) -> Client {
-        self.pause = pause;
+    pub fn with_sleeper(mut self, sleeper: Box<dyn sc::Sleeper>) -> Client {
+        self.inner = self.inner.with_sleeper(sleeper);
         self
     }
 
     pub fn link(&self) -> Link {
-        self.link
+        self.inner.link()
     }
 
-    pub fn settings(&self) -> &ServerSettings {
-        &self.settings
+    pub fn settings(&self) -> &sc::Settings {
+        self.inner.settings()
     }
 
-    /// The path of a route of the machine, `/api/v1/machines/{machine}{rest}`; the machine must be set.
-    pub fn machine_path(&self, rest: &str) -> Result<String, ServerError> {
-        if self.settings.machine.is_empty() {
-            return Err(ServerError::Config(
+    /// The counts and the times of the link, for a log of the session.
+    pub fn metrics(&self) -> &sc::LinkMetrics {
+        self.inner.metrics()
+    }
+
+    fn machine(&self) -> Result<&str, ClientError> {
+        let m = self.inner.settings().server_machine.as_str();
+        if m.is_empty() {
+            Err(ClientError::Config(
                 "server_machine is not set (in vision.cfg or with --machine)".into(),
-            ));
-        }
-        Ok(format!("{API}/machines/{}{rest}", self.settings.machine))
-    }
-
-    /// One request, with the retries: a connection that could not be made is tried again for any method, a time-out or a broken connection only for `GET`, `HEAD`, `PUT`, `DELETE` and
-    /// `OPTIONS` (so a `POST` is never sent twice), and so is an answer of 502, 503 or 504. A 401 or 403 is not tried again.
-    pub fn request(
-        &mut self,
-        method: &str,
-        path: &str,
-        body: Option<&str>,
-        with_token: bool,
-    ) -> Result<Reply, ServerError> {
-        if !path.starts_with('/') || path.chars().any(|c| c.is_control() || c == ' ') {
-            return Err(ServerError::Config(format!("'{path}' is not a path")));
-        }
-        let tries = self.settings.retries + 1;
-        let token = if with_token {
-            self.settings.token.clone()
+            ))
         } else {
-            String::new()
-        };
-        let mut attempt = 0u32;
-        loop {
-            attempt += 1;
-            let sent = self.transport.send(&Request {
-                address: &self.settings.address,
-                method,
-                path,
-                token: &token,
-                body,
-                timeout: Duration::from_secs(self.settings.timeout_s),
-            });
-            let error = match sent {
-                Ok(reply) => {
-                    if matches!(reply.status, 502..=504) && idempotent(method) && attempt < tries {
-                        format!("the server answered {}", reply.status)
-                    } else {
-                        self.link = Link::Connected;
-                        return self.classify(reply);
-                    }
-                }
-                Err(Fail::NoConnection(e)) => e,
-                Err(Fail::Timeout(e) | Fail::Broken(e)) if idempotent(method) => e,
-                Err(Fail::Timeout(e) | Fail::Broken(e)) => {
-                    self.link = Link::Disconnected;
-                    return Err(ServerError::Unreachable {
-                        error: e,
-                        attempts: attempt,
-                    });
-                }
-            };
-            if attempt >= tries {
-                self.link = Link::Disconnected;
-                return Err(ServerError::Unreachable {
-                    error,
-                    attempts: attempt,
-                });
-            }
-            (self.pause)(backoff(attempt));
-        }
-    }
-
-    fn classify(&mut self, reply: Reply) -> Result<Reply, ServerError> {
-        match reply.status {
-            200..=299 => Ok(reply),
-            401 => {
-                self.link = Link::LoggedOut;
-                Err(ServerError::Unauthorized)
-            }
-            403 => Err(ServerError::Forbidden),
-            status => {
-                let fields = parse_object(&reply.body).unwrap_or_default();
-                let get = |k: &str| {
-                    fields
-                        .iter()
-                        .find(|f| f.0 == k)
-                        .map(|f| f.1.clone())
-                        .unwrap_or_default()
-                };
-                let code = match get("error") {
-                    c if c.is_empty() => format!("http_{status}"),
-                    c => c,
-                };
-                Err(ServerError::Server {
-                    status,
-                    code,
-                    detail: get("detail"),
-                })
-            }
+            Ok(m)
         }
     }
 
     /// Whether the server answers: `GET /api/v1/health`, with no token.
-    pub fn health(&mut self) -> Result<(), ServerError> {
-        self.request("GET", &format!("{API}/health"), None, false)
-            .map(|_| ())
+    pub fn health(&mut self) -> Result<(), ClientError> {
+        self.inner.health().map(|_| ())
     }
 
-    /// The values of the configuration file that the server holds for the machine, as `(key, value)` pairs in the order the server gave them.
-    pub fn fetch_config(&mut self) -> Result<Vec<(String, String)>, ServerError> {
-        let path = self.machine_path("/vision/config")?;
-        let reply = self.request("GET", &path, None, true)?;
-        parse_object(&reply.body).map_err(|e| {
-            ServerError::BadReply(format!("the configuration is not a JSON object: {e}"))
+    /// The values of the configuration file that the server holds for the machine, as `(key, value)` pairs in the order the server gave them: the newest artifact
+    /// `vision-<machine>.cfg` of the format [`CONFIG_FORMAT`].
+    pub fn fetch_config(&mut self) -> Result<Vec<(String, String)>, ClientError> {
+        let name = config_name(self.machine()?);
+        let list = self
+            .inner
+            .get(&format!("{API}/artifacts?format={CONFIG_FORMAT}"))?;
+        let id = newest_artifact(&list.body, &name)?;
+        let reply = self.inner.get(&format!("{API}/artifacts/{id}"))?;
+        parse_config_text(&reply.body).map_err(|e| {
+            ClientError::BadReply(format!("the configuration of {name} cannot be read: {e}"))
         })
     }
 
-    /// Sends a result: `kind` is what it is (`quality`, `offset`, `pads`, `diff`) and `result_json` is the JSON file that the command of that name writes. The answer is the id the
-    /// server gave it, when it gave one.
+    /// Keeps a result: `kind` is what it is (`quality`, `offset`, `pads`, `diff`...) and `result_json` is the JSON file that the command of that name writes. The answer is the
+    /// id of the artifact the server made of it.
     pub fn send_result(
         &mut self,
         kind: &str,
         result_json: &str,
-    ) -> Result<Option<String>, ServerError> {
+    ) -> Result<Option<String>, ClientError> {
         if !safe_segment(kind) {
-            return Err(ServerError::Config(format!(
+            return Err(ClientError::Config(format!(
                 "'{kind}' is not a kind of result"
             )));
         }
         let result = result_json.trim();
         if !(result.starts_with('{') && result.ends_with('}')) {
-            return Err(ServerError::Config(
+            return Err(ClientError::Config(
                 "the result must be a JSON object".into(),
             ));
         }
-        let path = self.machine_path("/vision/results")?;
+        let machine = self.machine()?.to_string();
         let body = format!(
-            "{{\"kind\": {}, \"machine\": {}, \"app\": {}, \"result\": {result}}}",
+            "{{\"name\": {}, \"format\": {}, \"data_base64\": {}, \"producer\": {{\"tool\": \"eh3d-vision\", \"version\": {}}}, \"params\": {{\"kind\": {}, \"machine\": {}, \"app\": {}}}}}",
+            json_string(&format!("vision-{kind}.json")),
+            json_string(RESULT_FORMAT),
+            json_string(&base64_encode(result.as_bytes())),
+            json_string(env!("CARGO_PKG_VERSION")),
             json_string(kind),
-            json_string(&self.settings.machine),
+            json_string(&machine),
             json_string(APP)
         );
-        let reply = self.request("POST", &path, Some(&body), true)?;
-        Ok(parse_object(&reply.body)
-            .ok()
-            .and_then(|f| f.into_iter().find(|p| p.0 == "id").map(|p| p.1)))
+        let reply = self.inner.post(&format!("{API}/artifacts"), Some(&body))?;
+        Ok(reply.json().and_then(|j| {
+            j.get("artifact_id")
+                .and_then(sc::Json::as_str)
+                .map(str::to_string)
+        }))
     }
+}
+
+/// The name of the artifact that holds the configuration of a machine.
+pub fn config_name(machine: &str) -> String {
+    format!("vision-{machine}.cfg")
+}
+
+/// The id of the newest artifact of the list (newest first) with this name and the format of a configuration.
+fn newest_artifact(list: &str, name: &str) -> Result<String, ClientError> {
+    let json = sc::Json::parse(list)
+        .map_err(|e| ClientError::BadReply(format!("the list of artifacts is not JSON: {e}")))?;
+    let sc::Json::Arr(items) = json else {
+        return Err(ClientError::BadReply(
+            "the list of artifacts is not a list".into(),
+        ));
+    };
+    for item in &items {
+        let text = |k: &str| item.get(k).and_then(sc::Json::as_str).unwrap_or("");
+        if text("name") == name && text("format") == CONFIG_FORMAT {
+            let id = text("artifact_id");
+            if safe_segment(id) {
+                return Ok(id.to_string());
+            }
+            return Err(ClientError::BadReply(
+                "the id of the artifact cannot go into a request".into(),
+            ));
+        }
+    }
+    Err(ClientError::Server {
+        status: 404,
+        code: Some("unknown_artifact".into()),
+        detail: format!("no configuration {name} is kept on the server"),
+    })
+}
+
+/// The values of a configuration kept on the server: a JSON object, or the lines `key = value` of `vision.cfg` (blank lines and lines that start with `#` or `;` are
+/// ignored, a ` #` after a value starts a comment, a key written twice is an error).
+pub fn parse_config_text(text: &str) -> Result<Vec<(String, String)>, String> {
+    if text.trim_start().starts_with('{') {
+        return parse_object(text);
+    }
+    let mut out: Vec<(String, String)> = Vec::new();
+    for (n, raw) in text.lines().enumerate() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            return Err(format!("line {}: there is no = in it", n + 1));
+        };
+        let key = key.trim().to_string();
+        let value = value.split(" #").next().unwrap_or("").trim().to_string();
+        if key.is_empty() {
+            return Err(format!("line {}: there is no key", n + 1));
+        }
+        if out.iter().any(|p| p.0 == key) {
+            return Err(format!("line {}: \"{key}\" is written twice", n + 1));
+        }
+        out.push((key, value));
+    }
+    Ok(out)
+}
+
+const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/// The text of the bytes in Base64 (the alphabet with `+` and `/`, padded with `=`).
+pub fn base64_encode(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let n = (u32::from(chunk[0]) << 16)
+            | (u32::from(*chunk.get(1).unwrap_or(&0)) << 8)
+            | u32::from(*chunk.get(2).unwrap_or(&0));
+        out.push(B64[(n >> 18) as usize & 63] as char);
+        out.push(B64[(n >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 {
+            B64[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            B64[n as usize & 63] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
+/// The bytes of a Base64 text; `None` when it is not Base64 (a letter outside the alphabet, a wrong padding or a length that is not a multiple of four).
+pub fn base64_decode(text: &str) -> Option<Vec<u8>> {
+    let b = text.as_bytes();
+    if !b.len().is_multiple_of(4) {
+        return None;
+    }
+    let value = |c: u8| B64.iter().position(|&x| x == c).map(|p| p as u32);
+    let mut out = Vec::with_capacity(b.len() / 4 * 3);
+    for (i, quad) in b.chunks(4).enumerate() {
+        let last = i + 1 == b.len() / 4;
+        let pad = quad.iter().rev().take_while(|&&c| c == b'=').count();
+        if pad > 2 || (pad > 0 && !last) {
+            return None;
+        }
+        let mut n = 0u32;
+        for (k, &c) in quad.iter().enumerate() {
+            n <<= 6;
+            if k < 4 - pad {
+                n |= value(c)?;
+            }
+        }
+        out.push((n >> 16) as u8);
+        if pad < 2 {
+            out.push((n >> 8) as u8);
+        }
+        if pad < 1 {
+            out.push(n as u8);
+        }
+    }
+    Some(out)
 }
 
 /// What `apply_remote` did.
@@ -662,128 +563,6 @@ fn skip_nested(b: &[u8], i: &mut usize) -> Result<(), String> {
     Err("an object or a list is not closed".into())
 }
 
-/// Plain HTTP/1.1 over a connection of its own for each request.
-#[derive(Debug, Clone, Copy)]
-pub struct TcpTransport {
-    /// The most bytes of an answer that are read.
-    pub max_answer: usize,
-}
-
-impl Default for TcpTransport {
-    fn default() -> Self {
-        TcpTransport {
-            max_answer: MAX_ANSWER_BYTES,
-        }
-    }
-}
-
-impl Transport for TcpTransport {
-    fn send(&mut self, r: &Request<'_>) -> Result<Reply, Fail> {
-        let target = r
-            .address
-            .to_socket_addrs()
-            .map_err(|e| Fail::NoConnection(format!("{}: {e}", r.address)))?
-            .next()
-            .ok_or_else(|| Fail::NoConnection(format!("{}: no address", r.address)))?;
-        let mut stream =
-            TcpStream::connect_timeout(&target, r.timeout.min(Duration::from_secs(10)))
-                .map_err(|e| Fail::NoConnection(format!("{}: {e}", r.address)))?;
-        stream
-            .set_read_timeout(Some(r.timeout))
-            .and_then(|_| stream.set_write_timeout(Some(r.timeout)))
-            .map_err(|e| Fail::Broken(e.to_string()))?;
-        let payload = r.body.unwrap_or("");
-        let mut head = format!(
-            "{} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept: application/json\r\n",
-            r.method, r.path, r.address
-        );
-        if !r.token.is_empty() {
-            head.push_str(&format!("Authorization: Bearer {}\r\n", r.token));
-        }
-        if r.body.is_some() {
-            head.push_str(&format!(
-                "Content-Type: application/json\r\nContent-Length: {}\r\n",
-                payload.len()
-            ));
-        } else if matches!(r.method, "POST" | "PUT") {
-            head.push_str("Content-Length: 0\r\n");
-        }
-        head.push_str("\r\n");
-        head.push_str(payload);
-        let io_fail = |e: std::io::Error| {
-            if matches!(
-                e.kind(),
-                std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
-            ) {
-                Fail::Timeout(e.to_string())
-            } else {
-                Fail::Broken(e.to_string())
-            }
-        };
-        stream.write_all(head.as_bytes()).map_err(io_fail)?;
-        let mut raw = Vec::new();
-        (&stream)
-            .take(self.max_answer as u64 + 1)
-            .read_to_end(&mut raw)
-            .map_err(io_fail)?;
-        if raw.len() > self.max_answer {
-            return Err(Fail::Broken("the answer of the server is too big".into()));
-        }
-        parse_http(&raw).map_err(Fail::Broken)
-    }
-}
-
-/// The status and the body of an HTTP response (a body sent in chunks is put together).
-pub fn parse_http(raw: &[u8]) -> Result<Reply, String> {
-    let split = raw
-        .windows(4)
-        .position(|w| w == b"\r\n\r\n")
-        .ok_or("the answer of the server is incomplete")?;
-    let head = String::from_utf8_lossy(&raw[..split]).to_string();
-    let status: u16 = head
-        .lines()
-        .next()
-        .and_then(|l| l.split_whitespace().nth(1))
-        .and_then(|s| s.parse::<u16>().ok())
-        .filter(|s| (100..600).contains(s))
-        .ok_or("the answer of the server has no status")?;
-    let chunked = head.lines().any(|l| {
-        let l = l.to_ascii_lowercase();
-        l.starts_with("transfer-encoding:") && l.contains("chunked")
-    });
-    let rest = &raw[split + 4..];
-    let body = if chunked {
-        unchunk(rest)?
-    } else {
-        rest.to_vec()
-    };
-    Ok(Reply {
-        status,
-        body: String::from_utf8_lossy(&body).to_string(),
-    })
-}
-
-fn unchunk(mut rest: &[u8]) -> Result<Vec<u8>, String> {
-    let mut out = Vec::new();
-    loop {
-        let eol = rest
-            .windows(2)
-            .position(|w| w == b"\r\n")
-            .ok_or("a chunk of the answer is cut")?;
-        let size = usize::from_str_radix(String::from_utf8_lossy(&rest[..eol]).trim(), 16)
-            .map_err(|_| "a chunk of the answer has a bad size")?;
-        rest = &rest[eol + 2..];
-        if size == 0 {
-            return Ok(out);
-        }
-        if rest.len() < size.saturating_add(2) {
-            return Err("a chunk of the answer is cut".into());
-        }
-        out.extend_from_slice(&rest[..size]);
-        rest = &rest[size + 2..];
-    }
-}
-
 /// What a request to the server in memory does when it is told to fail.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SimFault {
@@ -794,18 +573,31 @@ pub enum SimFault {
     Status(u16, &'static str),
 }
 
+/// An artifact the server in memory keeps.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SimArtifact {
+    pub id: String,
+    pub name: String,
+    pub format: String,
+    /// The bytes, as text.
+    pub data: String,
+    /// The `kind` and the `machine` of its `params`, and the `tool` of its producer (empty when it had none).
+    pub kind: String,
+    pub machine: String,
+    pub tool: String,
+}
+
 #[derive(Debug, Default)]
 struct SimState {
-    config: String,
     faults: VecDeque<SimFault>,
     /// Every request that reached the server: method, path and whether it had the right token.
     log: Vec<(String, String, bool)>,
-    results: Vec<String>,
+    artifacts: Vec<SimArtifact>,
 }
 
-/// The server in memory: it answers `/api/v1/health` to anybody and, with the token `program-token`, the routes of the machine `bench` (`vision/config` and `vision/results`); with
-/// `viewer-token` it refuses to take a result (403), with any other token every route but the health is 401, and it fails on demand (`script`). It is a double of the routes this
-/// program uses, not the server.
+/// The server in memory: it answers `/api/v1/health` to anybody and, with the token `program-token`, the routes of the artifacts (`GET /api/v1/artifacts`, `GET
+/// /api/v1/artifacts/{id}` and `POST /api/v1/artifacts`); with `viewer-token` it refuses to keep an artifact (403), with any other token every route but the health is 401, and it
+/// fails on demand (`script`). It is a double of the routes this program uses, not the server.
 #[derive(Debug, Clone)]
 pub struct SimServer {
     state: Arc<Mutex<SimState>>,
@@ -816,21 +608,35 @@ impl SimServer {
     pub const PROGRAM_TOKEN: &'static str = "program-token";
     /// The token of a program that may only read.
     pub const VIEWER_TOKEN: &'static str = "viewer-token";
-    /// The only machine it knows.
+    /// The only machine it keeps a configuration for.
     pub const MACHINE: &'static str = "bench";
 
-    /// A server whose configuration for the machine is the JSON object `config`.
+    /// A server that keeps `config` (the lines of `vision.cfg` or a JSON object) as the configuration of the machine `bench`.
     pub fn new(config: &str) -> SimServer {
-        SimServer {
-            state: Arc::new(Mutex::new(SimState {
-                config: config.to_string(),
-                ..SimState::default()
-            })),
-        }
+        let server = SimServer {
+            state: Arc::new(Mutex::new(SimState::default())),
+        };
+        server.keep_config(Self::MACHINE, config);
+        server
     }
 
     fn state(&self) -> std::sync::MutexGuard<'_, SimState> {
         self.state.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Keeps another configuration (the newest one of the machine is the one that is read).
+    pub fn keep_config(&self, machine: &str, config: &str) {
+        let mut st = self.state();
+        let id = format!("a-{}", st.artifacts.len() + 1);
+        st.artifacts.push(SimArtifact {
+            id,
+            name: config_name(machine),
+            format: CONFIG_FORMAT.into(),
+            data: config.to_string(),
+            kind: "config".into(),
+            machine: machine.into(),
+            tool: String::new(),
+        });
     }
 
     /// The next requests fail in this order, one fault each, and then it answers again.
@@ -838,9 +644,19 @@ impl SimServer {
         self.state().faults = faults.into();
     }
 
-    /// The bodies of the results it took, in order.
+    /// The artifacts that are results (not configurations), in the order they were kept.
+    pub fn stored(&self) -> Vec<SimArtifact> {
+        self.state()
+            .artifacts
+            .iter()
+            .filter(|a| a.format == RESULT_FORMAT)
+            .cloned()
+            .collect()
+    }
+
+    /// The bytes of the results kept, in order.
     pub fn results(&self) -> Vec<String> {
-        self.state().results.clone()
+        self.stored().into_iter().map(|a| a.data).collect()
     }
 
     /// The requests that reached it (the ones that failed before they got there are not in the list).
@@ -849,91 +665,192 @@ impl SimServer {
     }
 }
 
-fn answer(status: u16, body: &str) -> Result<Reply, Fail> {
-    Ok(Reply {
+fn answer(status: u16, body: &str) -> Result<sc::Reply, sc::TransportError> {
+    Ok(sc::Reply {
         status,
         body: body.to_string(),
     })
 }
 
-impl Transport for SimServer {
-    fn send(&mut self, r: &Request<'_>) -> Result<Reply, Fail> {
+fn refusal(status: u16, code: &str, detail: &str) -> Result<sc::Reply, sc::TransportError> {
+    answer(
+        status,
+        &format!(
+            "{{\"error\": {}, \"detail\": {}}}",
+            json_string(code),
+            json_string(detail)
+        ),
+    )
+}
+
+impl SimServer {
+    /// Answers one request as the server would: the same as [`sc::Transport::send`], for a test that has the parts of a request and not a `Request` (the one of the client cannot
+    /// be made outside its crate).
+    pub fn handle(
+        &self,
+        method: &str,
+        path: &str,
+        token: &str,
+        body: Option<&str>,
+    ) -> Result<sc::Reply, sc::TransportError> {
         let mut st = self.state();
         match st.faults.pop_front() {
-            Some(SimFault::NoConnection) => return Err(Fail::NoConnection("refused".into())),
-            Some(SimFault::Timeout) => return Err(Fail::Timeout("timed out".into())),
-            Some(SimFault::Broken) => return Err(Fail::Broken("connection reset".into())),
+            Some(SimFault::NoConnection) => {
+                return Err(sc::TransportError::Connect("refused".into()))
+            }
+            Some(SimFault::Timeout) => return Err(sc::TransportError::Timeout),
+            Some(SimFault::Broken) => {
+                return Err(sc::TransportError::Io("connection reset".into()))
+            }
             Some(SimFault::Status(s, code)) => {
-                st.log.push((r.method.into(), r.path.into(), true));
-                return answer(
-                    s,
-                    &format!("{{\"error\": \"{code}\", \"detail\": \"scripted\"}}"),
-                );
+                st.log.push((method.to_string(), path.to_string(), true));
+                return refusal(s, code, "scripted");
             }
             None => {}
         }
-        let known = r.token == Self::PROGRAM_TOKEN || r.token == Self::VIEWER_TOKEN;
-        st.log.push((r.method.into(), r.path.into(), known));
-        if r.method == "GET" && r.path == format!("{API}/health") {
-            return answer(200, "{\"status\": \"ok\"}");
-        }
-        if !known {
+        let known = token == Self::PROGRAM_TOKEN || token == Self::VIEWER_TOKEN;
+        st.log.push((method.to_string(), path.to_string(), known));
+        if method == "GET" && path == format!("{API}/health") {
             return answer(
-                401,
-                "{\"error\": \"unauthorized\", \"detail\": \"no valid token\"}",
+                200,
+                "{\"name\": \"eh3d-server\", \"version\": \"sim\", \"status\": \"ok\", \"api_revision\": 1}",
             );
         }
-        let base = format!("{API}/machines/{}/vision/", Self::MACHINE);
-        match (r.method, r.path.strip_prefix(&base)) {
-            ("GET", Some("config")) => answer(200, &st.config),
-            ("POST", Some("results")) => {
-                if r.token != Self::PROGRAM_TOKEN {
-                    return answer(403, "{\"error\": \"forbidden\", \"detail\": \"read only\"}");
-                }
-                let body = r.body.unwrap_or("");
-                if parse_object(body).is_err() || !body.contains("\"kind\"") {
-                    return answer(
-                        400,
-                        "{\"error\": \"bad_request\", \"detail\": \"not a result\"}",
-                    );
-                }
-                st.results.push(body.to_string());
-                let id = st.results.len();
-                answer(201, &format!("{{\"id\": \"r{id}\"}}"))
-            }
-            _ => answer(
-                404,
-                "{\"error\": \"not_found\", \"detail\": \"no such route\"}",
-            ),
+        if !known {
+            return refusal(401, "unauthorized", "no valid token");
         }
+        let (path, query) = path.split_once('?').unwrap_or((path, ""));
+        let route = path.strip_prefix(&format!("{API}/artifacts"));
+        match (method, route) {
+            ("GET", Some("")) => {
+                let format = query.strip_prefix("format=").unwrap_or("");
+                let rows: Vec<String> = st
+                    .artifacts
+                    .iter()
+                    .rev()
+                    .filter(|a| format.is_empty() || a.format == format)
+                    .map(|a| {
+                        format!(
+                            "{{\"artifact_id\": {}, \"blob_sha256\": \"\", \"size\": {}, \"name\": {}, \"format\": {}}}",
+                            json_string(&a.id),
+                            a.data.len(),
+                            json_string(&a.name),
+                            json_string(&a.format)
+                        )
+                    })
+                    .collect();
+                answer(200, &format!("[{}]", rows.join(", ")))
+            }
+            ("GET", Some(id)) if id.starts_with('/') => {
+                match st.artifacts.iter().find(|a| a.id == id[1..]) {
+                    Some(a) => answer(200, &a.data),
+                    None => refusal(404, "unknown_artifact", ""),
+                }
+            }
+            ("POST", Some("")) => {
+                if token != Self::PROGRAM_TOKEN {
+                    return refusal(403, "forbidden", "read only");
+                }
+                let Some(json) = body.and_then(|b| sc::Json::parse(b).ok()) else {
+                    return refusal(400, "bad_request", "not JSON");
+                };
+                let text =
+                    |j: &sc::Json, k: &str| j.get(k).and_then(sc::Json::as_str).map(str::to_string);
+                let (Some(name), Some(format), Some(data)) = (
+                    text(&json, "name"),
+                    text(&json, "format"),
+                    text(&json, "data_base64").and_then(|d| base64_decode(&d)),
+                ) else {
+                    return refusal(
+                        422,
+                        "bad_artifact",
+                        "name, format and data_base64 are needed",
+                    );
+                };
+                if !(1..=120).contains(&name.len())
+                    || name
+                        .chars()
+                        .any(|c| c.is_control() || c == '/' || c == '\\')
+                    || format != format.to_ascii_lowercase()
+                {
+                    return refusal(422, "bad_artifact", "name or format");
+                }
+                let params = json.get("params");
+                let param = |k: &str| {
+                    params
+                        .and_then(|p| p.get(k))
+                        .and_then(sc::Json::as_str)
+                        .unwrap_or("")
+                        .to_string()
+                };
+                let tool = json
+                    .get("producer")
+                    .and_then(|p| p.get("tool"))
+                    .and_then(sc::Json::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let id = format!("a-{}", st.artifacts.len() + 1);
+                let size = data.len();
+                st.artifacts.push(SimArtifact {
+                    id: id.clone(),
+                    name,
+                    format,
+                    data: String::from_utf8_lossy(&data).to_string(),
+                    kind: param("kind"),
+                    machine: param("machine"),
+                    tool,
+                });
+                answer(
+                    201,
+                    &format!(
+                        "{{\"artifact_id\": \"{id}\", \"blob_sha256\": \"\", \"size\": {size}}}"
+                    ),
+                )
+            }
+            _ => refusal(404, "not_found", "no such route"),
+        }
+    }
+}
+
+impl sc::Transport for SimServer {
+    fn send(&self, r: &sc::Request) -> Result<sc::Reply, sc::TransportError> {
+        self.handle(
+            &r.method,
+            &r.path,
+            r.bearer().unwrap_or(""),
+            r.body.as_deref(),
+        )
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::RefCell;
-    use std::net::TcpListener;
-    use std::rc::Rc;
+    use std::time::Duration;
 
-    fn settings(token: &str) -> ServerSettings {
-        ServerSettings {
-            address: "127.0.0.1:18200".into(),
-            token: token.into(),
-            machine: SimServer::MACHINE.into(),
-            ..ServerSettings::default()
+    fn settings(token: &str) -> sc::Settings {
+        let mut s = sc::Settings::default();
+        s.set("server_address", "127.0.0.1:18200").unwrap();
+        s.set("server_token", token).unwrap();
+        s.set("server_machine", SimServer::MACHINE).unwrap();
+        s
+    }
+
+    /// A sleeper that writes the pauses down instead of waiting for them.
+    struct Seen(Arc<Mutex<Vec<Duration>>>);
+
+    impl sc::Sleeper for Seen {
+        fn sleep(&self, how_long: Duration) {
+            self.0.lock().unwrap().push(how_long);
         }
     }
 
     /// A client over the server in memory whose pauses are written down, not waited for.
-    type Waits = Rc<RefCell<Vec<Duration>>>;
-
-    fn client(sim: &SimServer, s: ServerSettings) -> (Client, Waits) {
-        let waits = Rc::new(RefCell::new(Vec::new()));
-        let seen = waits.clone();
+    fn client(sim: &SimServer, s: sc::Settings) -> (Client, Arc<Mutex<Vec<Duration>>>) {
+        let waits = Arc::new(Mutex::new(Vec::new()));
         let c = Client::new(s, Box::new(sim.clone()))
             .unwrap()
-            .with_pause(Box::new(move |d| seen.borrow_mut().push(d)));
+            .with_sleeper(Box::new(Seen(waits.clone())));
         (c, waits)
     }
 
@@ -947,6 +864,7 @@ mod tests {
         c.health().unwrap();
         assert_eq!(c.link(), Link::Connected);
         assert_eq!(sim.log()[0].1, "/api/v1/health");
+        assert!(!sim.log()[0].2);
     }
 
     #[test]
@@ -987,6 +905,50 @@ mod tests {
         assert_eq!(next.server_token, base.server_token);
         // the original is not touched
         assert!(!base.quality_check);
+        // the routes are those of the store
+        let log = sim.log();
+        assert_eq!(
+            log[0].1,
+            "/api/v1/artifacts?format=text/x-eh3d-vision-config"
+        );
+        assert_eq!(log[1].1, "/api/v1/artifacts/a-1");
+    }
+
+    #[test]
+    fn the_configuration_may_be_the_lines_of_the_file_and_the_newest_one_is_read() {
+        let sim = SimServer::new("polarity = dark\n");
+        sim.keep_config(
+            "bench",
+            "# tuned on the bench\npolarity = light  # the new lamp\nthreshold = 99\n",
+        );
+        sim.keep_config("other", "polarity = dark\n");
+        let (mut c, _) = client(&sim, settings(SimServer::PROGRAM_TOKEN));
+        let pairs = c.fetch_config().unwrap();
+        assert_eq!(
+            pairs,
+            [
+                ("polarity".to_string(), "light".to_string()),
+                ("threshold".to_string(), "99".to_string())
+            ]
+        );
+    }
+
+    #[test]
+    fn the_text_of_a_configuration_is_read_with_its_line_on_a_mistake() {
+        assert!(parse_config_text("").unwrap().is_empty());
+        assert!(parse_config_text("\n# only a comment\n; and another\n")
+            .unwrap()
+            .is_empty());
+        let e = parse_config_text("a = 1\nnonsense\n").unwrap_err();
+        assert!(e.starts_with("line 2"), "{e}");
+        let e = parse_config_text("a = 1\n a = 2\n").unwrap_err();
+        assert!(e.contains("line 2") && e.contains("twice"), "{e}");
+        assert!(parse_config_text("= 3").unwrap_err().contains("no key"));
+        // a JSON object is read as the server of the first version sent it
+        assert_eq!(
+            parse_config_text(" {\"a\": 1}").unwrap(),
+            [("a".to_string(), "1".to_string())]
+        );
     }
 
     #[test]
@@ -1016,29 +978,30 @@ mod tests {
     }
 
     #[test]
-    fn a_result_is_sent_with_its_kind_and_gets_an_id() {
+    fn a_result_is_kept_as_an_artifact_with_its_kind_and_gets_an_id() {
         let sim = SimServer::new(CONFIG);
         let (mut c, _) = client(&sim, settings(SimServer::PROGRAM_TOKEN));
         let id = c
             .send_result("quality", "{\"verdict\": \"pass\"}\n")
             .unwrap();
-        assert_eq!(id.as_deref(), Some("r1"));
-        let body = &sim.results()[0];
-        let fields = parse_object(body).unwrap();
-        // the result itself is nested, so it is not one of the flat fields
-        assert!(body.contains("\"result\": {\"verdict\": \"pass\"}"));
-        assert!(fields.contains(&("kind".to_string(), "quality".to_string())));
-        assert!(fields.contains(&("machine".to_string(), "bench".to_string())));
-        assert!(fields.contains(&("app".to_string(), APP.to_string())));
+        assert_eq!(id.as_deref(), Some("a-2"));
+        let kept = &sim.stored()[0];
+        assert_eq!(kept.name, "vision-quality.json");
+        assert_eq!(kept.format, "application/json");
+        assert_eq!(kept.data, "{\"verdict\": \"pass\"}");
         assert_eq!(
-            sim.log()[0],
             (
-                "POST".into(),
-                "/api/v1/machines/bench/vision/results".into(),
-                true
-            )
+                kept.kind.as_str(),
+                kept.machine.as_str(),
+                kept.tool.as_str()
+            ),
+            ("quality", "bench", "eh3d-vision")
         );
-        assert_eq!(c.send_result("diff", "{}").unwrap().as_deref(), Some("r2"));
+        assert_eq!(
+            sim.log().last().unwrap(),
+            &("POST".to_string(), "/api/v1/artifacts".to_string(), true)
+        );
+        assert_eq!(c.send_result("diff", "{}").unwrap().as_deref(), Some("a-3"));
     }
 
     #[test]
@@ -1053,7 +1016,7 @@ mod tests {
             ("", "{}"),
         ] {
             assert!(
-                matches!(c.send_result(kind, text), Err(ServerError::Config(_))),
+                matches!(c.send_result(kind, text), Err(ClientError::Config(_))),
                 "{kind} {text}"
             );
         }
@@ -1064,71 +1027,80 @@ mod tests {
     fn a_token_that_is_not_accepted_or_not_allowed_is_told_apart() {
         let sim = SimServer::new(CONFIG);
         let (mut c, _) = client(&sim, settings("wrong"));
-        assert_eq!(c.fetch_config().unwrap_err(), ServerError::Unauthorized);
+        assert!(matches!(
+            c.fetch_config().unwrap_err(),
+            ClientError::Unauthorized { .. }
+        ));
         assert_eq!(c.link(), Link::LoggedOut);
         let (mut v, _) = client(&sim, settings(SimServer::VIEWER_TOKEN));
         assert!(v.fetch_config().is_ok());
-        assert_eq!(
+        assert!(matches!(
             v.send_result("quality", "{}").unwrap_err(),
-            ServerError::Forbidden
-        );
+            ClientError::Forbidden { .. }
+        ));
         assert_eq!(v.link(), Link::Connected);
         // a 401 is not tried again
         assert_eq!(sim.log().iter().filter(|l| !l.2).count(), 1);
     }
 
     #[test]
-    fn a_machine_the_server_does_not_know_is_an_error_with_its_code() {
+    fn a_machine_with_no_configuration_is_an_error_with_the_code_of_the_server() {
         let sim = SimServer::new(CONFIG);
         let mut s = settings(SimServer::PROGRAM_TOKEN);
-        s.machine = "lathe".into();
+        s.set("server_machine", "lathe").unwrap();
         let (mut c, _) = client(&sim, s);
         match c.fetch_config().unwrap_err() {
-            ServerError::Server {
+            ClientError::Server {
                 status,
                 code,
                 detail,
             } => {
-                assert_eq!(
-                    (status, code.as_str(), detail.as_str()),
-                    (404, "not_found", "no such route")
-                );
+                assert_eq!(status, 404);
+                assert_eq!(code.as_deref(), Some("unknown_artifact"));
+                assert!(detail.contains("vision-lathe.cfg"), "{detail}");
             }
             other => panic!("{other:?}"),
         }
-        let text = c.fetch_config().unwrap_err().to_string();
-        assert_eq!(text, "not_found: no such route (404)");
+        let text = describe(&c.fetch_config().unwrap_err());
+        assert!(text.starts_with("unknown_artifact: "), "{text}");
+        assert!(text.contains("vision-lathe.cfg"), "{text}");
+        // the id of the route is still unknown to the server
+        let (mut c2, _) = client(&sim, settings(SimServer::PROGRAM_TOKEN));
+        let missing = c2.inner.get("/api/v1/artifacts/a-99").unwrap_err();
+        assert_eq!(missing.code(), Some("unknown_artifact"));
     }
 
     #[test]
     fn a_connection_that_fails_is_tried_again_with_pauses_that_grow() {
         let sim = SimServer::new(CONFIG);
         sim.script(vec![SimFault::NoConnection, SimFault::NoConnection]);
-        let (mut c, waits) = client(&sim, settings(SimServer::PROGRAM_TOKEN));
-        // a POST is tried again when nothing was sent
-        assert!(c.send_result("quality", "{}").is_ok());
+        let (mut c, waits) = client(&sim, settings(""));
+        c.health().unwrap();
         assert_eq!(
-            *waits.borrow(),
+            *waits.lock().unwrap(),
             [Duration::from_millis(200), Duration::from_millis(400)]
         );
-        assert_eq!(sim.results().len(), 1);
+        assert_eq!(c.link(), Link::Connected);
+        assert_eq!(c.metrics().retries(), 2);
     }
 
     #[test]
     fn a_time_out_is_tried_again_for_a_get_but_a_post_is_never_sent_twice() {
         let sim = SimServer::new(CONFIG);
         sim.script(vec![SimFault::Timeout]);
-        let (mut c, _) = client(&sim, settings(SimServer::PROGRAM_TOKEN));
+        let (mut c, waits) = client(&sim, settings(SimServer::PROGRAM_TOKEN));
         assert!(c.fetch_config().is_ok());
-        sim.script(vec![SimFault::Timeout, SimFault::Broken]);
+        assert_eq!(waits.lock().unwrap().len(), 1);
+        sim.script(vec![SimFault::Timeout, SimFault::Timeout]);
+        let before = waits.lock().unwrap().len();
         match c.send_result("quality", "{}").unwrap_err() {
-            ServerError::Unreachable { attempts, .. } => assert_eq!(attempts, 1),
+            ClientError::Unreachable { attempts, .. } => assert_eq!(attempts, 1),
             other => panic!("{other:?}"),
         }
+        assert_eq!(waits.lock().unwrap().len(), before);
         assert_eq!(c.link(), Link::Disconnected);
-        assert!(sim.results().is_empty());
-        // the second fault was never used: the next request meets it
-        assert!(c.fetch_config().is_ok());
+        // the second fault was not used: nothing was sent again
+        assert!(sim.stored().is_empty());
     }
 
     #[test]
@@ -1139,169 +1111,170 @@ mod tests {
         assert!(c.fetch_config().is_ok());
         sim.script(vec![SimFault::Status(503, "unavailable")]);
         match c.send_result("quality", "{}").unwrap_err() {
-            ServerError::Server { status, code, .. } => {
-                assert_eq!((status, code.as_str()), (503, "unavailable"))
+            ClientError::Server { status, code, .. } => {
+                assert_eq!(status, 503);
+                assert_eq!(code.as_deref(), Some("unavailable"));
             }
             other => panic!("{other:?}"),
         }
-        assert!(sim.results().is_empty());
+        assert!(sim.stored().is_empty());
     }
 
     #[test]
     fn when_the_tries_run_out_the_link_is_down_and_the_error_counts_them() {
         let sim = SimServer::new(CONFIG);
-        sim.script(vec![SimFault::NoConnection; 5]);
-        let mut s = settings(SimServer::PROGRAM_TOKEN);
-        s.retries = 2;
-        let (mut c, waits) = client(&sim, s);
-        match c.health().unwrap_err() {
-            ServerError::Unreachable { attempts, error } => {
-                assert_eq!(attempts, 3);
-                assert_eq!(error, "refused");
-            }
+        sim.script(vec![SimFault::Broken, SimFault::Broken, SimFault::Broken]);
+        let (mut c, waits) = client(&sim, settings(SimServer::PROGRAM_TOKEN));
+        let e = c.fetch_config().unwrap_err();
+        match &e {
+            ClientError::Unreachable { attempts, .. } => assert_eq!(*attempts, 3),
             other => panic!("{other:?}"),
         }
         assert_eq!(c.link(), Link::Disconnected);
-        assert_eq!(waits.borrow().len(), 2);
-        // 0 retries is one try and no pause
-        sim.script(vec![SimFault::NoConnection]);
-        let mut s = settings("");
-        s.retries = 0;
-        let (mut c, waits) = client(&sim, s);
-        assert!(matches!(
-            c.health(),
-            Err(ServerError::Unreachable { attempts: 1, .. })
-        ));
-        assert!(waits.borrow().is_empty());
+        assert_eq!(waits.lock().unwrap().len(), 2);
+        let text = describe(&e);
+        assert!(text.starts_with("server_unreachable: "), "{text}");
+        assert!(text.ends_with("(after 3 tries)"), "{text}");
+        // a server that comes back is connected again
+        assert!(c.health().is_ok());
+        assert_eq!(c.link(), Link::Connected);
     }
 
     #[test]
-    fn the_pauses_grow_up_to_two_seconds() {
-        let ms: Vec<u128> = (1..=8).map(|a| backoff(a).as_millis()).collect();
-        assert_eq!(ms, [200, 400, 800, 1600, 2000, 2000, 2000, 2000]);
-        assert_eq!(backoff(0).as_millis(), 200);
+    fn the_tries_are_the_ones_of_the_settings() {
+        let sim = SimServer::new(CONFIG);
+        sim.script(vec![SimFault::NoConnection; 6]);
+        let mut s = settings("");
+        s.set("server_retries", "0").unwrap();
+        let (mut c, waits) = client(&sim, s);
+        assert!(matches!(
+            c.health().unwrap_err(),
+            ClientError::Unreachable { attempts: 1, .. }
+        ));
+        assert!(waits.lock().unwrap().is_empty());
     }
 
     #[test]
     fn the_settings_have_ranges_and_the_token_is_not_shown() {
-        assert!(ServerSettings::default().check().is_ok());
-        assert!(!ServerSettings::default().enabled());
-        for ok in [
-            "127.0.0.1:18200",
-            "cm5.local:80",
-            "[::1]:18200",
-            "host-1:65535",
-        ] {
-            let s = ServerSettings {
-                address: ok.into(),
-                ..ServerSettings::default()
-            };
-            assert!(s.check().is_ok(), "{ok}");
-        }
-        for bad in [
+        let ok = |c: &Config| link_settings(c);
+        let mut c = Config::default();
+        assert!(ok(&c).is_ok());
+        c.server_address = "cm5.local:18200".into();
+        c.server_machine = "bench".into();
+        c.server_token = "t".repeat(512);
+        assert!(ok(&c).is_ok());
+        for address in [
             "nohost",
-            ":18200",
             "host:0",
             "host:65536",
-            "host:port",
+            ":80",
             "a b:1",
-            "host:1/x",
-            "h@st:1",
+            "host:port",
+            "ho/st:1",
         ] {
-            let s = ServerSettings {
-                address: bad.into(),
-                ..ServerSettings::default()
-            };
-            assert!(s.check().is_err(), "{bad}");
+            c.server_address = address.into();
+            let e = ok(&c).unwrap_err();
+            assert!(e.contains("server_address"), "{address}: {e}");
         }
-        for s in [
-            ServerSettings {
-                token: "has space".into(),
-                ..ServerSettings::default()
-            },
-            ServerSettings {
-                token: "line\nbreak".into(),
-                ..ServerSettings::default()
-            },
-            ServerSettings {
-                token: "x".repeat(513),
-                ..ServerSettings::default()
-            },
-            ServerSettings {
-                machine: "a/b".into(),
-                ..ServerSettings::default()
-            },
-            ServerSettings {
-                machine: "x".repeat(65),
-                ..ServerSettings::default()
-            },
-            ServerSettings {
-                timeout_s: 0,
-                ..ServerSettings::default()
-            },
-            ServerSettings {
-                timeout_s: 121,
-                ..ServerSettings::default()
-            },
-            ServerSettings {
-                retries: 6,
-                ..ServerSettings::default()
-            },
-        ] {
-            assert!(s.check().is_err(), "{s:?}");
-        }
-        let shown = format!("{:?}", settings("secret-value"));
-        assert!(!shown.contains("secret-value") && shown.contains("***"));
+        c.server_address = "[::1]:80".into();
+        assert!(ok(&c).is_ok());
+        c.server_token = "a b".into();
+        assert!(ok(&c).is_err());
+        c.server_token = "t".repeat(513);
+        assert!(ok(&c).unwrap_err().contains("512"));
+        c.server_token = "x".into();
+        c.server_machine = "a/b".into();
+        assert!(ok(&c).unwrap_err().contains("server_machine"));
+        c.server_machine = "m".repeat(65);
+        assert!(ok(&c).is_err());
+        c.server_machine = "m".repeat(64);
+        assert!(ok(&c).is_ok());
+        // the token is not in what the settings write about themselves
+        let s = ok(&c).unwrap();
+        assert!(!format!("{s:?}").contains("token: x"));
+        assert!(!s.to_text(false).contains("server_token = x"));
+        assert!(s.to_text(false).contains("server_mdns = off"));
+    }
+
+    #[test]
+    fn mdns_is_off_by_default_and_the_key_reaches_the_client() {
+        let mut c = Config::default();
+        assert!(!c.server_mdns);
+        assert!(!link_settings(&c).unwrap().server_mdns);
+        c.set("server_mdns", "on").unwrap();
+        assert!(link_settings(&c).unwrap().server_mdns);
+        assert!(c.set("server_mdns", "maybe").is_err());
     }
 
     #[test]
     fn a_client_needs_a_server_and_a_machine_to_send_to() {
         let sim = SimServer::new(CONFIG);
-        let none = Client::new(ServerSettings::default(), Box::new(sim.clone()));
-        assert!(matches!(none.err(), Some(ServerError::Config(m)) if m.contains("server_address")));
-        let broken = ServerSettings {
-            retries: 9,
-            ..settings("")
-        };
-        assert!(Client::new(broken, Box::new(sim.clone())).is_err());
+        let none = sc::Settings::default();
+        let e = Client::new(none, Box::new(sim.clone())).err().unwrap();
+        assert!(describe(&e).contains("server_address is not set"), "{e}");
         let mut s = settings(SimServer::PROGRAM_TOKEN);
-        s.machine.clear();
+        s.set("server_machine", "").unwrap();
         let (mut c, _) = client(&sim, s);
-        assert!(
-            matches!(c.fetch_config(), Err(ServerError::Config(m)) if m.contains("server_machine"))
-        );
-        assert!(c.request("GET", "no-slash", None, true).is_err());
-        assert!(c.request("GET", "/a b", None, true).is_err());
-        assert!(c.request("GET", "/a\r\nX: y", None, true).is_err());
+        let e = c.fetch_config().unwrap_err();
+        assert!(describe(&e).contains("server_machine is not set"), "{e}");
+        assert!(c.send_result("quality", "{}").is_err());
+        assert!(sim.log().is_empty());
+        let mut bad = settings("");
+        bad.set("server_address", "nohost").unwrap();
+        assert!(Client::new(bad, Box::new(sim)).is_err());
     }
 
     #[test]
     fn a_token_that_would_go_over_plain_http_far_away_is_warned_of() {
-        let at = |addr: &str, token: &str| {
-            plain_token_warning(&ServerSettings {
-                address: addr.into(),
-                token: token.into(),
-                ..ServerSettings::default()
-            })
+        let warn = |address: &str, token: &str| {
+            let mut s = sc::Settings::default();
+            s.set("server_address", address).unwrap();
+            s.set("server_token", token).unwrap();
+            plain_token_warning(&s)
         };
+        assert!(warn("example.org:18200", "t")
+            .unwrap()
+            .contains("example.org"));
+        assert!(warn("8.8.8.8:80", "t").is_some());
+        assert!(warn("172.32.0.1:80", "t").is_some());
         for near in [
-            "127.0.0.1:1",
-            "localhost:1",
-            "[::1]:1",
+            "127.0.0.1:80",
+            "localhost:80",
             "192.168.0.180:18200",
-            "10.1.2.3:1",
-            "172.16.0.1:1",
-            "172.31.9.9:1",
-            "cm5.local:1",
+            "10.0.0.2:80",
+            "172.16.0.9:80",
+            "172.31.0.9:80",
+            "cm5.local:18200",
+            "[::1]:80",
         ] {
-            assert!(at(near, "t").is_none(), "{near}");
+            assert!(warn(near, "t").is_none(), "{near}");
         }
-        for far in ["8.8.8.8:1", "example.com:1", "172.32.0.1:1", "172.15.0.1:1"] {
-            assert!(at(far, "t").is_some(), "{far}");
+        // no token, nothing to warn of
+        assert!(warn("example.org:18200", "").is_none());
+        assert!(warn("", "t").is_none());
+    }
+
+    #[test]
+    fn base64_goes_there_and_back_and_refuses_what_is_not_base64() {
+        for (plain, coded) in [
+            ("", ""),
+            ("f", "Zg=="),
+            ("fo", "Zm8="),
+            ("foo", "Zm9v"),
+            ("foob", "Zm9vYg=="),
+            ("fooba", "Zm9vYmE="),
+            ("foobar", "Zm9vYmFy"),
+        ] {
+            assert_eq!(base64_encode(plain.as_bytes()), coded);
+            assert_eq!(base64_decode(coded).unwrap(), plain.as_bytes());
         }
-        assert!(at("8.8.8.8:1", "").is_none());
-        assert!(at("", "t").is_none());
-        assert!(at("8.8.8.8:1", "t").unwrap().contains("8.8.8.8"));
+        let all: Vec<u8> = (0..=255).collect();
+        assert_eq!(base64_decode(&base64_encode(&all)).unwrap(), all);
+        for bad in [
+            "Zg=", "Zg", "Z===", "Zm9v=", "Zm=v", "Zm9!", "=Zm9", "Zg==Zg==",
+        ] {
+            assert!(base64_decode(bad).is_none(), "{bad}");
+        }
     }
 
     #[test]
@@ -1341,150 +1314,51 @@ mod tests {
     }
 
     #[test]
-    fn an_http_answer_is_cut_into_status_and_body() {
-        let r = parse_http(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"a\": 1}")
-            .unwrap();
-        assert_eq!((r.status, r.body.as_str()), (200, "{\"a\": 1}"));
-        let chunked = parse_http(b"HTTP/1.1 201 Created\r\nTransfer-Encoding: chunked\r\n\r\n4\r\n{\"a\"\r\n5\r\n: 1}\n\r\n0\r\n\r\n").unwrap();
-        assert_eq!(
-            (chunked.status, chunked.body.as_str()),
-            (201, "{\"a\": 1}\n")
-        );
-        for bad in [
-            &b""[..],
-            b"HTTP/1.1 200 OK\r\n",
-            b"garbage\r\n\r\n",
-            b"HTTP/1.1 20 OK\r\n\r\n",
-            b"HTTP/1.1 99 X\r\n\r\n",
-            b"HTTP/1.1 600 X\r\n\r\n",
-            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nzz\r\n",
-            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nab",
-        ] {
-            assert!(parse_http(bad).is_err(), "{bad:?}");
-        }
-    }
-
-    /// A server of one connection on the loopback that answers with the bytes it is given and tells what it was asked.
-    fn one_shot(reply: &'static [u8]) -> (String, std::thread::JoinHandle<String>) {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    fn the_plain_http_transport_of_the_suite_talks_to_a_server_on_the_loopback() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap().to_string();
         let handle = std::thread::spawn(move || {
             let (mut s, _) = listener.accept().unwrap();
-            s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
-            let mut got = Vec::new();
-            let mut buf = [0u8; 1024];
-            loop {
-                let n = s.read(&mut buf).unwrap_or(0);
-                got.extend_from_slice(&buf[..n]);
-                let text = String::from_utf8_lossy(&got).to_string();
-                if let Some(at) = text.find("\r\n\r\n") {
-                    let want = text[..at]
-                        .lines()
-                        .find_map(|l| {
-                            l.strip_prefix("Content-Length: ")
-                                .and_then(|v| v.trim().parse::<usize>().ok())
-                        })
-                        .unwrap_or(0);
-                    if got.len() >= at + 4 + want {
-                        break;
-                    }
-                }
-                if n == 0 {
-                    break;
-                }
-            }
-            s.write_all(reply).unwrap();
-            String::from_utf8_lossy(&got).to_string()
+            let mut buf = [0u8; 2048];
+            let n = s.read(&mut buf).unwrap();
+            let body = "{\"name\": \"eh3d-server\", \"version\": \"1\", \"status\": \"ok\", \"api_revision\": 1}";
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            s.write_all(format!("{head}{body}").as_bytes()).unwrap();
+            String::from_utf8_lossy(&buf[..n]).to_string()
         });
-        (address, handle)
-    }
-
-    #[test]
-    fn the_plain_http_transport_talks_to_a_server_on_the_loopback() {
-        let (address, seen) =
-            one_shot(b"HTTP/1.1 201 Created\r\nContent-Length: 11\r\n\r\n{\"id\": \"a1\"}");
-        let s = ServerSettings {
-            address,
-            token: "tok".into(),
-            machine: "bench".into(),
-            ..ServerSettings::default()
-        };
-        let mut c = Client::tcp(s).unwrap();
-        let id = c.send_result("quality", "{\"verdict\": \"pass\"}").unwrap();
-        assert_eq!(id.as_deref(), Some("a1"));
-        let request = seen.join().unwrap();
-        assert!(
-            request.starts_with("POST /api/v1/machines/bench/vision/results HTTP/1.1\r\n"),
-            "{request}"
-        );
-        assert!(request.contains("Authorization: Bearer tok\r\n"));
-        assert!(request.contains("Content-Type: application/json\r\n"));
-        assert!(
-            request.ends_with("\"result\": {\"verdict\": \"pass\"}}"),
-            "{request}"
-        );
-    }
-
-    #[test]
-    fn a_health_request_has_no_authorization_and_no_content_length() {
-        let (address, seen) = one_shot(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}");
-        let s = ServerSettings {
-            address,
-            token: "tok".into(),
-            ..ServerSettings::default()
-        };
+        let mut s = settings("t");
+        s.set("server_address", &address).unwrap();
         let mut c = Client::tcp(s).unwrap();
         c.health().unwrap();
-        let request = seen.join().unwrap();
-        assert!(request.starts_with("GET /api/v1/health HTTP/1.1\r\n"));
-        assert!(!request.contains("Authorization") && !request.contains("Content-Length"));
+        let seen = handle.join().unwrap();
+        assert!(seen.starts_with("GET /api/v1/health HTTP/1.1"), "{seen}");
+        // the health needs no token and sends none
+        assert!(
+            !seen.to_ascii_lowercase().contains("authorization"),
+            "{seen}"
+        );
     }
 
     #[test]
-    fn nothing_listening_is_no_connection_and_a_silent_server_is_a_time_out() {
-        fn ask(address: &str) -> Request<'_> {
-            Request {
-                address,
-                method: "GET",
-                path: "/x",
-                token: "",
-                body: None,
-                timeout: Duration::from_millis(300),
-            }
-        }
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let address = listener.local_addr().unwrap().to_string();
-        drop(listener);
-        let mut t = TcpTransport::default();
-        assert!(matches!(t.send(&ask(&address)), Err(Fail::NoConnection(_))));
-        assert!(matches!(
-            t.send(&ask("not an address")),
-            Err(Fail::NoConnection(_))
-        ));
-        let quiet = TcpListener::bind("127.0.0.1:0").unwrap();
-        let address = quiet.local_addr().unwrap().to_string();
-        let held = std::thread::spawn(move || {
-            let (s, _) = quiet.accept().unwrap();
-            std::thread::sleep(Duration::from_millis(800));
-            drop(s);
-        });
-        assert!(matches!(t.send(&ask(&address)), Err(Fail::Timeout(_))));
-        held.join().unwrap();
-    }
-
-    #[test]
-    fn an_answer_that_is_too_big_is_refused() {
-        let (address, seen) = one_shot(b"HTTP/1.1 200 OK\r\nContent-Length: 40\r\n\r\n0123456789012345678901234567890123456789");
-        let mut t = TcpTransport { max_answer: 20 };
-        let r = Request {
-            address: &address,
-            method: "GET",
-            path: "/x",
-            token: "",
-            body: None,
-            timeout: Duration::from_secs(2),
-        };
-        assert!(matches!(t.send(&r), Err(Fail::Broken(m)) if m.contains("too big")));
-        seen.join().unwrap();
+    fn nothing_listening_is_unreachable_and_the_description_names_the_kind() {
+        let free = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .to_string();
+        let mut s = settings("");
+        s.set("server_address", &free).unwrap();
+        s.set("server_retries", "0").unwrap();
+        s.set("server_timeout_s", "1").unwrap();
+        let mut c = Client::tcp(s).unwrap();
+        let e = c.health().unwrap_err();
+        assert!(describe(&e).starts_with("server_unreachable: "), "{e}");
+        assert_eq!(c.link(), Link::Disconnected);
+        // and the text can be asked in the language of the person
+        assert_ne!(e.text(sc::Lang::Es), e.text(sc::Lang::En));
     }
 }
