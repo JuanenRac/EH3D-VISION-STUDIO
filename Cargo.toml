@@ -26,13 +26,17 @@ required-features = ["gui"]
 [features]
 default = []
 # the window (egui, with the icon of the program): `cargo run --release --features gui --bin eh3d-vision-gui`
-gui = ["dep:eframe", "dep:png"]
+gui = ["dep:eframe", "dep:png", "dep:eh3d-view", "eh3d-view/gui"]
+# the search for servers on the local network (the resolver of the shared client; it still asks nothing of the network unless `server_mdns = on`)
+mdns = ["eh3d-serverclient/mdns"]
 
 [dependencies]
 # the reader of PGM and PNG pictures, shared with the other programs that work from a picture
 eh3d-image = { version = ">=0.0.1", path = "../EH3D-COMMON/crates/image" }
 # the one client of the suite for EH3D-SERVER: the same keys, retries, link state and refusals by code in eight languages
 eh3d-serverclient = { version = ">=0.0.1", path = "../EH3D-COMMON/crates/serverclient" }
+# the panel of the settings of the server, the login and the badge of the link that every program of the suite shows in its window (only with the window)
+eh3d-view = { version = ">=0.0.1", path = "../EH3D-COMMON/crates/view", optional = true }
 
 # the window
 eframe = { version = "0.37.0", default-features = false, features = ["glow", "default_fonts"], optional = true }

@@ -14,7 +14,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 90] = [
+pub const KEYS: [&str; 93] = [
     "language",
     "polarity",
     "threshold",
@@ -81,6 +81,9 @@ pub const KEYS: [&str; 90] = [
     "quality_min_mean",
     "quality_max_mean",
     "quality_min_sharpness",
+    "focus_reference",
+    "edge_step_px",
+    "edge_max_uncertainty_px",
     "server_address",
     "server_token",
     "server_machine",
@@ -215,6 +218,12 @@ pub struct Config {
     pub quality_min_mean: f64,
     pub quality_max_mean: f64,
     pub quality_min_sharpness: f64,
+    /// `server send focus`: the sharpness (variance of the Laplacian) that counts as 50 points of 100 in the result of a focus check; a picture is sharp from there on.
+    pub focus_reference: f64,
+    /// `edge`: the distance in pixels between two samples along the line that is looked across, and the largest uncertainty of the position of the edge (one standard deviation, in pixels)
+    /// that the verdict accepts.
+    pub edge_step_px: f64,
+    pub edge_max_uncertainty_px: f64,
     /// The server of the machine: `host:port` (empty means that there is none), the token of this program, the id of the machine, how long one try may take in seconds and how many more
     /// tries follow a failure on the network.
     pub server_address: String,
@@ -323,6 +332,9 @@ impl Default for Config {
             quality_min_mean: 20.0,
             quality_max_mean: 235.0,
             quality_min_sharpness: 0.0,
+            focus_reference: 100.0,
+            edge_step_px: 0.25,
+            edge_max_uncertainty_px: 0.25,
             server_address: String::new(),
             server_token: String::new(),
             server_machine: String::new(),
@@ -393,6 +405,14 @@ impl Config {
             tolerance_mm: self.inspect_tolerance,
             max_offset_mm: self.pick_max_offset_mm,
             max_turn_deg: self.pick_max_turn_deg,
+        }
+    }
+
+    /// The settings of the reading of an edge that the values make.
+    pub fn edge_settings(&self) -> crate::edge::EdgeSettings {
+        crate::edge::EdgeSettings {
+            step_px: self.edge_step_px,
+            max_uncertainty_px: self.edge_max_uncertainty_px,
         }
     }
 
@@ -603,6 +623,9 @@ impl Config {
             "quality_min_mean" => self.quality_min_mean = number(value, key)?,
             "quality_max_mean" => self.quality_max_mean = number(value, key)?,
             "quality_min_sharpness" => self.quality_min_sharpness = number(value, key)?,
+            "focus_reference" => self.focus_reference = number(value, key)?,
+            "edge_step_px" => self.edge_step_px = number(value, key)?,
+            "edge_max_uncertainty_px" => self.edge_max_uncertainty_px = number(value, key)?,
             "server_address" => self.server_address = value.to_string(),
             "server_token" => self.server_token = value.to_string(),
             "server_machine" => self.server_machine = value.to_string(),
@@ -784,6 +807,10 @@ impl Config {
             return Err("pick_max_turn_deg must be from 0 (not checked) to 90".into());
         }
         crate::quality::check(&self.quality_settings())?;
+        if !(self.focus_reference.is_finite() && self.focus_reference > 0.0) {
+            return Err("focus_reference must be more than 0".into());
+        }
+        crate::edge::check(&self.edge_settings())?;
         crate::server::link_settings(self)?;
         crate::correlate::check(&self.correlate_settings())
             .map_err(|e| format!("correlate_diameter and correlate_min_score: {e}"))?;
@@ -1028,6 +1055,14 @@ square_max_size = 20",
             "quality_check = 1",
             "quality_min_contrast = -1",
             "quality_min_sharpness = -1",
+            "focus_reference = 0",
+            "focus_reference = -3",
+            "focus_reference = soon",
+            "edge_step_px = 0",
+            "edge_step_px = 0.01",
+            "edge_step_px = 2",
+            "edge_max_uncertainty_px = 0",
+            "edge_max_uncertainty_px = 9",
             "quality_min_mean = 200
 quality_max_mean = 100",
             "quality_max_mean = 300",

@@ -104,7 +104,7 @@ jobs:
       - name: Check out the sibling repositories named in depends_on of the manifest
         shell: bash
         env:
-          SIBLING_REFS: "EH3D-COMMON=v0.2.5"
+          SIBLING_REFS: "EH3D-COMMON=v0.2.6"
         run: |
           python3 - <<'PY'
           import json
@@ -138,7 +138,7 @@ jobs:
         env:
           MATRIX_TARGET: ${{ matrix.target }}
       - name: Build
-        run: cargo build --release --features gui --target ${MATRIX_TARGET}
+        run: cargo build --release --features gui,mdns --target ${MATRIX_TARGET}
         working-directory: EH3D-VISION-STUDIO
         shell: bash
         env:

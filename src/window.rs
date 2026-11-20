@@ -5,7 +5,9 @@ use crate::align::{fit, isocam_args, pair_nearest, Transform};
 use crate::config::Config;
 use crate::correlate::Match;
 use crate::diff::Diff;
+use crate::edge::Edge;
 use crate::fiducial::{find_with, refine, Fiducial, Polarity};
+use crate::histogram::{Histogram, Report};
 use crate::image::{from_bytes, Gray};
 use crate::inspect::{Judged, Package};
 use crate::job::BatchJob;
@@ -16,6 +18,7 @@ use crate::offset::Offset;
 use crate::pads::Pads;
 use crate::points;
 use crate::quality::Quality;
+use crate::reference::RefCheck;
 use crate::ring::Ring;
 use crate::scale::Scale;
 use crate::shots::Plan;
@@ -49,6 +52,7 @@ pub enum Section {
     Rectify,
     Pads,
     Diff,
+    Edge,
 }
 
 /// A value of the configuration that the person can edit in the window.
@@ -117,6 +121,30 @@ pub enum Status {
         percent: f64,
     },
     DiffChanged {
+        percent: f64,
+        regions: usize,
+    },
+    /// What the histogram says: the three thresholds and whether they agree.
+    Histogram {
+        otsu: u8,
+        isodata: u8,
+        triangle: u8,
+        agree: bool,
+    },
+    /// Where an edge is, how uncertain that is (pixels) and whether it is within the limit.
+    EdgeDone {
+        x: f64,
+        y: f64,
+        uncertainty: f64,
+        sure: bool,
+    },
+    /// The mask of tolerance that was loaded.
+    MaskLoaded(String),
+    /// The picture is within the tolerance of the reference (the share of pixels outside it, in percent).
+    ReferenceSame {
+        percent: f64,
+    },
+    ReferenceDifferent {
         percent: f64,
         regions: usize,
     },
@@ -237,6 +265,49 @@ impl Status {
             Status::DiffChanged { percent, regions } => {
                 Msg::DiffChanged.with(lang, &[&show(*percent, 3), &regions.to_string()])
             }
+            Status::Histogram {
+                otsu,
+                isodata,
+                triangle,
+                agree,
+            } => Msg::HistogramStatus.with(
+                lang,
+                &[
+                    otsu.to_string(),
+                    isodata.to_string(),
+                    triangle.to_string(),
+                    if *agree {
+                        Msg::HistogramAgree.tr(lang).to_string()
+                    } else {
+                        Msg::HistogramDisagree.tr(lang).to_string()
+                    },
+                ],
+            ),
+            Status::EdgeDone {
+                x,
+                y,
+                uncertainty,
+                sure,
+            } => Msg::EdgeStatus.with(
+                lang,
+                &[
+                    show(*x, 3),
+                    show(*y, 3),
+                    show(*uncertainty, 3),
+                    if *sure {
+                        Msg::EdgeSure.tr(lang).to_string()
+                    } else {
+                        Msg::EdgeUnsure.tr(lang).to_string()
+                    },
+                ],
+            ),
+            Status::MaskLoaded(name) => Msg::ReferenceMaskLoaded.with(lang, &[name]),
+            Status::ReferenceSame { percent } => {
+                Msg::ReferenceSame.with(lang, &[&show(*percent, 3)])
+            }
+            Status::ReferenceDifferent { percent, regions } => {
+                Msg::ReferenceDifferent.with(lang, &[&show(*percent, 3), &regions.to_string()])
+            }
             Status::QualityGood => Msg::QualityGood.tr(lang).to_string(),
             Status::QualityPoor(reasons) => {
                 let why: Vec<&str> = reasons
@@ -295,6 +366,9 @@ impl Status {
 
     /// Whether the status is something that did not work (it is drawn in red).
     pub fn is_problem(&self) -> bool {
+        if let Status::EdgeDone { sure, .. } = self {
+            return !sure;
+        }
         matches!(
             self,
             Status::Failed(_)
@@ -315,6 +389,7 @@ impl Status {
                 | Status::PadsRefused(_)
                 | Status::NeedOther
                 | Status::DiffChanged { .. }
+                | Status::ReferenceDifferent { .. }
                 | Status::GridCount { .. }
                 | Status::TooLarge { .. }
                 | Status::SameFile
@@ -435,6 +510,8 @@ fn field_text(cfg: &Config, key: &str) -> String {
         "diff_threshold" => cfg.diff_threshold.to_string(),
         "diff_min_area" => cfg.diff_min_area.to_string(),
         "diff_max_changed" => cfg.diff_max_changed.to_string(),
+        "edge_step_px" => cfg.edge_step_px.to_string(),
+        "edge_max_uncertainty_px" => cfg.edge_max_uncertainty_px.to_string(),
         _ => String::new(),
     }
 }
@@ -494,6 +571,14 @@ pub struct Window {
     pub status: Status,
     /// The report of a folder that is being read in a thread, with the folder it is written in.
     pub batch_job: Option<(BatchJob, PathBuf)>,
+    /// The histogram of the open picture and what it says about the thresholds.
+    pub histogram: Option<(Histogram, Report)>,
+    /// The four numbers (x and y of the start, x and y of the end, as typed) of the line across an edge, and the edge that was measured along it.
+    pub edge_line: [String; 4],
+    pub edge: Option<Edge>,
+    /// The mask of tolerance of the check against a reference and what that check found.
+    pub mask: Option<Loaded>,
+    pub reference: Option<RefCheck>,
 }
 
 impl Window {
@@ -581,6 +666,12 @@ impl Window {
             ("diff_threshold", Msg::DiffThreshold, Section::Diff),
             ("diff_min_area", Msg::DiffMinArea, Section::Diff),
             ("diff_max_changed", Msg::DiffMaxChanged, Section::Diff),
+            ("edge_step_px", Msg::EdgeStep, Section::Edge),
+            (
+                "edge_max_uncertainty_px",
+                Msg::EdgeMaxUncertainty,
+                Section::Edge,
+            ),
         ]
         .into_iter()
         .map(|(key, label, section)| FieldState {
@@ -622,6 +713,11 @@ impl Window {
             viewport: Viewport::default(),
             status: config_problem.map_or(Status::Ready, Status::ConfigProblem),
             batch_job: None,
+            histogram: None,
+            edge_line: Default::default(),
+            edge: None,
+            mask: None,
+            reference: None,
         }
     }
 
@@ -1244,7 +1340,7 @@ mod tests {
     fn a_new_window_waits_for_a_picture() {
         let w = window();
         assert_eq!(w.status, Status::Ready);
-        assert_eq!(w.fields.len(), 58);
+        assert_eq!(w.fields.len(), 60);
         assert_eq!(w.fields[0].text, "auto");
         assert_eq!(w.fields[1].text, "8");
         assert!(!w.light_marks());
@@ -1733,6 +1829,24 @@ mod tests {
             Status::NeedDesign,
             Status::NeedAccepted,
             Status::GridCount { need: 20, found: 3 },
+            Status::Histogram {
+                otsu: 100,
+                isodata: 110,
+                triangle: 90,
+                agree: false,
+            },
+            Status::EdgeDone {
+                x: 1.0,
+                y: 2.0,
+                uncertainty: 0.05,
+                sure: true,
+            },
+            Status::MaskLoaded("m.pgm".into()),
+            Status::ReferenceSame { percent: 0.0 },
+            Status::ReferenceDifferent {
+                percent: 3.5,
+                regions: 2,
+            },
             Status::TooLarge {
                 name: "b.png".into(),
                 mib: 64,

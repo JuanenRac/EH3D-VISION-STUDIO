@@ -11,15 +11,26 @@ use eh3d_vision_studio::board::{
     report as board_report, scale_from_squares, to_csv as board_csv, to_json as board_json,
 };
 use eh3d_vision_studio::config::Config;
+use eh3d_vision_studio::convention::{
+    blob_findings, document, fiducial_findings, focus_finding, validate, Finding, Source,
+    DEFAULT_EVIDENCE,
+};
 use eh3d_vision_studio::correlate::{correlate, to_csv as correlate_csv};
 use eh3d_vision_studio::cross::{find_crosses, CrossSettings};
 use eh3d_vision_studio::diff::{
     compare as diff_compare, mask as diff_mask, to_csv as diff_csv, to_json as diff_json,
 };
+use eh3d_vision_studio::edge::{
+    measure as edge_measure, summary as edge_summary, to_csv as edge_csv, to_json as edge_json,
+};
 use eh3d_vision_studio::fiducial::{find, refine, Polarity, Settings};
 use eh3d_vision_studio::flatten::flatten;
 use eh3d_vision_studio::footprint::{
     judge as footprint_judge, to_csv as footprint_csv, to_json as footprint_json, FootprintSettings,
+};
+use eh3d_vision_studio::histogram::{
+    histogram, report as histogram_report, summary as histogram_summary, to_csv as histogram_csv,
+    to_json as histogram_json,
 };
 use eh3d_vision_studio::image::{from_bytes, Gray};
 use eh3d_vision_studio::inspect::{
@@ -27,7 +38,9 @@ use eh3d_vision_studio::inspect::{
     to_json as inspect_json, Package,
 };
 use eh3d_vision_studio::lang::Lang;
-use eh3d_vision_studio::lens::{fit_lens, undistort2};
+use eh3d_vision_studio::lens::{
+    fit_lens, residual_report, residuals_summary, residuals_to_csv, residuals_to_json, undistort2,
+};
 use eh3d_vision_studio::limit::{read_limited, read_text_limited, write_bytes, write_text};
 use eh3d_vision_studio::measure::{measure_parts, to_csv, to_json, Part, PartSettings};
 use eh3d_vision_studio::offset::{
@@ -41,6 +54,9 @@ use eh3d_vision_studio::pads::{measure_row, to_csv as pads_csv, to_json as pads_
 use eh3d_vision_studio::perspective::{parse_corners, rectify};
 use eh3d_vision_studio::points::parse as parse_points;
 use eh3d_vision_studio::quality;
+use eh3d_vision_studio::reference::{
+    map as reference_map, to_csv as reference_csv, to_json as reference_json,
+};
 use eh3d_vision_studio::report::html as report_html;
 use eh3d_vision_studio::ring::find_rings;
 use eh3d_vision_studio::scale::{from_pitch, Scale};
@@ -69,7 +85,7 @@ const HELP: &str = "eh3d-vision: fiducials in a camera image
   eh3d-vision quality IMAGE [--min-contrast V] [--min-mean V] [--max-mean V] [--min-sharpness V] [--format csv|json] [--output FILE] [--replace]   whether a picture is good enough to measure from: its sharpness, contrast and mean grey level, and why it is refused (flat, dark, bright or blurry); exit 1 when it is refused
   eh3d-vision inspect IMAGE --package NAME [--table FILE] [--mm-per-px V] [--tolerance MM] [--max-angle DEG] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   each part of a picture compared with the body of its package from a table (CSV with package, body_long_mm, body_short_mm), one verdict per part; exit 1 when a part fails
   eh3d-vision shots (--package NAME [--table FILE] | --body-long MM --body-short MM) --fov-w MM --fov-h MM [--overlap F] [--margin MM] [--output FILE] [--replace]   the places of the camera that cover a part bigger than its field (millimetres from the centre of the part), row after row, as CSV; no camera is needed
-  eh3d-vision lens IMAGE [--columns C] [--rows R] [--max-rms PX] [--light] [--flatten PX]   the two radial factors of the lens from a grid of marks (columns and rows as grid_columns and grid_rows), refused when the marks stay farther than --max-rms pixels from their lattice
+  eh3d-vision lens IMAGE [--columns C] [--rows R] [--max-rms PX] [--light] [--flatten PX] [--residuals] [--format csv|json] [--output FILE] [--replace]   the two radial factors of the lens from a grid of marks (columns and rows as grid_columns and grid_rows), refused when the marks stay farther than --max-rms pixels from their lattice; --residuals writes, mark by mark, how far each lies from its place before and after the correction, the farthest mark, three bands of distance from the centre and the ratio of the outer band to the inner one (a ratio well above 1: two radial terms are not enough)
   eh3d-vision rings IMAGE [--light] [--min-size PX] [--max-size PX] [--split PX] [--flatten PX]   the ring marks found (donuts: a round mark with a hole), with the outer and inner diameter, the size class when the rings are of two sizes (--split gives the diameter that tells small from large, else it is found from the diameters), the score of the shape and a confidence
   eh3d-vision squares IMAGE [--light] [--min-size PX] [--max-size PX] [--flatten PX]   the square marks found, turned by any angle (centre, side and angle)
   eh3d-vision calibrate IMAGE --pitch-mm D [--light] [--tolerance 0.05] [--flatten PX]   the millimetres of a pixel from a target whose neighbouring marks are D millimetres apart
@@ -82,7 +98,10 @@ const HELP: &str = "eh3d-vision: fiducials in a camera image
   eh3d-vision footprint IMAGE --pad-length MM --pad-width MM [--tolerance MM] [--count N] [--mm-per-px V] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   each pad of a picture judged on its own against the size of the design, with a tolerance in millimetres: one line per pad with the differences; exit 1 when a pad is off or the count is not the one asked for
   eh3d-vision sharpmap IMAGE [--cells N] [--min-share F] [--heat FILE.pgm] [--format csv|json] [--output FILE] [--replace]   a map of where the picture is sharp: a grid of cells with the sharpness of each, the weak ones, the tilt along x and y and (with --heat) a picture of the map; exit 1 when a cell is much less sharp than the median
   eh3d-vision board IMAGE [--square-mm D] [--pitch-mm D] [--max-aspect F] [--max-spread F] [--light] [--flatten PX] [--format csv|json] [--output FILE] [--report FILE.txt] [--replace]   the millimetres of a pixel from a board of squares (D is the side or the distance between centres), along x, along y and from the side, with a report; exit 1 when the pixels are not square, the distances between neighbours differ or the side and the pitch do not agree
-  eh3d-vision server health|config|send KIND ... [--address HOST:PORT] [--machine ID]   the EH3D server of the machine (server_address, server_token, server_machine and server_mdns of vision.cfg): health asks whether it answers, config reads the values of the configuration file that the server keeps for the machine (written as lines for vision.cfg with --output, never over a file without --replace), send quality|offset|pads|diff|orientation|footprint|sharpmap|board takes the arguments of the command of that name and keeps its result as JSON on the server
+  eh3d-vision edge IMAGE --from X,Y --to X,Y [--step PX] [--max-uncertainty PX] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   where an edge is, to a fraction of a pixel, along a line laid across it (from a point on one side to a point on the other, both inside the picture), with the uncertainty of the position (one standard deviation, from the noise of the two flat grounds and the slope of the edge), the contrast and the width of the transition; exit 1 when the uncertainty is above the limit
+  eh3d-vision histogram IMAGE [--bins N] [--flatten PX] [--format csv|json] [--output FILE] [--replace]   the histogram of the grey levels in 8 to 256 groups and the thresholds that Otsu, isodata and the triangle method pick, how much of the variance two groups explain and whether the three agree (the value for `threshold` of vision.cfg when the automatic one is not good)
+  eh3d-vision refcheck REFERENCE PICTURE [--tolerance MASK.pgm] [--threshold V] [--min-area PX] [--max-changed F] [--map FILE.pgm] [--format csv|json] [--output FILE] [--replace]   a picture compared with a reference of the same size through a mask of tolerance (a mask pixel at 0 keeps the general threshold, 1 to 254 allows that many levels more, 255 is not looked at): the pixels outside the tolerance, how much they pass it, in how many regions and where; --map writes them as a picture; exit 1 when the share is above the limit
+  eh3d-vision server health|config|discover|check|detect|send KIND ... [--address HOST:PORT] [--machine ID]   the EH3D server of the machine (server_address, server_token, server_machine and server_mdns of vision.cfg): health asks whether it answers, config reads the values of the configuration file that the server keeps for the machine (written as lines for vision.cfg with --output, never over a file without --replace), discover lists the servers that answer on the local network (only with server_mdns = on and a program built with the feature mdns; they are candidates for the person to choose, never connected to by themselves), check FILE tells whether a result follows the convention of the server (schema, kind, picture, findings, units, evidence), detect fiducials|barcode|focus|blobs IMAGE [--seed N] [--artifact] asks the simulated station of the server for a result about the picture (evidence simulator), send quality|offset|pads|diff|orientation|footprint|sharpmap|board takes the arguments of the command of that name and keeps its result as JSON on the server, and send fiducials|focus|blobs IMAGE [--evidence camera|picture|simulator] [--max-findings N] keeps the result in the convention of the server with its schema
 
 IMAGE is a PNG or a PGM file. The CSV files have one point per line: x,y in millimetres, in the same order in both files.";
 
@@ -601,6 +620,174 @@ fn server_settings(args: &mut Vec<String>, cfg: &Config) -> Result<sc::Settings,
         eprintln!("warning: {w}");
     }
     Ok(s)
+}
+
+/// Two numbers written `X,Y`.
+fn xy(text: &str, what: &str) -> Result<(f64, f64), String> {
+    let (a, b) = text
+        .split_once(',')
+        .ok_or_else(|| format!("{what} '{text}' is not X,Y"))?;
+    Ok((num(a, what)?, num(b, what)?))
+}
+
+/// What `edge` does: the text, whether the position is sure enough and a line for the error output.
+fn edge_run(
+    args: &mut Vec<String>,
+    cfg: &Config,
+    json: bool,
+) -> Result<(String, bool, String), String> {
+    let mut s = cfg.edge_settings();
+    if let Some(v) = flag(args, "--step")? {
+        s.step_px = num(&v, "--step")?;
+    }
+    if let Some(v) = flag(args, "--max-uncertainty")? {
+        s.max_uncertainty_px = num(&v, "--max-uncertainty")?;
+    }
+    let from = xy(
+        &flag(args, "--from")?.ok_or("edge needs --from X,Y")?,
+        "--from",
+    )?;
+    let to = xy(&flag(args, "--to")?.ok_or("edge needs --to X,Y")?, "--to")?;
+    let flatten_px = flag(args, "--flatten")?
+        .map(|v| count(&v, "--flatten"))
+        .transpose()?;
+    finish(args, 1)?;
+    let path = args.first().ok_or("edge needs an image")?;
+    let img = picture(path, cfg, flatten_px)?;
+    let e = edge_measure(&img, from, to, &s)?;
+    let text = if json { edge_json(&e) } else { edge_csv(&e) };
+    Ok((text, e.sure, edge_summary(&e, s.max_uncertainty_px)))
+}
+
+/// What `refcheck` does: the picture against its reference through the mask of tolerance. The text, whether it is the same and a line for the error output.
+fn refcheck_run(
+    args: &mut Vec<String>,
+    cfg: &Config,
+    json: bool,
+    replace: bool,
+) -> Result<(String, bool, String), String> {
+    let mut s = cfg.diff_settings();
+    if let Some(v) = flag(args, "--threshold")? {
+        s.threshold = u8::try_from(count(&v, "--threshold")?)
+            .map_err(|_| format!("--threshold '{v}' is not from 0 to 254"))?;
+    }
+    if let Some(v) = flag(args, "--min-area")? {
+        s.min_area = count(&v, "--min-area")? as u64;
+    }
+    if let Some(v) = flag(args, "--max-changed")? {
+        s.max_changed = num(&v, "--max-changed")?;
+    }
+    let tolerance = flag(args, "--tolerance")?;
+    let map_file = flag(args, "--map")?;
+    finish(args, 2)?;
+    let (reference, shown) = match (args.first(), args.get(1)) {
+        (Some(a), Some(b)) => (a, b),
+        _ => return Err("refcheck needs two pictures: the reference and the one to check".into()),
+    };
+    let a = picture(reference, cfg, Some(0))?;
+    let b = picture(shown, cfg, Some(0))?;
+    let mask = tolerance
+        .map(|file| picture(&file, cfg, Some(0)))
+        .transpose()?;
+    let (map, c) = reference_map(&a, &b, mask.as_ref(), &s)?;
+    if let Some(file) = map_file {
+        write_bytes(Path::new(&file), &to_pgm(&map), replace)?;
+    }
+    let note = format!(
+        "{} of {} pixels looked at are outside the tolerance ({:.3} percent; {} left out by the mask), {} regions, the farthest {} levels over: {}",
+        c.outside_px,
+        c.checked_px,
+        c.outside_share * 100.0,
+        c.ignored_px,
+        c.regions,
+        c.max_excess,
+        if c.same { "the same" } else { "different" }
+    );
+    let text = if json {
+        reference_json(&c)
+    } else {
+        reference_csv(&c)
+    };
+    Ok((text, c.same, note))
+}
+
+/// The result of the convention of the server about a picture: the kind (`fiducials`, `focus` or `blobs`), the document and whether it is a good result (marks found, a sharp picture,
+/// spots found).
+fn official_document(
+    kind: &str,
+    args: &mut Vec<String>,
+    cfg: &Config,
+) -> Result<(String, bool), String> {
+    let light = switch(args, "--light");
+    let flatten_px = flag(args, "--flatten")?
+        .map(|v| count(&v, "--flatten"))
+        .transpose()?;
+    let evidence = flag(args, "--evidence")?.unwrap_or_else(|| DEFAULT_EVIDENCE.to_string());
+    let max_findings = flag(args, "--max-findings")?
+        .map(|v| count(&v, "--max-findings"))
+        .transpose()?
+        .unwrap_or(50);
+    let mut s = cfg.settings();
+    if light {
+        s.polarity = Polarity::Light;
+    }
+    if let Some(v) = flag(args, "--min-diam")? {
+        s.min_diameter = num(&v, "--min-diam")?;
+    }
+    if let Some(v) = flag(args, "--max-diam")? {
+        s.max_diameter = num(&v, "--max-diam")?;
+    }
+    finish(args, 1)?;
+    let path = args
+        .first()
+        .ok_or_else(|| format!("{kind} needs an image"))?;
+    let bytes = read_limited(Path::new(path), cfg.max_file_mib)?;
+    let raw = from_bytes(&bytes)?;
+    let source = Source::of_file(raw.w, raw.h, &bytes);
+    let (findings, good) = match kind {
+        "focus" => {
+            let q = quality::measure(&raw)?;
+            let f = focus_finding(&q, cfg.focus_reference)?;
+            let sharp = matches!(f, Finding::Focus { sharp: true, .. });
+            (vec![f], sharp)
+        }
+        _ => {
+            let img = match flatten_px.unwrap_or(cfg.flatten_window) {
+                0 => raw,
+                window => flatten(&raw, window)?,
+            };
+            let list = if kind == "fiducials" {
+                let mut marks = find(&img, &s)?;
+                if cfg.refine_subpixel {
+                    for f in &mut marks {
+                        let r = refine(&img, f, s.polarity, cfg.full_contrast);
+                        (f.x, f.y) = (r.x, r.y);
+                    }
+                }
+                let mut list = fiducial_findings(&marks);
+                list.truncate(max_findings.min(1000));
+                list
+            } else {
+                blob_findings(&img, s.polarity, max_findings)?
+            };
+            let found = !list.is_empty();
+            (list, found)
+        }
+    };
+    Ok((document(kind, &source, &findings, &evidence)?, good))
+}
+
+/// A client to look for servers with: only a program built with the feature `mdns` has the resolver.
+#[cfg(feature = "mdns")]
+fn discovery_client(settings: sc::Settings) -> Result<Client, String> {
+    Ok(Client::finder(settings)
+        .map_err(|e| describe(&e))?
+        .with_mdns())
+}
+
+#[cfg(not(feature = "mdns"))]
+fn discovery_client(_settings: sc::Settings) -> Result<Client, String> {
+    Err("this program was built without the search of the local network (build it with --features mdns)".into())
 }
 
 fn run(mut args: Vec<String>) -> Result<(), String> {
@@ -1145,6 +1332,16 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 .map(|v| num(&v, "--max-rms"))
                 .transpose()?
                 .unwrap_or(cfg.lens_max_rms);
+            let want_residuals = switch(&mut args, "--residuals");
+            let replace = switch(&mut args, "--replace");
+            let format = flag(&mut args, "--format")?.unwrap_or_else(|| "csv".to_string());
+            let output = flag(&mut args, "--output")?;
+            if !matches!(format.as_str(), "csv" | "json") {
+                return Err(format!("--format '{format}' is not csv or json"));
+            }
+            if !want_residuals && (output.is_some() || replace) {
+                return Err("--output and --replace are for --residuals".into());
+            }
             finish(&args, 1)?;
             let path = args.first().ok_or("lens needs an image")?;
             settings.min_diameter = cfg.min_diameter;
@@ -1163,6 +1360,25 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 centre.0.hypot(centre.1),
                 max_rms,
             )?;
+            if want_residuals {
+                let r = residual_report(
+                    &marks,
+                    columns,
+                    rows,
+                    centre,
+                    centre.0.hypot(centre.1),
+                    l.k1,
+                    l.k2,
+                )?;
+                let text = if format == "json" {
+                    residuals_to_json(&r)
+                } else {
+                    residuals_to_csv(&r)
+                };
+                deliver(&text, output, replace || cfg.replace_output)?;
+                eprintln!("{}", residuals_summary(&r));
+                return Ok(());
+            }
             println!(
                 "{} marks: k1 {:.5}, k2 {:.5}; before the correction they were {:.3} px from their lattice, after it {:.3} px",
                 l.marks, l.k1, l.k2, l.rms_before, l.rms_after
@@ -1170,6 +1386,73 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
             println!("lens_k1 = {:.6}", l.k1);
             println!("lens_k2 = {:.6}", l.k2);
             Ok(())
+        }
+        "edge" => {
+            let replace = switch(&mut args, "--replace");
+            let cfg = config();
+            let format = flag(&mut args, "--format")?.unwrap_or_else(|| "csv".to_string());
+            let output = flag(&mut args, "--output")?;
+            if !matches!(format.as_str(), "csv" | "json") {
+                return Err(format!("--format '{format}' is not csv or json"));
+            }
+            let (text, sure, note) = edge_run(&mut args, &cfg, format == "json")?;
+            deliver(&text, output, replace || cfg.replace_output)?;
+            eprintln!("{note}");
+            if sure {
+                Ok(())
+            } else {
+                Err("the position of the edge is not sure enough".into())
+            }
+        }
+        "histogram" => {
+            let replace = switch(&mut args, "--replace");
+            let cfg = config();
+            let bins = flag(&mut args, "--bins")?
+                .map(|v| count(&v, "--bins"))
+                .transpose()?
+                .unwrap_or(16);
+            let flatten_px = flag(&mut args, "--flatten")?
+                .map(|v| count(&v, "--flatten"))
+                .transpose()?;
+            let format = flag(&mut args, "--format")?.unwrap_or_else(|| "csv".to_string());
+            let output = flag(&mut args, "--output")?;
+            finish(&args, 1)?;
+            if !matches!(format.as_str(), "csv" | "json") {
+                return Err(format!("--format '{format}' is not csv or json"));
+            }
+            let path = args.first().ok_or("histogram needs an image")?;
+            let img = picture(path, &cfg, flatten_px.or(Some(0)))?;
+            let h = histogram(&img)?;
+            let text = if format == "json" {
+                histogram_json(&h, bins)?
+            } else {
+                histogram_csv(&h, bins)?
+            };
+            deliver(&text, output, replace || cfg.replace_output)?;
+            eprintln!("{}", histogram_summary(&histogram_report(&h)));
+            Ok(())
+        }
+        "refcheck" => {
+            let replace = switch(&mut args, "--replace");
+            let cfg = config();
+            let format = flag(&mut args, "--format")?.unwrap_or_else(|| "csv".to_string());
+            let output = flag(&mut args, "--output")?;
+            if !matches!(format.as_str(), "csv" | "json") {
+                return Err(format!("--format '{format}' is not csv or json"));
+            }
+            let (text, same, note) = refcheck_run(
+                &mut args,
+                &cfg,
+                format == "json",
+                replace || cfg.replace_output,
+            )?;
+            deliver(&text, output, replace || cfg.replace_output)?;
+            eprintln!("{note}");
+            if same {
+                Ok(())
+            } else {
+                Err("the picture is different from the reference".into())
+            }
         }
         "rings" => {
             let light = switch(&mut args, "--light");
@@ -1535,11 +1818,79 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
             let settings = server_settings(&mut args, &cfg)?;
             let output = flag(&mut args, "--output")?;
             if args.is_empty() {
-                return Err("server needs health, config or send".into());
+                return Err("server needs health, config, discover, check, detect or send".into());
             }
             let sub = args.remove(0);
+            if sub == "check" {
+                finish(&args, 1)?;
+                let path = args.first().ok_or("server check needs a JSON file")?;
+                let text = read_text_limited(Path::new(path), cfg.max_file_mib)?;
+                let c = validate(&text)?;
+                println!(
+                    "ok: {} result, {} findings, evidence {}, picture {} x {} px",
+                    c.kind, c.findings, c.evidence, c.width, c.height
+                );
+                return Ok(());
+            }
+            if sub == "discover" {
+                finish(&args, 0)?;
+                let found = discovery_client(settings)?
+                    .discover()
+                    .map_err(|e| describe(&e))?;
+                for address in &found {
+                    println!("{address}");
+                }
+                if found.is_empty() {
+                    eprintln!("no server answered on the local network");
+                } else {
+                    eprintln!("these are candidates, not proofs: any device of the network can answer. Choose the one you trust and write it as server_address");
+                }
+                return Ok(());
+            }
             let mut client = Client::tcp(settings).map_err(|e| describe(&e))?;
             match sub.as_str() {
+                "detect" => {
+                    let as_artifact = switch(&mut args, "--artifact");
+                    let seed = flag(&mut args, "--seed")?
+                        .map(|v| {
+                            v.parse::<u64>()
+                                .map_err(|_| format!("--seed '{v}' is not a whole number"))
+                        })
+                        .transpose()?
+                        .unwrap_or(0);
+                    finish(&args, 2)?;
+                    let (what, path) = match (args.first(), args.get(1)) {
+                        (Some(w), Some(p)) => (w.clone(), p.clone()),
+                        _ => return Err(
+                            "server detect needs fiducials, barcode, focus or blobs and an image"
+                                .into(),
+                        ),
+                    };
+                    let bytes = read_limited(Path::new(&path), cfg.max_file_mib)?;
+                    let img = from_bytes(&bytes)?;
+                    let source = Source::of_file(img.w, img.h, &bytes);
+                    let got = client
+                        .detect(&what, &source, seed, as_artifact, &mut || {
+                            std::thread::sleep(std::time::Duration::from_millis(500));
+                        })
+                        .map_err(|e| describe(&e))?;
+                    match (&got.document, &got.artifact_id) {
+                        (Some(d), _) => {
+                            deliver(&format!("{d}\n"), output, replace || cfg.replace_output)?
+                        }
+                        (None, Some(id)) => println!("{id}"),
+                        (None, None) => {}
+                    }
+                    eprintln!(
+                        "the station of the server answered job {}: {}",
+                        got.job,
+                        got.artifact_id
+                            .map_or("the result is above".to_string(), |id| format!(
+                                "the result is kept as artifact {id}"
+                            ))
+                    );
+                    Ok(())
+                }
                 "health" => {
                     finish(&args, 0)?;
                     client.health().map_err(|e| describe(&e))?;
@@ -1569,9 +1920,22 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                 }
                 "send" => {
                     if args.is_empty() {
-                        return Err("server send needs quality, offset, pads, diff, orientation, footprint, sharpmap or board".into());
+                        return Err("server send needs quality, offset, pads, diff, orientation, footprint, sharpmap, board, fiducials, focus or blobs".into());
                     }
                     let kind = args.remove(0);
+                    if matches!(kind.as_str(), "fiducials" | "focus" | "blobs") {
+                        let (doc, good) = official_document(&kind, &mut args, &cfg)?;
+                        let id = client.send_document(&doc).map_err(|e| describe(&e))?;
+                        eprintln!(
+                            "the {kind} result was sent{}",
+                            id.map(|i| format!(" as {i}")).unwrap_or_default()
+                        );
+                        return if good {
+                            Ok(())
+                        } else {
+                            Err(format!("the {kind} result is not good"))
+                        };
+                    }
                     let (json, passes) = match kind.as_str() {
                         "quality" => {
                             finish(&args, 1)?;
@@ -1616,7 +1980,7 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                         }
                         other => {
                             return Err(format!(
-                                "{other}: server send takes quality, offset, pads, diff, orientation, footprint, sharpmap or board"
+                                "{other}: server send takes quality, offset, pads, diff, orientation, footprint, sharpmap, board, fiducials, focus or blobs"
                             ))
                         }
                     };
@@ -1632,7 +1996,9 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                         Err(format!("the {kind} result is not good"))
                     }
                 }
-                other => Err(format!("{other}: server takes health, config or send")),
+                other => Err(format!(
+                    "{other}: server takes health, config, discover, check, detect or send"
+                )),
             }
         }
         other => Err(format!("{other}: unknown command (see help)")),

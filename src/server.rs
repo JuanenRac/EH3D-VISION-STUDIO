@@ -7,13 +7,17 @@
 //! state of the link, a token that is never printed and the refusals of the server by their code in the language of the person. What is this program's own is here: which routes it
 //! uses and the shape of what it keeps there.
 //!
-//! The server has no plugin of vision, so this program uses the routes that exist and that every program of the suite may use, the artifacts of the store (`docs/PROJECT_STORE.md` of the
-//! server): a result is kept with `POST /api/v1/artifacts` (the JSON that the command writes, as `vision-<kind>.json`, with the machine and the kind in its `params`), and the values of the
-//! configuration file are read from the newest artifact `vision-<machine>.cfg` of the format [`CONFIG_FORMAT`] (`GET /api/v1/artifacts?format=...` and `GET /api/v1/artifacts/{id}`),
-//! written as the lines of `vision.cfg` or as a JSON object. The server in memory ([`SimServer`]) answers those routes so that the whole path is tested without a network.
+//! A result is kept with the routes that every program of the suite may use, the artifacts of the store (`docs/PROJECT_STORE.md` of the server): `POST /api/v1/artifacts` (the JSON that the
+//! command writes, as `vision-<kind>.json`, with the machine and the kind in its `params`), and the values of the configuration file are read from the newest artifact
+//! `vision-<machine>.cfg` of the format [`CONFIG_FORMAT`] (`GET /api/v1/artifacts?format=...` and `GET /api/v1/artifacts/{id}`), written as the lines of `vision.cfg` or as a JSON object.
+//! The results of the kinds of the convention of the server (`fiducials`, `barcode`, `focus` and `blobs`, see [`crate::convention`]) are kept with their schema, and the `vision` plugin of
+//! the server can be asked for the same documents from a simulated station (`POST /api/v1/work/jobs`, see [`crate::station`]). The server in memory ([`SimServer`]) answers those routes so
+//! that the whole path is tested without a network.
 
 use crate::config::{Config, KEYS};
+use crate::convention::Source;
 use crate::inspect::json_string;
+use crate::station::{self, Asked, Detected};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
@@ -148,6 +152,15 @@ impl Client {
         })
     }
 
+    /// A client that is only used to look for servers on the local network (`discover`): it needs no address, since finding one is what it is for.
+    pub fn finder(settings: sc::Settings) -> Result<Client, ClientError> {
+        check_link(&settings).map_err(ClientError::Config)?;
+        let transport = sc::TcpTransport::new(settings.server_address.clone());
+        Ok(Client {
+            inner: sc::Client::new(settings, Box::new(transport)),
+        })
+    }
+
     /// A client that talks plain HTTP over the network.
     pub fn tcp(settings: sc::Settings) -> Result<Client, ClientError> {
         let transport = sc::TcpTransport::new(settings.server_address.clone());
@@ -210,6 +223,24 @@ impl Client {
         kind: &str,
         result_json: &str,
     ) -> Result<Option<String>, ClientError> {
+        self.put_artifact(kind, result_json, None)
+    }
+
+    /// Keeps a document of the convention of the server (`fiducials`, `barcode`, `focus` or `blobs`, see [`crate::convention`]) as `vision-<kind>.json` with its schema. A document
+    /// that does not follow the convention is refused before anything is sent.
+    pub fn send_document(&mut self, document: &str) -> Result<Option<String>, ClientError> {
+        let checked = crate::convention::validate(document).map_err(|e| {
+            ClientError::Config(format!("the document does not follow the convention: {e}"))
+        })?;
+        self.put_artifact(&checked.kind, document, Some(crate::convention::SCHEMA))
+    }
+
+    fn put_artifact(
+        &mut self,
+        kind: &str,
+        result_json: &str,
+        schema_version: Option<&str>,
+    ) -> Result<Option<String>, ClientError> {
         if !safe_segment(kind) {
             return Err(ClientError::Config(format!(
                 "'{kind}' is not a kind of result"
@@ -222,8 +253,11 @@ impl Client {
             ));
         }
         let machine = self.machine()?.to_string();
+        let schema = schema_version
+            .map(|s| format!("\"schema_version\": {}, ", json_string(s)))
+            .unwrap_or_default();
         let body = format!(
-            "{{\"name\": {}, \"format\": {}, \"data_base64\": {}, \"producer\": {{\"tool\": \"eh3d-vision\", \"version\": {}}}, \"params\": {{\"kind\": {}, \"machine\": {}, \"app\": {}}}}}",
+            "{{\"name\": {}, \"format\": {}, {schema}\"data_base64\": {}, \"producer\": {{\"tool\": \"eh3d-vision\", \"version\": {}}}, \"params\": {{\"kind\": {}, \"machine\": {}, \"app\": {}}}}}",
             json_string(&format!("vision-{kind}.json")),
             json_string(RESULT_FORMAT),
             json_string(&base64_encode(result.as_bytes())),
@@ -239,6 +273,90 @@ impl Client {
                 .map(str::to_string)
         }))
     }
+}
+
+/// How many times the job of the station is read before the program gives up waiting for it.
+pub const POLLS: usize = 120;
+
+impl Client {
+    /// Asks the `vision` station of the server for a result about a picture: a job is made (`POST /api/v1/work/jobs`), started and read until it ends. `pause` is called between two
+    /// readings (the command line sleeps there; a test does nothing). With `as_artifact` the server keeps the document in the store and the answer has its id; otherwise the
+    /// answer has the document. The document is what the station makes up and says `evidence: simulator`.
+    pub fn detect(
+        &mut self,
+        what: &str,
+        source: &Source,
+        seed: u64,
+        as_artifact: bool,
+        pause: &mut dyn FnMut(),
+    ) -> Result<Detected, ClientError> {
+        let machine = self.machine()?.to_string();
+        let request =
+            station::request(what, source, seed, as_artifact, None).map_err(ClientError::Config)?;
+        let body = station::job_body(&machine, &format!("vision {what}"), &request);
+        let made = self.inner.post(&format!("{API}/work/jobs"), Some(&body))?;
+        let id = made
+            .json()
+            .and_then(|j| j.get("id").and_then(sc::Json::as_str).map(str::to_string))
+            .filter(|id| safe_segment(id))
+            .ok_or_else(|| {
+                ClientError::BadReply("the job has no id that can go into a request".into())
+            })?;
+        self.inner
+            .post(&format!("{API}/work/jobs/{id}/start"), None)?;
+        for _ in 0..POLLS {
+            let reply = self.inner.get(&format!("{API}/work/jobs/{id}"))?;
+            if let Some(done) = station::read_job(&reply.body).map_err(ClientError::BadReply)? {
+                return Ok(Detected { job: id, ..done });
+            }
+            pause();
+        }
+        Err(ClientError::BadReply(format!(
+            "the job {id} did not end after {POLLS} readings"
+        )))
+    }
+
+    /// Gives the client a resolver for the servers of the local network. It asks nothing of the network unless `server_mdns` is on.
+    pub fn with_discovery(mut self, discovery: Box<dyn sc::Discover>) -> Client {
+        self.inner = self.inner.with_discovery(discovery);
+        self
+    }
+
+    /// The resolver of the suite for `_eh3d._tcp` (the feature `mdns`). It still asks nothing of the network unless `server_mdns` is on.
+    #[cfg(feature = "mdns")]
+    pub fn with_mdns(mut self) -> Client {
+        self.inner = self.inner.with_mdns();
+        self
+    }
+
+    /// The `host:port` of the servers that answered on the local network. Refused with an error that says why when `server_mdns` is off or no resolver was given: what is found is a
+    /// candidate for the person to choose, never an address to connect to by itself.
+    pub fn discover(&self) -> Result<Vec<String>, ClientError> {
+        self.inner.discover()
+    }
+}
+
+#[cfg(feature = "mdns")]
+fn with_resolver(client: sc::Client) -> sc::Client {
+    client.with_mdns()
+}
+
+#[cfg(not(feature = "mdns"))]
+fn with_resolver(client: sc::Client) -> sc::Client {
+    client
+}
+
+/// The client of the suite that the panel of the settings of the window works through (login, test of the connection, sessions). It needs no address to be made, since the panel is
+/// where the address is written, and it has the resolver of the local network when the program is built with the feature `mdns`.
+pub fn panel_client(settings: &sc::Settings) -> sc::Client {
+    let transport = sc::TcpTransport::new(settings.server_address.clone());
+    with_resolver(sc::Client::new(settings.clone(), Box::new(transport)))
+}
+
+/// The `host:port` of the servers that answer on the local network, for a window to offer them as candidates; it waits up to `server_timeout_s` seconds (at most 10), so a window asks it in
+/// a thread. Refused, saying why, when `server_mdns` is off or the program was built without the resolver.
+pub fn find_servers(settings: &sc::Settings) -> Result<Vec<String>, ClientError> {
+    panel_client(settings).discover()
 }
 
 /// The name of the artifact that holds the configuration of a machine.
@@ -585,6 +703,19 @@ pub struct SimArtifact {
     pub kind: String,
     pub machine: String,
     pub tool: String,
+    /// The `schema_version` it was kept with (empty when it had none).
+    pub schema_version: String,
+}
+
+/// A job of the simulated station.
+#[derive(Debug, Clone)]
+struct SimJob {
+    id: String,
+    machine: String,
+    asked: Asked,
+    document: String,
+    artifact: Option<(String, usize)>,
+    started: bool,
 }
 
 #[derive(Debug, Default)]
@@ -593,6 +724,7 @@ struct SimState {
     /// Every request that reached the server: method, path and whether it had the right token.
     log: Vec<(String, String, bool)>,
     artifacts: Vec<SimArtifact>,
+    jobs: Vec<SimJob>,
 }
 
 /// The server in memory: it answers `/api/v1/health` to anybody and, with the token `program-token`, the routes of the artifacts (`GET /api/v1/artifacts`, `GET
@@ -636,6 +768,7 @@ impl SimServer {
             kind: "config".into(),
             machine: machine.into(),
             tool: String::new(),
+            schema_version: String::new(),
         });
     }
 
@@ -720,6 +853,9 @@ impl SimServer {
             return refusal(401, "unauthorized", "no valid token");
         }
         let (path, query) = path.split_once('?').unwrap_or((path, ""));
+        if let Some(rest) = path.strip_prefix(&format!("{API}/work/jobs")) {
+            return work(&mut st, method, rest, token, body);
+        }
         let route = path.strip_prefix(&format!("{API}/artifacts"));
         match (method, route) {
             ("GET", Some("")) => {
@@ -799,6 +935,7 @@ impl SimServer {
                     kind: param("kind"),
                     machine: param("machine"),
                     tool,
+                    schema_version: text(&json, "schema_version").unwrap_or_default(),
                 });
                 answer(
                     201,
@@ -809,6 +946,104 @@ impl SimServer {
             }
             _ => refusal(404, "not_found", "no such route"),
         }
+    }
+}
+
+/// The text of a job of the station as the server shows it (`GET /api/v1/work/jobs/{id}`): the plugin, the state and the view with the result or the artifact.
+fn job_text(job: &SimJob) -> String {
+    let view = station::view_text(
+        &job.asked,
+        &job.document,
+        job.artifact.as_ref().map(|(id, size)| (id.as_str(), *size)),
+    );
+    format!(
+        "{{\"id\": {}, \"machine\": {}, \"plugin\": \"vision\", \"state\": {}, \"message\": \"\", \"view\": {view}}}",
+        json_string(&job.id),
+        json_string(&job.machine),
+        json_string(if job.started { "done" } else { "queued" })
+    )
+}
+
+/// The jobs of the `vision` station of the server in memory: `POST /api/v1/work/jobs`, `POST .../{id}/start` and `GET .../{id}`. The result is made when the job is made (as the
+/// server does), kept as an artifact when the request asked for it, and the job is done as soon as it is started.
+fn work(
+    st: &mut SimState,
+    method: &str,
+    rest: &str,
+    token: &str,
+    body: Option<&str>,
+) -> Result<sc::Reply, sc::TransportError> {
+    let find = |st: &SimState, id: &str| st.jobs.iter().position(|j| j.id == id);
+    match (method, rest) {
+        ("POST", "") => {
+            if token != SimServer::PROGRAM_TOKEN {
+                return refusal(403, "forbidden", "read only");
+            }
+            let Some(json) = body.and_then(|b| sc::Json::parse(b).ok()) else {
+                return refusal(400, "bad_request", "not JSON");
+            };
+            let machine = json.get("machine").and_then(sc::Json::as_str).unwrap_or("");
+            if machine != SimServer::MACHINE {
+                return refusal(404, "unknown_machine", machine);
+            }
+            let Some(request) = json.get("request") else {
+                return refusal(422, "bad_plugin_request", "request is needed");
+            };
+            let (asked, document) = match station::simulate(request, station::DEFAULT_MAX_FINDINGS)
+            {
+                Ok(made) => made,
+                Err(why) => return refusal(422, "bad_plugin_request", &why),
+            };
+            let id = format!("job-{}", st.jobs.len() + 1);
+            let mut artifact = None;
+            if asked.as_artifact {
+                let aid = format!("a-{}", st.artifacts.len() + 1);
+                let name = asked
+                    .artifact_name
+                    .clone()
+                    .unwrap_or_else(|| crate::convention::artifact_name(&asked.what));
+                st.artifacts.push(SimArtifact {
+                    id: aid.clone(),
+                    name,
+                    format: RESULT_FORMAT.into(),
+                    data: document.clone(),
+                    kind: asked.what.clone(),
+                    machine: machine.into(),
+                    tool: station::TOOL.into(),
+                    schema_version: crate::convention::SCHEMA.into(),
+                });
+                artifact = Some((aid, document.len()));
+            }
+            let job = SimJob {
+                id,
+                machine: machine.into(),
+                asked,
+                document,
+                artifact,
+                started: false,
+            };
+            let text = job_text(&job);
+            st.jobs.push(job);
+            answer(201, &text)
+        }
+        ("POST", r) if r.starts_with('/') && r.ends_with("/start") => {
+            if token != SimServer::PROGRAM_TOKEN {
+                return refusal(403, "forbidden", "read only");
+            }
+            let Some(at) = find(st, &r[1..r.len() - "/start".len()]) else {
+                return refusal(404, "unknown_job", "");
+            };
+            if st.jobs[at].started {
+                return refusal(409, "job_not_startable", "the job was started");
+            }
+            st.jobs[at].started = true;
+            answer(200, &job_text(&st.jobs[at]))
+        }
+        ("GET", r) if r.starts_with('/') => match find(st, &r[1..]) {
+            Some(at) => answer(200, &job_text(&st.jobs[at])),
+            None => refusal(404, "unknown_job", ""),
+        },
+        _ => refusal(404, "not_found", "no such route"),
     }
 }
 
@@ -1360,5 +1595,302 @@ mod tests {
         assert_eq!(c.link(), Link::Disconnected);
         // and the text can be asked in the language of the person
         assert_ne!(e.text(sc::Lang::Es), e.text(sc::Lang::En));
+    }
+
+    fn picture() -> Source {
+        Source {
+            width: 640,
+            height: 480,
+            sha256: Some(crate::convention::sha256_hex(b"a picture")),
+        }
+    }
+
+    #[test]
+    fn the_station_gives_a_document_of_the_convention_for_each_kind_and_the_same_one_again() {
+        for what in crate::convention::KINDS {
+            let sim = SimServer::new(CONFIG);
+            let (mut c, _) = client(&sim, settings(SimServer::PROGRAM_TOKEN));
+            let got = c.detect(what, &picture(), 5, false, &mut || {}).unwrap();
+            let doc = got.document.expect("the document stays in the view");
+            assert_eq!(got.artifact_id, None);
+            let checked =
+                crate::convention::validate(&doc).unwrap_or_else(|e| panic!("{what}: {e}\n{doc}"));
+            assert_eq!(
+                (checked.kind.as_str(), checked.evidence.as_str()),
+                (what, "simulator")
+            );
+            assert_eq!((checked.width, checked.height), (640, 480));
+            // asking again gives the same findings, another seed other ones
+            let again = c.detect(what, &picture(), 5, false, &mut || {}).unwrap();
+            assert_eq!(again.document.as_deref(), Some(doc.as_str()), "{what}");
+            let other = c.detect(what, &picture(), 6, false, &mut || {}).unwrap();
+            assert_ne!(other.document.as_deref(), Some(doc.as_str()), "{what}");
+            assert_eq!(c.link(), Link::Connected);
+        }
+    }
+
+    #[test]
+    fn the_station_keeps_the_document_as_an_artifact_with_its_schema() {
+        let sim = SimServer::new(CONFIG);
+        let (mut c, _) = client(&sim, settings(SimServer::PROGRAM_TOKEN));
+        let got = c
+            .detect("fiducials", &picture(), 1, true, &mut || {})
+            .unwrap();
+        assert_eq!(got.document, None);
+        let id = got.artifact_id.expect("the artifact");
+        let kept = sim.stored();
+        assert_eq!(kept.len(), 1);
+        let a = &kept[0];
+        assert_eq!(a.id, id);
+        assert_eq!(a.name, "vision-fiducials.json");
+        assert_eq!(a.format, "application/json");
+        assert_eq!(a.schema_version, crate::convention::SCHEMA);
+        assert_eq!(
+            (a.kind.as_str(), a.tool.as_str()),
+            ("fiducials", "eh3d-server vision")
+        );
+        assert!(crate::convention::validate(&a.data).is_ok());
+        // the routes are the ones of the work queue
+        let paths: Vec<String> = sim
+            .log()
+            .into_iter()
+            .map(|l| format!("{} {}", l.0, l.1))
+            .collect();
+        assert_eq!(
+            paths,
+            [
+                "POST /api/v1/work/jobs",
+                "POST /api/v1/work/jobs/job-1/start",
+                "GET /api/v1/work/jobs/job-1"
+            ]
+        );
+    }
+
+    #[test]
+    fn the_station_refuses_a_viewer_an_unknown_machine_and_a_request_that_does_not_fit() {
+        let sim = SimServer::new(CONFIG);
+        let (mut viewer, _) = client(&sim, settings(SimServer::VIEWER_TOKEN));
+        let e = viewer
+            .detect("focus", &picture(), 0, false, &mut || {})
+            .unwrap_err();
+        assert!(describe(&e).starts_with("forbidden"), "{e}");
+        let mut other = settings(SimServer::PROGRAM_TOKEN);
+        other.set("server_machine", "nowhere").unwrap();
+        let (mut c, _) = client(&sim, other);
+        let e = c
+            .detect("focus", &picture(), 0, false, &mut || {})
+            .unwrap_err();
+        assert!(describe(&e).starts_with("unknown_machine"), "{e}");
+        let (mut c, _) = client(&sim, settings(SimServer::PROGRAM_TOKEN));
+        // a kind or a picture that the plugin would refuse is refused here, before anything is sent
+        let before = sim.log().len();
+        assert!(c.detect("faces", &picture(), 0, false, &mut || {}).is_err());
+        let flat = Source {
+            width: 0,
+            ..picture()
+        };
+        assert!(c.detect("focus", &flat, 0, false, &mut || {}).is_err());
+        assert_eq!(sim.log().len(), before);
+        // and the server refuses what it is sent by hand
+        let r = sim
+            .handle(
+                "POST",
+                "/api/v1/work/jobs",
+                SimServer::PROGRAM_TOKEN,
+                Some(r#"{"machine": "bench", "request": {"kind": "detect", "what": "focus"}}"#),
+            )
+            .unwrap();
+        assert_eq!(r.status, 422);
+        let r = sim
+            .handle(
+                "POST",
+                "/api/v1/work/jobs/job-9/start",
+                SimServer::PROGRAM_TOKEN,
+                None,
+            )
+            .unwrap();
+        assert_eq!(r.status, 404);
+        let r = sim
+            .handle(
+                "GET",
+                "/api/v1/work/jobs/job-9",
+                SimServer::PROGRAM_TOKEN,
+                None,
+            )
+            .unwrap();
+        assert_eq!(r.status, 404);
+        let r = sim
+            .handle("GET", "/api/v1/work/jobs", "nope", None)
+            .unwrap();
+        assert_eq!(r.status, 401);
+        // a job started twice is refused
+        let (mut c, _) = client(&sim, settings(SimServer::PROGRAM_TOKEN));
+        c.detect("focus", &picture(), 0, false, &mut || {}).unwrap();
+        let r = sim
+            .handle(
+                "POST",
+                "/api/v1/work/jobs/job-1/start",
+                SimServer::PROGRAM_TOKEN,
+                None,
+            )
+            .unwrap();
+        assert_eq!(r.status, 409);
+    }
+
+    #[test]
+    fn a_job_that_never_ends_is_given_up_after_a_number_of_readings() {
+        struct Never;
+        impl sc::Transport for Never {
+            fn send(&self, r: &sc::Request) -> Result<sc::Reply, sc::TransportError> {
+                let body = if r.method == "POST" && r.path.ends_with("/jobs") {
+                    r#"{"id": "job-1", "state": "queued"}"#
+                } else {
+                    r#"{"id": "job-1", "state": "running"}"#
+                };
+                answer(200, body)
+            }
+        }
+        let c = Client::new(settings("t"), Box::new(Never)).unwrap();
+        let mut c = c.with_sleeper(Box::new(Seen(Arc::new(Mutex::new(Vec::new())))));
+        let mut pauses = 0;
+        let e = c
+            .detect("focus", &picture(), 0, false, &mut || pauses += 1)
+            .unwrap_err();
+        assert!(matches!(e, ClientError::BadReply(_)), "{e}");
+        assert_eq!(pauses, POLLS);
+    }
+
+    #[test]
+    fn a_document_of_the_convention_is_kept_with_its_schema_and_one_that_is_not_is_not_sent() {
+        let sim = SimServer::new(CONFIG);
+        let (mut c, _) = client(&sim, settings(SimServer::PROGRAM_TOKEN));
+        let doc = crate::convention::document(
+            "focus",
+            &picture(),
+            &[crate::convention::Finding::Focus {
+                score: 71.5,
+                sharp: true,
+            }],
+            "picture",
+        )
+        .unwrap();
+        let id = c.send_document(&doc).unwrap().unwrap();
+        let kept = sim.stored();
+        assert_eq!(
+            (kept[0].id.as_str(), kept[0].name.as_str()),
+            (id.as_str(), "vision-focus.json")
+        );
+        assert_eq!(kept[0].schema_version, crate::convention::SCHEMA);
+        assert_eq!(kept[0].data.trim(), doc.trim());
+        // the old kinds are kept as before, with no schema
+        c.send_result("quality", "{\"a\": 1}").unwrap();
+        assert_eq!(sim.stored()[1].schema_version, "");
+        let sent = sim.log().len();
+        for bad in [
+            "{\"a\": 1}",
+            "",
+            "[]",
+            &doc.replace("\"units\": \"px\"", "\"units\": \"mm\""),
+        ] {
+            let e = c.send_document(bad).unwrap_err();
+            assert!(matches!(e, ClientError::Config(_)), "{e}");
+        }
+        assert_eq!(sim.log().len(), sent);
+    }
+
+    #[test]
+    fn the_client_of_the_panel_needs_no_address_and_the_search_says_why_it_cannot_run() {
+        // no address: the panel is where it is written
+        let c = panel_client(&sc::Settings::default());
+        assert_eq!(c.link(), Link::Unknown);
+        let e = find_servers(&sc::Settings::default()).unwrap_err();
+        assert!(describe(&e).contains("server_mdns is off"), "{e}");
+        // the key on: without the feature there is no resolver to ask (with it the loopback test below asks, and nothing here goes out to a real network)
+        #[cfg(not(feature = "mdns"))]
+        {
+            let mut on = sc::Settings::default();
+            on.set("server_mdns", "on").unwrap();
+            let e = find_servers(&on).unwrap_err();
+            assert!(describe(&e).contains("no mDNS resolver"), "{e}");
+        }
+    }
+
+    #[test]
+    fn the_search_on_the_network_asks_nothing_unless_the_key_is_on_and_a_resolver_is_given() {
+        struct Fixed(Vec<String>);
+        impl sc::Discover for Fixed {
+            fn find(&self, _within: Duration) -> Vec<String> {
+                self.0.clone()
+            }
+        }
+        let sim = SimServer::new(CONFIG);
+        let found = vec!["192.168.0.180:18200".to_string()];
+        // the key is off: refused, whatever resolver there is
+        let (c, _) = client(&sim, settings(""));
+        let c = c.with_discovery(Box::new(Fixed(found.clone())));
+        let e = c.discover().unwrap_err();
+        assert!(describe(&e).contains("server_mdns is off"), "{e}");
+        // on but no resolver: it says so
+        let mut on = settings("");
+        on.set("server_mdns", "on").unwrap();
+        let (bare, _) = client(&sim, on.clone());
+        let e = bare.discover().unwrap_err();
+        assert!(describe(&e).contains("no mDNS resolver"), "{e}");
+        // on with a resolver: the candidates, and nothing was sent to the server
+        let (c, _) = client(&sim, on);
+        let c = c.with_discovery(Box::new(Fixed(found.clone())));
+        assert_eq!(c.discover().unwrap(), found);
+        assert!(sim.log().is_empty());
+    }
+
+    #[cfg(feature = "mdns")]
+    #[test]
+    fn the_resolver_of_the_suite_finds_a_responder_only_when_the_key_is_on() {
+        use std::net::{Ipv4Addr, UdpSocket};
+        let responder = UdpSocket::bind("127.0.0.1:0").unwrap();
+        responder
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let target = responder.local_addr().unwrap();
+        let answer_to = std::thread::spawn(move || {
+            let mut buf = [0u8; 512];
+            let mut asked = 0;
+            while let Ok((_, from)) = responder.recv_from(&mut buf) {
+                asked += 1;
+                let reply = sc::mdns::build_response(
+                    sc::mdns::SERVICE,
+                    "EH3D Server on test",
+                    "test.local",
+                    18200,
+                    Ipv4Addr::new(127, 0, 0, 1),
+                    120,
+                )
+                .unwrap();
+                let _ = responder.send_to(&reply, from);
+                if asked >= 1 {
+                    break;
+                }
+            }
+            asked
+        });
+        let sim = SimServer::new(CONFIG);
+        let resolver = sc::mdns::MdnsResolver::default().with_target(target);
+        // off: nothing leaves the program, so the responder is never asked
+        let (off, _) = client(&sim, settings(""));
+        let off = off.with_discovery(Box::new(resolver.clone()));
+        assert!(off.discover().is_err());
+        // on: the responder is asked and its address is a candidate
+        let mut on = settings("");
+        on.set("server_mdns", "on").unwrap();
+        on.set("server_timeout_s", "3").unwrap();
+        let (c, _) = client(&sim, on);
+        let c = c.with_discovery(Box::new(resolver));
+        assert_eq!(c.discover().unwrap(), ["127.0.0.1:18200"]);
+        assert_eq!(answer_to.join().unwrap(), 1);
+        // and the shortcut of the client builds its own resolver
+        let mut again = settings("");
+        again.set("server_mdns", "off").unwrap();
+        let (c, _) = client(&sim, again);
+        assert!(c.with_mdns().discover().is_err());
     }
 }

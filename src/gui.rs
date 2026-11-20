@@ -5,13 +5,20 @@ use crate::browse::{self, Browser};
 use crate::config::Config;
 use crate::image::Gray;
 use crate::lang::{Lang, Msg};
+use crate::readings::EDGE_LABELS;
 use crate::ring::SizeClass;
+use crate::server::{find_servers, link_settings, panel_client, sc, APP};
 use crate::shot::{ShotRequest, ShotTheme, PATIENCE_FRAMES};
 use crate::tools::ShapeKind;
-use crate::window::{Section, Window, DESIGN_EXTENSIONS, IMAGE_EXTENSIONS, OUTPUT_EXTENSIONS};
+use crate::window::{
+    Section, Status, Window, DESIGN_EXTENSIONS, IMAGE_EXTENSIONS, OUTPUT_EXTENSIONS,
+};
 use eframe::egui::{
     self, Color32, FontData, FontDefinitions, FontFamily, Pos2, Rect, Stroke, TextureOptions,
 };
+use eh3d_view::server_gui;
+use eh3d_view::server_panel::{error_text, ServerPanel};
+use eh3d_view::texts::Lang as ViewLang;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -35,6 +42,7 @@ enum Kind {
     Design,
     Export,
     Other,
+    Mask,
 }
 
 enum Outcome {
@@ -50,8 +58,39 @@ struct Dialog {
     export: Option<String>,
 }
 
+/// What a search for servers on the network found: the `host:port` of each, or the reason it could not run.
+type Found = Result<Vec<String>, sc::ClientError>;
+
+/// The settings of the server in the window: the panel of the suite (the boxes, the login, the state of the link), the client it works through and the search on the network, which
+/// runs in a thread because it waits for answers.
+struct ServerUi {
+    panel: ServerPanel,
+    client: sc::Client,
+    /// The search that is running, and what the last one found.
+    search: Option<Arc<Mutex<Option<Found>>>>,
+    found: Option<Found>,
+}
+
+impl ServerUi {
+    fn new(cfg: &Config) -> ServerUi {
+        let settings = link_settings(cfg).unwrap_or_default();
+        ServerUi {
+            panel: ServerPanel::new(&settings, APP),
+            client: panel_client(&settings),
+            search: None,
+            found: None,
+        }
+    }
+}
+
+/// The language of the panel of the suite that is the one of the window.
+fn view_lang(lang: Lang) -> ViewLang {
+    ViewLang::from_code(lang.code()).unwrap_or(ViewLang::En)
+}
+
 struct App {
     win: Window,
+    server: ServerUi,
     /// The picture mode, while the window is there only to be photographed.
     shot: Option<ShotState>,
     dialog: Option<Dialog>,
@@ -68,8 +107,10 @@ fn extension_is(path: &Path, list: &[&str]) -> bool {
 impl App {
     fn new(cfg: Config, problem: Option<String>, files: &[PathBuf]) -> App {
         let lang = Lang::from_setting(&cfg.language);
+        let server = ServerUi::new(&cfg);
         let mut app = App {
             win: Window::new(lang, cfg, problem),
+            server,
             shot: None,
             dialog: None,
             fit_pending: false,
@@ -101,7 +142,7 @@ impl App {
 
     fn open_dialog(&mut self, kind: Kind) {
         let extensions: &[&'static str] = match kind {
-            Kind::Image | Kind::Other => &IMAGE_EXTENSIONS,
+            Kind::Image | Kind::Other | Kind::Mask => &IMAGE_EXTENSIONS,
             Kind::Design => &DESIGN_EXTENSIONS,
             Kind::Export => &OUTPUT_EXTENSIONS,
         };
@@ -414,6 +455,7 @@ impl App {
     fn distortion_section(&mut self, ui: &mut egui::Ui) {
         let lang = self.win.lang;
         Self::heading(ui, Msg::DistortionTitle.tr(lang));
+        Self::help(ui, lang, "help_distortion", Msg::HelpDistortion);
         self.fields(ui, Section::Grid);
         if ui
             .add_enabled(
@@ -558,6 +600,7 @@ impl App {
     fn quality_section(&mut self, ui: &mut egui::Ui) {
         let lang = self.win.lang;
         Self::heading(ui, Msg::QualityTitle.tr(lang));
+        Self::help(ui, lang, "help_quality", Msg::HelpQuality);
         let mut on = self.win.cfg.quality_check;
         if ui
             .checkbox(&mut on, Msg::QualityCheckBox.tr(lang))
@@ -676,6 +719,7 @@ impl App {
     fn diff_section(&mut self, ui: &mut egui::Ui) {
         let lang = self.win.lang;
         Self::heading(ui, Msg::DiffTitle.tr(lang));
+        Self::help(ui, lang, "help_diff", Msg::HelpDiff);
         self.fields(ui, Section::Diff);
         if ui.button(Msg::DiffOpenOther.tr(lang)).clicked() {
             self.open_dialog(Kind::Other);
@@ -703,6 +747,173 @@ impl App {
         });
         if let Some(line) = self.win.diff_line() {
             ui.label(egui::RichText::new(line).color(DIM));
+        }
+    }
+
+    /// A line of help under the heading of a section: closed until the person opens it.
+    fn help(ui: &mut egui::Ui, lang: Lang, key: &str, text: Msg) {
+        egui::CollapsingHeader::new(Msg::HelpToggle.tr(lang))
+            .id_salt(key)
+            .show(ui, |ui| {
+                ui.label(egui::RichText::new(text.tr(lang)).color(DIM));
+            });
+    }
+
+    fn histogram_section(&mut self, ui: &mut egui::Ui) {
+        let lang = self.win.lang;
+        Self::heading(ui, Msg::HistogramTitle.tr(lang));
+        Self::help(ui, lang, "help_histogram", Msg::HelpHistogram);
+        if ui
+            .add_enabled(
+                self.win.image.is_some(),
+                egui::Button::new(Msg::HistogramRun.tr(lang)),
+            )
+            .clicked()
+        {
+            self.win.read_histogram();
+        }
+        let Some(bars) = self.win.histogram_bars() else {
+            return;
+        };
+        let (rect, _) =
+            ui.allocate_exact_size(egui::vec2(ui.available_width(), 56.0), egui::Sense::hover());
+        let painter = ui.painter_at(rect);
+        painter.rect_filled(rect, 0.0, BACKGROUND);
+        // the height of a bar follows the square root of its count, so that a small group is seen beside a big one
+        let top = bars.iter().copied().max().unwrap_or(1).max(1) as f32;
+        let width = rect.width() / bars.len() as f32;
+        for (k, count) in bars.iter().enumerate() {
+            let height = rect.height() * (*count as f32 / top).sqrt();
+            let x = rect.left() + k as f32 * width;
+            let bar = Rect::from_min_max(
+                Pos2::new(x, rect.bottom() - height),
+                Pos2::new(x + (width - 1.0).max(1.0), rect.bottom()),
+            );
+            painter.rect_filled(bar, 0.0, ACCENT);
+        }
+        // the cut of Otsu, the one the search for marks uses when no threshold is given
+        if let Some(r) = self.win.histogram_report() {
+            let x = rect.left() + (f32::from(r.otsu) + 1.0) / 256.0 * rect.width();
+            painter.line_segment(
+                [Pos2::new(x, rect.top()), Pos2::new(x, rect.bottom())],
+                Stroke::new(1.5, MARK),
+            );
+        }
+    }
+
+    fn edge_section(&mut self, ui: &mut egui::Ui) {
+        let lang = self.win.lang;
+        Self::heading(ui, Msg::EdgeTitle.tr(lang));
+        Self::help(ui, lang, "help_edge", Msg::HelpEdge);
+        for (k, label) in EDGE_LABELS.iter().enumerate() {
+            ui.label(label.tr(lang));
+            let mut text = self.win.edge_line[k].clone();
+            if ui
+                .add(egui::TextEdit::singleline(&mut text).desired_width(f32::INFINITY))
+                .changed()
+            {
+                self.win.set_edge_field(k, text);
+            }
+        }
+        self.fields(ui, Section::Edge);
+        if ui
+            .add_enabled(
+                self.win.image.is_some(),
+                egui::Button::new(Msg::EdgeRun.tr(lang)),
+            )
+            .clicked()
+        {
+            self.win.measure_edge();
+        }
+    }
+
+    fn reference_section(&mut self, ui: &mut egui::Ui) {
+        let lang = self.win.lang;
+        Self::heading(ui, Msg::ReferenceTitle.tr(lang));
+        Self::help(ui, lang, "help_reference", Msg::HelpReference);
+        if ui.button(Msg::ReferenceOpenMask.tr(lang)).clicked() {
+            self.open_dialog(Kind::Mask);
+        }
+        if let Some(mask) = &self.win.mask {
+            ui.label(egui::RichText::new(mask.name.clone()).color(DIM));
+        }
+        let ready = self.win.image.is_some() && self.win.other.is_some();
+        if ui
+            .add_enabled(ready, egui::Button::new(Msg::ReferenceRun.tr(lang)))
+            .clicked()
+        {
+            self.win.check_reference();
+        }
+    }
+
+    /// The settings of the server: the panel of the suite, and the search for servers on the network (only when the switch of the settings that were applied is on).
+    fn server_section(&mut self, ui: &mut egui::Ui) {
+        let lang = self.win.lang;
+        let shown = view_lang(lang);
+        ui.add_space(8.0);
+        ui.separator();
+        Self::help(ui, lang, "help_server", Msg::HelpServer);
+        self.server.panel.refresh(&self.server.client);
+        if let Some(action) = server_gui::show(ui, &mut self.server.panel, shown) {
+            if let Some(settings) = self.server.panel.handle(action, &mut self.server.client) {
+                match self.win.apply_link(&settings) {
+                    Ok(()) => self.server.client = panel_client(&settings),
+                    Err(why) => self.win.status = Status::Failed(why),
+                }
+            }
+        }
+        if !self.win.cfg.server_mdns {
+            return;
+        }
+        let searching = self.server.search.is_some();
+        if ui
+            .add_enabled(!searching, egui::Button::new(Msg::ServerFind.tr(lang)))
+            .clicked()
+        {
+            if let Ok(settings) = self.win.link() {
+                let slot: Arc<Mutex<Option<Found>>> = Arc::new(Mutex::new(None));
+                let theirs = slot.clone();
+                std::thread::spawn(move || {
+                    let found = find_servers(&settings);
+                    if let Ok(mut place) = theirs.lock() {
+                        *place = Some(found);
+                    }
+                });
+                self.server.search = Some(slot);
+                self.server.found = None;
+            }
+        }
+        match &self.server.found {
+            Some(Ok(list)) if list.is_empty() => {
+                ui.label(egui::RichText::new(Msg::ServerNoneFound.tr(lang)).color(DIM));
+            }
+            Some(Ok(list)) => {
+                ui.label(egui::RichText::new(Msg::ServerCandidates.tr(lang)).color(DIM));
+                for address in list.clone() {
+                    if ui.button(address.as_str()).clicked() {
+                        self.server.panel.form.address = address;
+                    }
+                }
+            }
+            Some(Err(why)) => {
+                ui.colored_label(DANGER, error_text(shown, why));
+            }
+            None => {}
+        }
+    }
+
+    /// Takes what the search for servers found, when it is done; while it runs the window asks to be drawn again soon.
+    fn poll_search(&mut self, ctx: &egui::Context) {
+        let Some(slot) = self.server.search.clone() else {
+            return;
+        };
+        let done = slot.lock().ok().and_then(|mut place| place.take());
+        match done {
+            Some(found) => {
+                self.server.found = Some(found);
+                self.server.search = None;
+            }
+            None => ctx.request_repaint_after(std::time::Duration::from_millis(200)),
         }
     }
 
@@ -742,11 +953,13 @@ impl App {
                     .show(ui, |ui| {
                         self.search_section(ui);
                         self.quality_section(ui);
+                        self.histogram_section(ui);
                         self.refine_section(ui);
                         self.marks_section(ui);
                         self.scale_section(ui);
                         self.pitch_section(ui);
                         self.distortion_section(ui);
+                        self.edge_section(ui);
                         self.shapes_section(ui);
                         self.rings_section(ui);
                         self.measure_section(ui);
@@ -757,8 +970,10 @@ impl App {
                         self.rectify_section(ui);
                         self.pads_section(ui);
                         self.diff_section(ui);
+                        self.reference_section(ui);
                         self.align_section(ui);
                         self.batch_section(ui);
+                        self.server_section(ui);
                     });
             });
     }
@@ -775,6 +990,8 @@ impl App {
                 ui.label(egui::RichText::new(self.win.status.text(lang)).color(colour));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(egui::RichText::new(Msg::ZoomHint.tr(lang)).color(DIM));
+                    ui.separator();
+                    server_gui::link_badge(ui, self.server.panel.badge(), view_lang(lang));
                 });
             });
         });
@@ -1024,6 +1241,7 @@ impl App {
                     Kind::Design => self.win.load_design(&path),
                     Kind::Export => self.win.export_isocam(&path),
                     Kind::Other => self.win.open_other(&path),
+                    Kind::Mask => self.win.open_mask(&path),
                 };
                 if !done {
                     // the window stays open so that another file or name can be tried
@@ -1060,6 +1278,7 @@ fn show_dialog(ctx: &egui::Context, d: &mut Dialog, lang: Lang) -> Option<Outcom
         Kind::Design => Msg::OpenDesignTitle,
         Kind::Export => Msg::ExportTitle,
         Kind::Other => Msg::OpenOtherTitle,
+        Kind::Mask => Msg::OpenMaskTitle,
     };
     egui::Window::new(title.tr(lang))
         .open(&mut open)
@@ -1155,6 +1374,7 @@ impl eframe::App for App {
         if self.win.poll_batch() {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
+        self.poll_search(&ctx);
         self.top_bar(ui);
         self.status_bar(ui);
         self.side_panel(ui);

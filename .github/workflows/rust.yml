@@ -23,7 +23,7 @@ permissions:
 
 env:
   # The tag of each sibling repository this one is built against (name=tag, separated by spaces); a sibling that is not listed is taken at main.
-  SIBLING_REFS: "EH3D-COMMON=v0.2.5"
+  SIBLING_REFS: "EH3D-COMMON=v0.2.6"
 
 jobs:
   rust:
@@ -85,8 +85,14 @@ jobs:
       - name: Lints of the window
         run: cargo clippy --all-targets --features gui -- -D warnings
         working-directory: EH3D-VISION-STUDIO
+      - name: Lints with the search of the local network
+        run: cargo clippy --all-targets --features mdns -- -D warnings
+        working-directory: EH3D-VISION-STUDIO
       - name: Tests
         run: cargo test --all-targets
+        working-directory: EH3D-VISION-STUDIO
+      - name: Tests of the search of the local network
+        run: cargo test --features mdns --lib server::
         working-directory: EH3D-VISION-STUDIO
 
   main-against-main:
