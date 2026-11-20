@@ -71,6 +71,14 @@ EH3D-VISION-STUDIO is one program of the EH3D Fabrication Suite. It works as a l
 
 How the parts of this repository fit together: who uses it, what it holds and what it depends on. The picture is drawn from `docs/architecture.json` and checked against the code.
 
+## 🖼️ Screenshots
+
+<p align="center">
+  <img src="images/screens/vision-studio-01-window.png" alt="The window with the example picture and design" width="100%">
+</p>
+
+<p align="center"><em>The window with the example picture and the example design: the two marks found, each with its centre and its number, and the settings of the search at the left.</em></p>
+
 ## ✨ Features
 
 * **A library and a command line:** every command of `eh3d-vision` is a function of the library, so another program of the suite can call it without starting a process.

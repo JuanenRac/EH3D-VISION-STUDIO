@@ -71,6 +71,14 @@ EH3D-VISION-STUDIO 是 EH3D Fabrication Suite 的一个程序。它以库和命�
 
 本仓库各部分如何配合：谁使用它、它包含什么、它依赖什么。图由 `docs/architecture.json` 绘制并与代码核对。
 
+## 🖼️ 屏幕截图
+
+<p align="center">
+  <img src="images/screens/vision-studio-01-window.png" alt="载入示例图像和示例设计的窗口" width="100%">
+</p>
+
+<p align="center"><em>载入示例图像和示例设计的窗口：找到的两个标记，各自带有中心和编号，左侧是搜索的设置。</em></p>
+
 ## ✨ 功能
 
 * **库加命令行：** `eh3d-vision` 的每个命令都是库中的函数，套件中的其他程序无需启动进程即可调用。
