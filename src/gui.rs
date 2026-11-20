@@ -34,6 +34,7 @@ enum Kind {
     Image,
     Design,
     Export,
+    Other,
 }
 
 enum Outcome {
@@ -100,7 +101,7 @@ impl App {
 
     fn open_dialog(&mut self, kind: Kind) {
         let extensions: &[&'static str] = match kind {
-            Kind::Image => &IMAGE_EXTENSIONS,
+            Kind::Image | Kind::Other => &IMAGE_EXTENSIONS,
             Kind::Design => &DESIGN_EXTENSIONS,
             Kind::Export => &OUTPUT_EXTENSIONS,
         };
@@ -610,6 +611,101 @@ impl App {
             });
     }
 
+    fn correlate_section(&mut self, ui: &mut egui::Ui) {
+        let lang = self.win.lang;
+        Self::heading(ui, Msg::CorrelateTitle.tr(lang));
+        self.fields(ui, Section::Correlate);
+        let has_image = self.win.image.is_some();
+        if ui
+            .add_enabled(has_image, egui::Button::new(Msg::CorrelateRun.tr(lang)))
+            .clicked()
+        {
+            self.win.find_matches();
+        }
+        let lines = self.win.match_lines();
+        egui::ScrollArea::vertical()
+            .id_salt("matches")
+            .max_height(120.0)
+            .show(ui, |ui| {
+                for line in lines {
+                    ui.label(egui::RichText::new(line).color(DIM));
+                }
+            });
+    }
+
+    fn rectify_section(&mut self, ui: &mut egui::Ui) {
+        let lang = self.win.lang;
+        Self::heading(ui, Msg::RectifyTitle.tr(lang));
+        self.fields(ui, Section::Rectify);
+        let has_image = self.win.image.is_some();
+        if ui
+            .add_enabled(has_image, egui::Button::new(Msg::RectifyRun.tr(lang)))
+            .clicked()
+        {
+            self.win.rectify_picture();
+        }
+    }
+
+    fn pads_section(&mut self, ui: &mut egui::Ui) {
+        let lang = self.win.lang;
+        Self::heading(ui, Msg::PadsTitle.tr(lang));
+        self.fields(ui, Section::Pads);
+        let has_parts = !self.win.parts.is_empty();
+        ui.horizontal(|ui| {
+            if ui
+                .add_enabled(has_parts, egui::Button::new(Msg::PadsRun.tr(lang)))
+                .clicked()
+            {
+                self.win.judge_row();
+            }
+            if ui
+                .add_enabled(
+                    self.win.row.is_some(),
+                    egui::Button::new(Msg::PadsSave.tr(lang)),
+                )
+                .clicked()
+            {
+                self.win.save_row();
+            }
+        });
+        if let Some(line) = self.win.row_line() {
+            ui.label(egui::RichText::new(line).color(DIM));
+        }
+    }
+
+    fn diff_section(&mut self, ui: &mut egui::Ui) {
+        let lang = self.win.lang;
+        Self::heading(ui, Msg::DiffTitle.tr(lang));
+        self.fields(ui, Section::Diff);
+        if ui.button(Msg::DiffOpenOther.tr(lang)).clicked() {
+            self.open_dialog(Kind::Other);
+        }
+        if let Some(other) = &self.win.other {
+            ui.label(egui::RichText::new(other.name.clone()).color(DIM));
+        }
+        let ready = self.win.image.is_some() && self.win.other.is_some();
+        ui.horizontal(|ui| {
+            if ui
+                .add_enabled(ready, egui::Button::new(Msg::DiffRun.tr(lang)))
+                .clicked()
+            {
+                self.win.compare_pictures();
+            }
+            if ui
+                .add_enabled(
+                    self.win.changes.is_some(),
+                    egui::Button::new(Msg::DiffSave.tr(lang)),
+                )
+                .clicked()
+            {
+                self.win.save_changes();
+            }
+        });
+        if let Some(line) = self.win.diff_line() {
+            ui.label(egui::RichText::new(line).color(DIM));
+        }
+    }
+
     fn align_section(&mut self, ui: &mut egui::Ui) {
         let lang = self.win.lang;
         Self::heading(ui, Msg::AlignTitle.tr(lang));
@@ -657,6 +753,10 @@ impl App {
                         self.inspect_section(ui);
                         self.offset_section(ui);
                         self.shots_section(ui);
+                        self.correlate_section(ui);
+                        self.rectify_section(ui);
+                        self.pads_section(ui);
+                        self.diff_section(ui);
                         self.align_section(ui);
                         self.batch_section(ui);
                     });
@@ -923,6 +1023,7 @@ impl App {
                     }
                     Kind::Design => self.win.load_design(&path),
                     Kind::Export => self.win.export_isocam(&path),
+                    Kind::Other => self.win.open_other(&path),
                 };
                 if !done {
                     // the window stays open so that another file or name can be tried
@@ -958,6 +1059,7 @@ fn show_dialog(ctx: &egui::Context, d: &mut Dialog, lang: Lang) -> Option<Outcom
         Kind::Image => Msg::OpenImageTitle,
         Kind::Design => Msg::OpenDesignTitle,
         Kind::Export => Msg::ExportTitle,
+        Kind::Other => Msg::OpenOtherTitle,
     };
     egui::Window::new(title.tr(lang))
         .open(&mut open)

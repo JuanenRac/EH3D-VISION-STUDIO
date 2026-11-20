@@ -3,6 +3,8 @@
 
 use crate::align::{fit, isocam_args, pair_nearest, Transform};
 use crate::config::Config;
+use crate::correlate::Match;
+use crate::diff::Diff;
 use crate::fiducial::{find_with, refine, Fiducial, Polarity};
 use crate::image::{from_bytes, Gray};
 use crate::inspect::{Judged, Package};
@@ -11,6 +13,7 @@ use crate::lang::{Lang, Msg};
 use crate::lens::{corrected_grid, fit_lens, predicted_grid, undistort2, Lens};
 use crate::measure::Part;
 use crate::offset::Offset;
+use crate::pads::Pads;
 use crate::points;
 use crate::quality::Quality;
 use crate::ring::Ring;
@@ -42,6 +45,10 @@ pub enum Section {
     Rings,
     Offset,
     Quality,
+    Correlate,
+    Rectify,
+    Pads,
+    Diff,
 }
 
 /// A value of the configuration that the person can edit in the window.
@@ -88,6 +95,30 @@ pub enum Status {
     OffsetDone {
         pass: usize,
         fail: usize,
+    },
+    /// How many marks the search by correlation found.
+    MatchesFound(usize),
+    /// Straightening needs four marks; this many were found.
+    NeedFourMarks(usize),
+    /// A row of pads that is good: how many pads and the pitch in millimetres.
+    PadsRow {
+        count: usize,
+        pitch: f64,
+    },
+    /// The reasons that a row of pads is refused (`pitch`, `row`).
+    PadsRefused(Vec<&'static str>),
+    OtherLoaded {
+        name: String,
+        w: usize,
+        h: usize,
+    },
+    NeedOther,
+    DiffSame {
+        percent: f64,
+    },
+    DiffChanged {
+        percent: f64,
+        regions: usize,
     },
     QualityGood,
     /// The reasons that the picture is poor (`flat`, `dark`, `bright`, `blurry`).
@@ -182,6 +213,30 @@ impl Status {
             Status::OffsetDone { pass, fail } => {
                 Msg::OffsetDone.with(lang, &[&pass.to_string(), &fail.to_string()])
             }
+            Status::MatchesFound(0) => Msg::NoMatchesFound.tr(lang).to_string(),
+            Status::MatchesFound(n) => Msg::MatchesFound.with(lang, &[&n.to_string()]),
+            Status::NeedFourMarks(n) => Msg::NeedFourMarks.with(lang, &[&n.to_string()]),
+            Status::PadsRow { count, pitch } => {
+                Msg::PadsGood.with(lang, &[&count.to_string(), &show(*pitch, 4)])
+            }
+            Status::PadsRefused(reasons) => {
+                let why: Vec<&str> = reasons
+                    .iter()
+                    .map(|r| match *r {
+                        crate::pads::REASON_ROW => Msg::ReasonRow.tr(lang),
+                        _ => Msg::ReasonPitch.tr(lang),
+                    })
+                    .collect();
+                Msg::PadsRefused.with(lang, &[why.join(", ")])
+            }
+            Status::OtherLoaded { name, w, h } => {
+                Msg::OtherLoaded.with(lang, &[name, &w.to_string(), &h.to_string()])
+            }
+            Status::NeedOther => Msg::NeedOther.tr(lang).to_string(),
+            Status::DiffSame { percent } => Msg::DiffSame.with(lang, &[&show(*percent, 3)]),
+            Status::DiffChanged { percent, regions } => {
+                Msg::DiffChanged.with(lang, &[&show(*percent, 3), &regions.to_string()])
+            }
             Status::QualityGood => Msg::QualityGood.tr(lang).to_string(),
             Status::QualityPoor(reasons) => {
                 let why: Vec<&str> = reasons
@@ -256,6 +311,10 @@ impl Status {
                 | Status::NeedPackage
                 | Status::NeedBody
                 | Status::QualityPoor(_)
+                | Status::NeedFourMarks(_)
+                | Status::PadsRefused(_)
+                | Status::NeedOther
+                | Status::DiffChanged { .. }
                 | Status::GridCount { .. }
                 | Status::TooLarge { .. }
                 | Status::SameFile
@@ -369,11 +428,18 @@ fn field_text(cfg: &Config, key: &str) -> String {
         "quality_min_mean" => cfg.quality_min_mean.to_string(),
         "quality_max_mean" => cfg.quality_max_mean.to_string(),
         "quality_min_sharpness" => cfg.quality_min_sharpness.to_string(),
+        "correlate_diameter" => cfg.correlate_diameter.to_string(),
+        "correlate_min_score" => cfg.correlate_min_score.to_string(),
+        "rectify_max_side" => cfg.rectify_max_side.to_string(),
+        "pads_tolerance" => cfg.pads_tolerance.to_string(),
+        "diff_threshold" => cfg.diff_threshold.to_string(),
+        "diff_min_area" => cfg.diff_min_area.to_string(),
+        "diff_max_changed" => cfg.diff_max_changed.to_string(),
         _ => String::new(),
     }
 }
 
-fn file_name(path: &Path) -> String {
+pub(crate) fn file_name(path: &Path) -> String {
     path.file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| path.display().to_string())
@@ -411,6 +477,11 @@ pub struct Window {
     pub held: Vec<Offset>,
     pub held_package: Option<Package>,
     pub quality: Option<Quality>,
+    /// The places found by correlation, the row of pads that was judged, the other picture of a comparison and what differs between the two.
+    pub matches: Vec<Match>,
+    pub row: Option<Pads>,
+    pub other: Option<Loaded>,
+    pub changes: Option<Diff>,
     pub selected: Option<usize>,
     pub scale: Option<Scale>,
     pub distortion: Option<Lens>,
@@ -495,6 +566,21 @@ impl Window {
                 Msg::QualityMinSharpness,
                 Section::Quality,
             ),
+            (
+                "correlate_diameter",
+                Msg::CorrelateDiameter,
+                Section::Correlate,
+            ),
+            (
+                "correlate_min_score",
+                Msg::CorrelateMinScore,
+                Section::Correlate,
+            ),
+            ("rectify_max_side", Msg::RectifyMaxSide, Section::Rectify),
+            ("pads_tolerance", Msg::PadsTolerance, Section::Pads),
+            ("diff_threshold", Msg::DiffThreshold, Section::Diff),
+            ("diff_min_area", Msg::DiffMinArea, Section::Diff),
+            ("diff_max_changed", Msg::DiffMaxChanged, Section::Diff),
         ]
         .into_iter()
         .map(|(key, label, section)| FieldState {
@@ -522,6 +608,10 @@ impl Window {
             held: Vec::new(),
             held_package: None,
             quality: None,
+            matches: Vec::new(),
+            row: None,
+            other: None,
+            changes: None,
             selected: None,
             scale: None,
             distortion: None,
@@ -628,6 +718,9 @@ impl Window {
                 self.held.clear();
                 self.held_package = None;
                 self.quality = None;
+                self.matches.clear();
+                self.row = None;
+                self.changes = None;
                 self.detect();
                 self.status = Status::Opened { name, w, h };
                 true
@@ -1151,7 +1244,7 @@ mod tests {
     fn a_new_window_waits_for_a_picture() {
         let w = window();
         assert_eq!(w.status, Status::Ready);
-        assert_eq!(w.fields.len(), 51);
+        assert_eq!(w.fields.len(), 58);
         assert_eq!(w.fields[0].text, "auto");
         assert_eq!(w.fields[1].text, "8");
         assert!(!w.light_marks());

@@ -9,6 +9,7 @@ pub mod align;
 pub mod batch;
 pub mod board;
 pub mod browse;
+pub mod checks;
 pub mod config;
 pub mod correlate;
 pub mod cross;

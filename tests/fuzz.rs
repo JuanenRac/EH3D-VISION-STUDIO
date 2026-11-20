@@ -1,12 +1,16 @@
 //! Random input with a fixed seed: whatever is put in (pictures of any size and grey levels, corners anywhere, text that is almost a configuration file or a JSON object or an HTTP answer)
 //! must never panic, and what comes out must make sense. The generator reads no clock, so a failure comes back the same way and says its seed and its round.
 
+use eh3d_vision_studio::board::{scale_from_squares, BoardSettings};
 use eh3d_vision_studio::config::Config;
 use eh3d_vision_studio::correlate::{correlate, CorrelateSettings};
 use eh3d_vision_studio::diff::{compare, mask, DiffSettings};
 use eh3d_vision_studio::fiducial::{find, Settings};
+use eh3d_vision_studio::footprint::{judge, FootprintSettings};
 use eh3d_vision_studio::image::{from_bytes, Gray};
+use eh3d_vision_studio::lang::Lang;
 use eh3d_vision_studio::measure::{measure_parts, Part, PartSettings};
+use eh3d_vision_studio::orientation::{analyse, OrientationSettings};
 use eh3d_vision_studio::pads::{measure_row, PadSettings};
 use eh3d_vision_studio::perspective::{convex, rectify, Homography};
 use eh3d_vision_studio::quality;
@@ -15,7 +19,10 @@ use eh3d_vision_studio::server::sc::transport::parse_response;
 use eh3d_vision_studio::server::{
     apply_remote, base64_decode, base64_encode, parse_config_text, parse_object,
 };
+use eh3d_vision_studio::sharpmap::{heat, sharp_map, SharpSettings};
 use eh3d_vision_studio::sim::SimRng;
+use eh3d_vision_studio::square::Square;
+use eh3d_vision_studio::window::Window;
 
 const SEED: u64 = 0x5EED_0005;
 
@@ -521,4 +528,232 @@ fn a_configuration_kept_on_the_server_is_read_or_refused_and_base64_goes_there_a
             assert!(decoded.len() <= noise.len(), "round {round}");
         }
     }
+}
+
+#[test]
+fn the_reading_of_a_marked_part_gives_numbers_that_make_sense_for_any_picture() {
+    let mut rng = SimRng::new(SEED + 10);
+    for round in 0..300 {
+        let img = picture(&mut rng, 40);
+        let s = OrientationSettings {
+            body_contrast: 1.0 + unit(&mut rng) * 120.0,
+            mark_contrast: 1.0 + unit(&mut rng) * 120.0,
+            min_mark_px: rng.below(8) + 1,
+            tolerance_deg: unit(&mut rng) * 90.0,
+            expected_deg: (rng.below(2) == 0).then(|| unit(&mut rng) * 720.0 - 360.0),
+        };
+        let ctx = format!(
+            "seed {:#x}, round {round}, {} x {}",
+            SEED + 10,
+            img.w,
+            img.h
+        );
+        match analyse(&img, 0.01 + unit(&mut rng), &s) {
+            Ok(o) => {
+                assert!((0.0..=1.0).contains(&o.mark_share), "{ctx}");
+                assert!(
+                    o.direction_deg > -180.0 && o.direction_deg <= 180.0,
+                    "{ctx}: {}",
+                    o.direction_deg
+                );
+                assert!(
+                    o.skew_deg > -45.0 - 1e-9 && o.skew_deg <= 45.0 + 1e-9,
+                    "{ctx}"
+                );
+                assert!(
+                    o.body_long_mm >= o.body_short_mm && o.distance_mm >= 0.0,
+                    "{ctx}"
+                );
+                assert_eq!(o.passes(), o.reasons.is_empty(), "{ctx}");
+                assert_eq!(o.error_deg.is_some(), s.expected_deg.is_some(), "{ctx}");
+                if let Some(e) = o.error_deg {
+                    assert!(e > -180.0 && e <= 180.0, "{ctx}: {e}");
+                }
+            }
+            Err(e) => assert!(
+                ["picture_small", "no_part", "part_cut"]
+                    .iter()
+                    .any(|c| e.starts_with(c)),
+                "{ctx}: {e}"
+            ),
+        }
+    }
+}
+
+#[test]
+fn pads_with_random_sizes_are_all_judged_and_numbered() {
+    let mut rng = SimRng::new(SEED + 11);
+    for round in 0..300 {
+        let n = rng.below(12) as usize;
+        let parts: Vec<Part> = (0..n)
+            .map(|_| Part {
+                x_mm: unit(&mut rng) * 20.0 - 10.0,
+                y_mm: unit(&mut rng) * 20.0 - 10.0,
+                angle_deg: 0.0,
+                length_mm: unit(&mut rng) * 3.0,
+                width_mm: unit(&mut rng) * 1.5,
+                area_mm2: 0.5,
+            })
+            .collect();
+        let width = 0.1 + unit(&mut rng);
+        let s = FootprintSettings {
+            length_mm: width + unit(&mut rng) * 2.0,
+            width_mm: width,
+            tolerance_mm: (0.01 + unit(&mut rng) * 0.2).min(width),
+            expected_count: (rng.below(2) == 0).then(|| rng.below(12) as usize + 1),
+        };
+        let ctx = format!("seed {:#x}, round {round}, {n} pads", SEED + 11);
+        match judge(&parts, &s) {
+            Ok(f) => {
+                assert_eq!(f.pads.len(), n, "{ctx}");
+                assert!(
+                    f.pads.iter().enumerate().all(|(i, p)| p.index == i + 1),
+                    "{ctx}"
+                );
+                assert!(f.pads_ok() <= n && f.worst_mm >= 0.0, "{ctx}");
+                assert_eq!(f.passes(), f.reasons.is_empty(), "{ctx}");
+                // a pad passes exactly when both sides are within the tolerance
+                for p in &f.pads {
+                    let within = p.d_length_mm.abs() <= s.tolerance_mm + 1e-9
+                        && p.d_width_mm.abs() <= s.tolerance_mm + 1e-9;
+                    assert_eq!(p.reasons.is_empty(), within, "{ctx}");
+                }
+            }
+            Err(e) => assert!(n == 0 && e.starts_with("no_pads"), "{ctx}: {e}"),
+        }
+    }
+}
+
+#[test]
+fn the_map_of_sharpness_covers_any_picture_and_judges_only_what_has_contrast() {
+    let mut rng = SimRng::new(SEED + 12);
+    for round in 0..200 {
+        let img = picture(&mut rng, 80);
+        let s = SharpSettings {
+            cells: 2 + rng.below(10) as usize,
+            min_share: 0.05 + unit(&mut rng) * 0.95,
+            min_contrast: unit(&mut rng) * 20.0,
+        };
+        let ctx = format!(
+            "seed {:#x}, round {round}, {} x {}",
+            SEED + 12,
+            img.w,
+            img.h
+        );
+        match sharp_map(&img, &s) {
+            Ok(m) => {
+                assert_eq!(m.cells.len(), s.cells * s.cells, "{ctx}");
+                let area: usize = m.cells.iter().map(|c| (c.x1 - c.x0) * (c.y1 - c.y0)).sum();
+                assert_eq!(area, img.w * img.h, "{ctx}");
+                assert!(m.weak + m.empty <= m.cells.len(), "{ctx}");
+                assert!(
+                    m.min <= m.median + 1e-9 && m.median <= m.max + 1e-9,
+                    "{ctx}"
+                );
+                assert!(m.uniformity >= 0.0 && m.uniformity <= 1.0 + 1e-9, "{ctx}");
+                assert_eq!(m.passes(), m.weak == 0, "{ctx}");
+                let hot = heat(&m, img.w, img.h).unwrap();
+                assert_eq!(hot.data.len(), img.data.len(), "{ctx}");
+            }
+            Err(e) => assert!(
+                e.starts_with("picture_small") || e.starts_with("flat"),
+                "{ctx}: {e}"
+            ),
+        }
+    }
+}
+
+#[test]
+fn squares_in_random_places_give_a_scale_or_a_reason() {
+    let mut rng = SimRng::new(SEED + 13);
+    for round in 0..300 {
+        let n = rng.below(14) as usize;
+        let squares: Vec<Square> = (0..n)
+            .map(|_| Square {
+                x: unit(&mut rng) * 400.0,
+                y: unit(&mut rng) * 300.0,
+                side: 5.0 + unit(&mut rng) * 40.0,
+                angle_deg: unit(&mut rng) * 89.0 - 44.5,
+                score: 1.0,
+            })
+            .collect();
+        let s = BoardSettings {
+            square_mm: if rng.below(2) == 0 {
+                0.0
+            } else {
+                0.5 + unit(&mut rng)
+            },
+            pitch_mm: if rng.below(2) == 0 {
+                0.0
+            } else {
+                2.0 + unit(&mut rng)
+            },
+            max_aspect: 0.01 + unit(&mut rng) * 0.5,
+            max_spread: 0.01 + unit(&mut rng) * 0.5,
+        };
+        let ctx = format!("seed {:#x}, round {round}, {n} squares", SEED + 13);
+        match scale_from_squares(&squares, &s) {
+            Ok(b) => {
+                assert!(b.mm_per_px.is_finite() && b.mm_per_px > 0.0, "{ctx}");
+                assert!(
+                    b.angle_deg > -45.0 - 1e-9 && b.angle_deg <= 45.0 + 1e-9,
+                    "{ctx}"
+                );
+                assert!(b.pitch_x_px > 0.0 && b.pitch_y_px > 0.0, "{ctx}");
+                assert_eq!(b.aspect.is_some(), s.pitch_mm > 0.0, "{ctx}");
+                assert_eq!(b.passes(), b.reasons.is_empty(), "{ctx}");
+            }
+            Err(e) => assert!(
+                ["few_squares", "no_lattice", "need_size"]
+                    .iter()
+                    .any(|c| e.starts_with(c)),
+                "{ctx}: {e}"
+            ),
+        }
+    }
+}
+
+#[test]
+fn the_panels_of_the_window_never_panic_on_any_picture() {
+    let dir = std::env::temp_dir().join(format!("eh3d_vision_fuzz_window_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut rng = SimRng::new(SEED + 14);
+    for round in 0..40 {
+        let img = picture(&mut rng, 70);
+        let other = picture(&mut rng, 70);
+        let (a, b) = (
+            dir.join(format!("a{round}.pgm")),
+            dir.join(format!("b{round}.pgm")),
+        );
+        for (path, g) in [(&a, &img), (&b, &other)] {
+            let mut bytes = format!("P5\n{} {}\n255\n", g.w, g.h).into_bytes();
+            bytes.extend_from_slice(&g.data);
+            std::fs::write(path, bytes).unwrap();
+        }
+        let mut w = Window::new(Lang::En, Config::default(), None);
+        let ctx = format!(
+            "seed {:#x}, round {round}, {} x {}",
+            SEED + 14,
+            img.w,
+            img.h
+        );
+        assert!(w.open_image(&a), "{ctx}");
+        w.find_matches();
+        w.rectify_picture();
+        w.cfg.mm_per_px = 0.05;
+        w.measure();
+        w.judge_row();
+        w.save_row();
+        w.open_other(&b);
+        w.compare_pictures();
+        w.save_changes();
+        // whatever came of it, the status can be said in every language
+        for l in Lang::ALL {
+            assert!(!w.status.text(l).trim().is_empty(), "{ctx}");
+        }
+        assert!(w.row.is_none() || !w.parts.is_empty(), "{ctx}");
+        assert!(w.matches.iter().all(|m| m.score.is_finite()), "{ctx}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
 }
