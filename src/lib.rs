@@ -26,6 +26,7 @@ pub mod convention;
 pub mod correlate;
 pub mod cross;
 pub mod diff;
+pub mod discovery;
 pub mod edge;
 pub mod fiducial;
 pub mod flatten;
@@ -59,6 +60,8 @@ pub mod shots;
 pub mod square;
 pub mod station;
 pub mod tools;
+pub mod train;
+pub mod turnpair;
 pub mod viewport;
 pub mod window;
 

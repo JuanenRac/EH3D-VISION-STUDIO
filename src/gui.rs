@@ -7,7 +7,7 @@ use crate::image::Gray;
 use crate::lang::{Lang, Msg};
 use crate::readings::EDGE_LABELS;
 use crate::ring::SizeClass;
-use crate::server::{find_servers, link_settings, panel_client, sc, APP};
+use crate::server::{find_server_candidates, link_settings, panel_client, sc, APP};
 use crate::shot::{ShotRequest, ShotTheme, PATIENCE_FRAMES};
 use crate::tools::ShapeKind;
 use crate::window::{
@@ -873,8 +873,9 @@ impl App {
             if let Ok(settings) = self.win.link() {
                 let slot: Arc<Mutex<Option<Found>>> = Arc::new(Mutex::new(None));
                 let theirs = slot.clone();
+                let find = self.win.cfg.find_settings();
                 std::thread::spawn(move || {
-                    let found = find_servers(&settings);
+                    let found = find_server_candidates(&settings, &find);
                     if let Ok(mut place) = theirs.lock() {
                         *place = Some(found);
                     }

@@ -17,7 +17,7 @@
 
 ---
 
-**Verifica di onestà - cosa funziona oggi:** una libreria Rust e un programma a riga di comando (`eh3d-vision`) con 687 test eseguiti su un computer: trova segni fiduciali rotondi in un'immagine, converte i pixel in millimetri e calcola la rotazione e lo spostamento che portano una scheda dove dice il suo progetto. Ha una finestra (si compila con `--features gui`, il programma `eh3d-vision-gui`) che apre un'immagine, mostra i segni con le loro coordinate, imposta la scala, calcola la distorsione dell'obiettivo da una griglia, allinea al progetto ed esporta le opzioni di ISOCAM, ma la finestra non è ancora stata vista su uno schermo; non è stato provato su una macchina e non è stato verificato su una raccolta di file reali.
+**Verifica di onestà - cosa funziona oggi:** una libreria Rust e un programma a riga di comando (`eh3d-vision`) con 725 test eseguiti su un computer: trova segni fiduciali rotondi in un'immagine, converte i pixel in millimetri e calcola la rotazione e lo spostamento che portano una scheda dove dice il suo progetto. Ha una finestra (si compila con `--features gui`, il programma `eh3d-vision-gui`) che apre un'immagine, mostra i segni con le loro coordinate, imposta la scala, calcola la distorsione dell'obiettivo da una griglia, allinea al progetto ed esporta le opzioni di ISOCAM, ma la finestra non è ancora stata vista su uno schermo; non è stato provato su una macchina e non è stato verificato su una raccolta di file reali.
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | Versione | `0.1.2` |
 | Maturità | Funzionale |
-| Test | 687 |
+| Test | 725 |
 | Stack tecnologico | Rust |
 | Su hardware reale | Non provato: nulla di questo ha girato su una macchina |
 
@@ -46,7 +46,7 @@ Ogni riga è una parte di questo repository e il semaforo dice a che punto è og
 |---|---|---|
 | Nucleo | 🟡 | trova segni fiduciali rotondi in un'immagine, converte i pixel in millimetri e calcola la rotazione e lo spostamento che portano una scheda dove dice il suo progetto; provato su un computer con input normali e danneggiati, non con una raccolta di file reali. |
 | Riga di comando | 🟡 | `eh3d-vision` esegue le stesse funzioni della libreria e stampa il risultato; ogni errore torna come messaggio e codice di uscita diverso da zero. |
-| Test | 🟡 | 687 test passano (`cargo test`), con casi normali, casi limite e input danneggiati, e una telecamera simulata sopra una scheda che aggiunge rumore, esposizione sbagliata, un fotogramma morto o assente, polvere che somiglia a un segno o un file immagine tagliato, e viene interrogata di nuovo. |
+| Test | 🟡 | 725 test passano (`cargo test`), con casi normali, casi limite e input danneggiati, e una telecamera simulata sopra una scheda che aggiunge rumore, esposizione sbagliata, un fotogramma morto o assente, polvere che somiglia a un segno o un file immagine tagliato, e viene interrogata di nuovo. |
 | Sicurezza | 🟡 | Rust sicuro e semplice (`forbid(unsafe_code)`; un piccolo bordo unsafe solo nei motori di telecamera compilati con la propria funzionalità): nulla va in panico con i file ricevuti e un valore errato è un errore con il suo motivo; nessuna revisione indipendente. |
 | Finestra | 🟠 | Scritta (egui, `--features gui`, il programma `eh3d-vision-gui`): aprire o trascinare un'immagine, vedere i segni con le loro coordinate, impostare la scala con un segno di dimensione nota, calcolare la distorsione dell'obiettivo da una griglia, allineare a un disegno CSV ed esportare le opzioni di ISOCAM; la sua logica è testata, ma non è ancora stata compilata né vista su uno schermo. |
 | Telecamera dal vivo | 🟠 | lo strato telecamera, la scacchiera di calibrazione e l'allineamento di una scheda sono scritti e provati su una telecamera e un tavolo simulati; i motori per Windows, V4L2 e libcamera sono scheletri e nulla è stato eseguito su una telecamera, un obiettivo o una scheda reali. |
@@ -123,6 +123,7 @@ Come si incastrano le parti di questo repository: chi lo usa, cosa contiene e da
 * **Risultati nella convenzione del server:** `eh3d-vision server send fiducials|focus|blobs IMMAGINE` conserva un risultato nella forma che condividono il plugin `vision` di EH3D-SERVER e i programmi che guardano attraverso una telecamera: un file `vision-<tipo>.json` di formato `application/json` e schema `eh3d.vision.result/1`, con la dimensione e lo SHA-256 dell'immagine, i rilevamenti del tipo (`fiducials` `{x, y, radius_px, score}`, `focus` `{score, sharp}`, `blobs` `{x, y, area_px}`; `barcode` viene verificato ma mai prodotto, perché qui nulla legge codici), le unità (`px`) e l'evidenza (`picture`, salvo che `--evidence camera|simulator` dica altro: il programma non può sapere che un file venga da una telecamera). `server check FILE.json` dice se un documento segue la convenzione e nomina la parte che non la segue, e un documento che non la segue viene rifiutato prima dell'invio. Il punteggio di una verifica di messa a fuoco è 50 quando la nitidezza è `focus_reference`.
 * **La stazione simulata del server:** `eh3d-vision server detect fiducials|barcode|focus|blobs IMMAGINE [--seed N] [--artifact]` chiede al plugin `vision` del server (`POST /api/v1/work/jobs`, avviato e letto fino alla fine) il risultato che inventa dalla dimensione e dall'hash dell'immagine e dal seme, sempre lo stesso (`evidence: simulator`), nella vista del lavoro o conservato come artefatto. `station::simulate` è un porting del plugin con cui risponde il server in memoria, così l'intera catena lavoro, risultato e artefatto è provata qui senza rete; non è stata eseguita contro il server vero.
 * **La ricerca del server sulla rete, come vero interruttore:** `eh3d-vision server discover` elenca l'`host:porta` dei server che rispondono a `_eh3d._tcp` sulla rete locale. Non fa nulla finché `server_mdns` è spento (predefinito), e il programma deve essere compilato con `--features mdns` (quelli delle versioni lo sono) per avere il risolutore del client condiviso. Ciò che trova sono candidati tra cui la persona sceglie, mai connessi da soli, perché qualsiasi dispositivo della rete può rispondere.
+* **Segni addestrati da un esempio, scheda molto ruotata ed elenco sicuro di server (libreria):** `train` conserva la media di rettangoli ritagliati intorno a un segno come suo modello e lo ritrova per correlazione, ruotato a passi se richiesto, con posizione e angolo (le chiavi `train_*` di `vision.cfg`); `turnpair` abbina i segni al disegno qualunque sia la rotazione della scheda, con un segno mancante o in più, e rifiuta ciò che due modi spiegano ugualmente bene (le chiavi `pair_*`); `discovery` trasforma ciò che risponde sulla rete in pochi candidati locali ben formati (le chiavi `find_server_*`). Tutto è provato su immagini disegnate con la verità che le ha disegnate; `server discover` e la finestra elencano già solo i candidati di `discovery`, e nessun comando o pannello usa ancora gli altri due.
 * **Un bordo a una frazione di pixel, con la sua incertezza:** `eh3d-vision edge IMMAGINE --from X,Y --to X,Y` legge l'immagine lungo una linea tracciata attraverso un bordo (bilineare, a distanza `edge_step_px`), prende i due capi della linea come i due fondi piani, trova dove il profilo incrocia il livello a metà e dà la posizione lungo la linea e nell'immagine, il contrasto, la larghezza della transizione e l'incertezza (una deviazione standard: il rumore dei fondi, con l'arrotondamento a 8 bit aggiunto, diviso per la pendenza dove incrocia). Il codice di uscita è 1 quando l'incertezza supera `edge_max_uncertainty_px`; una linea senza bordo è `edge_flat`. Un bordo più netto di un pixel può inclinarsi fino a 0,05 px.
 * **L'istogramma e la soglia automatica:** `eh3d-vision histogram IMMAGINE --bins N` dà i livelli di grigio in 8-256 gruppi e i tagli di Otsu (quello che usa la ricerca dei segni), di isodata e del metodo del triangolo, quanta varianza spiegano i due gruppi di Otsu, la quota di pixel neri e bianchi e se i tre tagli concordano (entro 8 livelli); se no, conviene controllare l'illuminazione o il `threshold` di `vision.cfg`.
 * **Un'immagine contro un riferimento, attraverso una maschera di tolleranza:** `eh3d-vision refcheck RIFERIMENTO IMMAGINE --tolerance MASCHERA.pgm` confronta due immagini della stessa dimensione dove la differenza ammessa può cambiare da punto a punto: un pixel della maschera a 0 mantiene il `diff_threshold` generale, da 1 a 254 ammette altrettanti livelli di grigio in più, e 255 non viene guardato. Dà i pixel fuori tolleranza, di quanto la superano, in quante regioni (`diff_min_area`) e dove; `--map FILE.pgm` li scrive come immagine e il codice di uscita è 1 oltre `diff_max_changed`.
@@ -201,7 +202,7 @@ Per fare un'immagine della finestra senza aprirla a mano, eseguila con `--shot F
 
 ## 🧪 Test
 
-La suite ha 687 test (`cargo test`, eseguiti su Windows e Linux nella CI). Verificano i casi normali, i casi limite e gli input danneggiati: file vuoti, spazzatura e file tagliati non causano mai un panico. La CI esegue anche `cargo fmt --check`, `cargo clippy` con gli avvisi come errori e `python -I tools/ci_validate.py`.
+La suite ha 725 test (`cargo test`, eseguiti su Windows e Linux nella CI). Verificano i casi normali, i casi limite e gli input danneggiati: file vuoti, spazzatura e file tagliati non causano mai un panico. La CI esegue anche `cargo fmt --check`, `cargo clippy` con gli avvisi come errori e `python -I tools/ci_validate.py`.
 
 ## 🏗️ Compilazione e rilascio
 
@@ -236,6 +237,7 @@ EH3D-VISION-STUDIO/
 │   ├── config.rs                                il file di configurazione: ogni valore regolato
 │   ├── correlate.rs                             marcatori rotondi trovati per correlazione con un disco del diametro voluto
 │   ├── diff.rs                                  due immagini dello stesso punto confrontate: cosa è cambiato, dove e di quanto
+│   ├── discovery.rs                             risposte della rete in un breve elenco di candidati sicuri, e un risolutore a copione
 │   ├── cross.rs                                 marcatori fiduciali a forma di croce
 │   ├── edge.rs                                  un bordo a una frazione di pixel lungo una linea, con la sua incertezza
 │   ├── fiducial.rs                              i riferimenti rotondi di un'immagine: soglia, macchie e controlli
@@ -265,6 +267,8 @@ EH3D-VISION-STUDIO/
 │   ├── sharpmap.rs                              una mappa di dove l'immagine è nitida: una griglia di celle, le deboli e l'inclinazione
 │   ├── square.rs                                segni quadrati e croci ruotate di un angolo qualsiasi
 │   ├── tools.rs                                 gli strumenti del pannello laterale sull'immagine: forme, pezzi, rapporto, scala dal passo
+│   ├── train.rs                                 un segno addestrato da esempi, ritrovato per correlazione all'angolo in cui è ruotato
+│   ├── turnpair.rs                              segni abbinati al disegno per una scheda ruotata di qualsiasi angolo
 │   ├── shot.rs                                  la modalità immagine della finestra (--shot): i suoi argomenti, letti e verificati senza schermo
 │   ├── shots.rs                                 le posizioni della telecamera che coprono un pezzo più grande del campo, dalle sole misure
 │   ├── browse.rs                                l'elenco dei file della finestra che apre un file
@@ -286,6 +290,9 @@ EH3D-VISION-STUDIO/
 │   ├── camera.rs                                i nuovi comandi eseguiti come programma: edge, histogram, refcheck, residui, server
 │   ├── fuzz_camera.rs                           input casuale con seme fisso per le nuove letture e la convenzione
 │   ├── fuzz_capture.rs                          input casuale con seme fisso per lettori di fotogrammi, calibrazione, allineamento
+│   ├── training.rs                              un segno addestrato ritrovato dove e come è stato disegnato, con i file
+│   ├── pairing.rs                               segni di una scheda ruotata di qualsiasi angolo abbinati secondo la verità
+│   ├── discovery.rs                             le risposte della rete, ostili o numerose, non danno mai un candidato non sicuro
 │   ├── shot_sample.rs                           test che gli esempi si aprano nella finestra di un'immagine
 │   ├── vision.rs                                test della libreria e della riga di comando
 │   └── reqs.rs                                  test del registro dei requisiti
@@ -321,14 +328,14 @@ EH3D-VISION-STUDIO/
 
 **Limiti noti oggi**
 
-* La finestra non è ancora stata vista su uno schermo; i segni vengono abbinati al disegno per posizione, quindi una scheda molto ruotata o un segno mancante viene rifiutato invece di essere indovinato.
+* La finestra non è ancora stata vista su uno schermo; i comandi abbinano i segni al disegno per posizione, quindi lì una scheda molto ruotata o un segno mancante viene rifiutato (la libreria sa abbinarli, ma nulla la chiama ancora).
 * Non è stato provato su una macchina né con una raccolta di file reali e non ha avuto revisione indipendente.
 * Legge file immagine, e una telecamera dal vivo solo in simulazione (i motori per Windows, V4L2 e libcamera sono scheletri mai provati su una telecamera reale), trova solo segni rotondi, quadrati e a forma di croce ed è stato provato su immagini disegnate dai test, non su fotografie di schede reali. La rotazione di un pezzo è misurata dai suoi pixel come per un rettangolo, quindi un pezzo che non è un rettangolo riceve la rotazione del suo asse lungo.
 * Il server non ha un plugin di visione, quindi il programma usa gli artefatti del magazzino (`POST /api/v1/artifacts` per un risultato, `GET /api/v1/artifacts` e `GET /api/v1/artifacts/{id}` per la configurazione di una macchina) con nomi e un formato propri (`vision-<kind>.json`, `vision-<machine>.cfg`); oggi si prova solo contro un server in memoria e un socket sul loopback, e la ricerca del server con mDNS (`server_mdns`) è un interruttore senza risolutore collegato.
 
 **Prossimi passi**
 
-* Leggere la telecamera dal vivo della macchina (EH3D-NODE-BUNGARD-AUX), provare fotografie di schede reali e aggiungere alla finestra l'addestramento di nuovi segni.
+* Leggere la telecamera dal vivo della macchina (EH3D-NODE-BUNGARD-AUX), provare fotografie di schede reali e mettere nella finestra l'addestramento di nuovi segni, che la libreria ha già.
 * Vedere la finestra su uno schermo e finirla.
 * Provarlo con file reali e con gli altri programmi della suite.
 * Scrivere i motori dal vivo (fotogrammi da Media Foundation, V4L2 e libcamera e il decodificatore di JPEG in movimento), provare la scacchiera di calibrazione con un obiettivo reale e l'allineamento con un tavolo reale.

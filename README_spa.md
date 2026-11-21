@@ -17,7 +17,7 @@
 
 ---
 
-**Comprobación de honestidad - lo que funciona hoy:** una biblioteca Rust y un programa de línea de comandos (`eh3d-vision`) con 687 pruebas que se ejecutan en un ordenador: encuentra marcas fiduciales redondas en una imagen, convierte píxeles en milímetros y calcula el giro y el desplazamiento que colocan una placa donde dice su diseño. Tiene una ventana (se compila con `--features gui`, el programa `eh3d-vision-gui`) que abre una imagen, muestra las marcas con sus coordenadas, fija la escala, ajusta la distorsión del objetivo con una rejilla, alinea con el diseño y exporta las opciones de ISOCAM, pero todavía no se ha visto en una pantalla; no se ha probado en una máquina y no se ha comprobado con una colección de ficheros reales.
+**Comprobación de honestidad - lo que funciona hoy:** una biblioteca Rust y un programa de línea de comandos (`eh3d-vision`) con 725 pruebas que se ejecutan en un ordenador: encuentra marcas fiduciales redondas en una imagen, convierte píxeles en milímetros y calcula el giro y el desplazamiento que colocan una placa donde dice su diseño. Tiene una ventana (se compila con `--features gui`, el programa `eh3d-vision-gui`) que abre una imagen, muestra las marcas con sus coordenadas, fija la escala, ajusta la distorsión del objetivo con una rejilla, alinea con el diseño y exporta las opciones de ISOCAM, pero todavía no se ha visto en una pantalla; no se ha probado en una máquina y no se ha comprobado con una colección de ficheros reales.
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | Versión | `0.1.2` |
 | Madurez | Funcional |
-| Pruebas | 687 |
+| Pruebas | 725 |
 | Pila tecnológica | Rust |
 | En hardware real | No probado: nada de esto se ha ejecutado en una máquina |
 
@@ -46,7 +46,7 @@ Cada línea es una parte de este repositorio y la luz dice hasta dónde llega ho
 |---|---|---|
 | Núcleo | 🟡 | encuentra marcas fiduciales redondas en una imagen, convierte píxeles en milímetros y calcula el giro y el desplazamiento que colocan una placa donde dice su diseño; probado en un ordenador con entradas normales y dañadas, no con una colección de ficheros reales. |
 | Línea de comandos | 🟡 | `eh3d-vision` ejecuta las mismas funciones que la biblioteca e imprime el resultado; cada error vuelve como mensaje y un código de salida distinto de cero. |
-| Pruebas | 🟡 | 687 pruebas pasan (`cargo test`), con casos normales, casos límite y entradas dañadas, y una cámara simulada sobre una placa que añade ruido, mala exposición, un fotograma muerto o ausente, polvo que parece una marca o un archivo de imagen cortado, y se vuelve a pedir. |
+| Pruebas | 🟡 | 725 pruebas pasan (`cargo test`), con casos normales, casos límite y entradas dañadas, y una cámara simulada sobre una placa que añade ruido, mala exposición, un fotograma muerto o ausente, polvo que parece una marca o un archivo de imagen cortado, y se vuelve a pedir. |
 | Seguridad | 🟡 | Rust seguro y simple (`forbid(unsafe_code)`; un pequeño borde unsafe solo en los motores de cámara compilados con su característica): nada entra en pánico con los ficheros recibidos y un valor malo es un error con su motivo; sin revisión independiente. |
 | Ventana | 🟠 | Escrita (egui, `--features gui`, el programa `eh3d-vision-gui`): abrir o soltar una imagen, ver las marcas con sus coordenadas, fijar la escala con una marca de tamaño conocido, ajustar la distorsión del objetivo con una rejilla, alinear con un diseño CSV y exportar las opciones de ISOCAM; su lógica está probada, pero todavía no se ha compilado ni visto en una pantalla. |
 | Cámara en vivo | 🟠 | la capa de cámara, el tablero de calibración y la alineación de una placa están escritos y probados con una cámara y una mesa simuladas; los motores de Windows, V4L2 y libcamera son esqueletos y nada se ha probado con una cámara, una lente o una placa reales. |
@@ -123,6 +123,7 @@ Cómo encajan las partes de este repositorio: quién lo usa, qué contiene y de 
 * **Resultados en la convención del servidor:** `eh3d-vision server send fiducials|focus|blobs IMAGEN` guarda un resultado en la forma que comparten el complemento `vision` de EH3D-SERVER y los programas que miran por una cámara: un fichero `vision-<tipo>.json` de formato `application/json` y esquema `eh3d.vision.result/1`, con el tamaño y el SHA-256 de la imagen, los hallazgos del tipo (`fiducials` `{x, y, radius_px, score}`, `focus` `{score, sharp}`, `blobs` `{x, y, area_px}`; `barcode` se comprueba pero nunca se hace, porque aquí nada lee códigos), las unidades (`px`) y la evidencia (`picture`, salvo que `--evidence camera|simulator` diga otra cosa: el programa no puede saber que un fichero vino de una cámara). `server check FICHERO.json` dice si cualquier documento sigue la convención y nombra la parte que no, y un documento que no la sigue se rechaza antes de enviarlo. La puntuación de una comprobación de enfoque es 50 cuando la nitidez es `focus_reference`.
 * **La estación simulada del servidor:** `eh3d-vision server detect fiducials|barcode|focus|blobs IMAGEN [--seed N] [--artifact]` pide al complemento `vision` del servidor (`POST /api/v1/work/jobs`, iniciado y leído hasta que termina) el resultado que inventa a partir del tamaño y el hash de la imagen y la semilla, siempre el mismo (`evidence: simulator`), en la vista del trabajo o guardado como artefacto. `station::simulate` es un port del complemento con el que responde el servidor en memoria, de modo que toda la cadena de trabajo, resultado y artefacto se prueba aquí sin red; no se ha ejecutado contra el servidor real.
 * **La búsqueda del servidor en la red, como interruptor real:** `eh3d-vision server discover` lista el `host:puerto` de los servidores que responden a `_eh3d._tcp` en la red local. No hace nada mientras `server_mdns` está apagado (por defecto), y el programa debe compilarse con `--features mdns` (los programas de las versiones lo están) para tener el resolutor del cliente compartido. Lo que encuentra son candidatos para que la persona elija, nunca se conecta solo a ellos, porque cualquier dispositivo de la red puede responder.
+* **Marcas entrenadas con un ejemplo, una placa muy girada y una lista segura de servidores (biblioteca):** `train` guarda el promedio de rectángulos recortados alrededor de una marca como su plantilla y la vuelve a encontrar por correlación, girada paso a paso si se pide, con su posición y su ángulo (las claves `train_*` de `vision.cfg`); `turnpair` empareja las marcas con el diseño sea cual sea el giro de la placa, con una marca que falta o una de más, y rechaza lo que dos formas explican igual de bien (las claves `pair_*`); `discovery` convierte lo que responde en la red en pocos candidatos locales bien formados (las claves `find_server_*`). Todo se prueba con imágenes dibujadas y la verdad que las dibujó; `server discover` y la ventana ya listan solo los candidatos de `discovery`, y ninguna orden ni panel usa todavía los otros dos.
 * **Un borde con fracción de píxel y su incertidumbre:** `eh3d-vision edge IMAGEN --from X,Y --to X,Y` lee la imagen a lo largo de una línea trazada a través de un borde (bilineal, separadas `edge_step_px`), toma los dos extremos de la línea como los dos fondos planos, halla dónde el perfil cruza el nivel intermedio y da la posición a lo largo de la línea y en la imagen, el contraste, el ancho de la transición y la incertidumbre (una desviación típica: el ruido de los fondos, con el redondeo de 8 bits añadido, dividido por la pendiente donde cruza). El código de salida es 1 cuando la incertidumbre supera `edge_max_uncertainty_px`; una línea sin borde es `edge_flat`. Un borde más nítido que un píxel puede desviarse hasta 0,05 px.
 * **El histograma y el umbral automático:** `eh3d-vision histogram IMAGEN --bins N` da los niveles de gris en 8 a 256 grupos y los cortes de Otsu (el que usa la búsqueda de marcas), isodata y el método del triángulo, cuánta varianza explican los dos grupos de Otsu, la proporción de píxeles negros y blancos y si los tres cortes coinciden (dentro de 8 niveles); si no coinciden, conviene revisar la iluminación o el `threshold` de `vision.cfg`.
 * **Una imagen contra una referencia, con una máscara de tolerancia:** `eh3d-vision refcheck REFERENCIA IMAGEN --tolerance MASCARA.pgm` compara dos imágenes del mismo tamaño donde la diferencia permitida puede cambiar de un sitio a otro: un píxel de la máscara en 0 mantiene el `diff_threshold` general, de 1 a 254 permite esos niveles de gris más, y 255 no se mira. Da los píxeles fuera de la tolerancia, cuánto la superan, en cuántas regiones (`diff_min_area`) y dónde; `--map FICHERO.pgm` los escribe como imagen y el código de salida es 1 por encima de `diff_max_changed`.
@@ -201,7 +202,7 @@ Para sacar una captura de la ventana sin abrirla a mano, ejecútelo con `--shot 
 
 ## 🧪 Pruebas
 
-El conjunto tiene 687 pruebas (`cargo test`, ejecutadas en Windows y Linux en el CI). Comprueban los casos normales, los casos límite y las entradas dañadas: ficheros vacíos, basura y ficheros cortados nunca provocan un pánico. El CI ejecuta además `cargo fmt --check`, `cargo clippy` con las advertencias como errores y `python -I tools/ci_validate.py`.
+El conjunto tiene 725 pruebas (`cargo test`, ejecutadas en Windows y Linux en el CI). Comprueban los casos normales, los casos límite y las entradas dañadas: ficheros vacíos, basura y ficheros cortados nunca provocan un pánico. El CI ejecuta además `cargo fmt --check`, `cargo clippy` con las advertencias como errores y `python -I tools/ci_validate.py`.
 
 ## 🏗️ Compilación y publicación
 
@@ -236,6 +237,7 @@ EH3D-VISION-STUDIO/
 │   ├── config.rs                                el fichero de configuración: cada valor afinado
 │   ├── correlate.rs                             marcas redondas halladas por correlación con un disco del diámetro buscado
 │   ├── diff.rs                                  dos imágenes del mismo sitio comparadas: qué cambió, dónde y cuánto
+│   ├── discovery.rs                             respuestas de la red como lista corta de candidatos seguros, y un resolutor guionizado
 │   ├── cross.rs                                 marcas fiduciales en forma de cruz
 │   ├── edge.rs                                  un borde con fracción de píxel a lo largo de una línea, con su incertidumbre
 │   ├── fiducial.rs                              las marcas redondas de una imagen: umbral, manchas y comprobaciones
@@ -265,6 +267,8 @@ EH3D-VISION-STUDIO/
 │   ├── sharpmap.rs                              un mapa de dónde es nítida la imagen: una rejilla de celdas, las débiles y la inclinación
 │   ├── square.rs                                marcas cuadradas y cruces girados con cualquier ángulo
 │   ├── tools.rs                                 las herramientas del panel lateral sobre la imagen: formas, piezas, informe y paso
+│   ├── train.rs                                 una marca entrenada con ejemplos, hallada por correlación en el ángulo en que está girada
+│   ├── turnpair.rs                              marcas emparejadas con el diseño con la placa girada a cualquier ángulo
 │   ├── shot.rs                                  el modo de captura de la ventana (--shot): sus argumentos, leídos y comprobados sin pantalla
 │   ├── shots.rs                                 los lugares de la cámara que cubren una pieza mayor que su campo, solo con los tamaños
 │   ├── browse.rs                                la lista de ficheros de la ventana que abre un fichero
@@ -286,6 +290,9 @@ EH3D-VISION-STUDIO/
 │   ├── camera.rs                                las órdenes nuevas ejecutadas como programa: edge, histogram, refcheck, residuos, server
 │   ├── fuzz_camera.rs                           entrada aleatoria con semilla fija para las lecturas nuevas y la convención
 │   ├── fuzz_capture.rs                          entrada aleatoria con semilla fija para lectores de imagen, calibración, alineación
+│   ├── training.rs                              una marca entrenada hallada donde y como se dibujó, y sus ficheros
+│   ├── pairing.rs                               marcas de una placa girada a cualquier ángulo emparejadas según la verdad
+│   ├── discovery.rs                             las respuestas de la red, hostiles o muchas, nunca dan un candidato inseguro
 │   ├── shot_sample.rs                           pruebas de que las muestras se abren en la ventana de una captura
 │   ├── vision.rs                                pruebas de la biblioteca y la línea de comandos
 │   └── reqs.rs                                  pruebas del registro de requisitos
@@ -321,14 +328,14 @@ EH3D-VISION-STUDIO/
 
 **Límites conocidos hoy**
 
-* La ventana todavía no se ha visto en una pantalla; las marcas se emparejan con el diseño por su posición, así que una placa muy girada o una marca que falta se rechaza en lugar de adivinarse.
+* La ventana todavía no se ha visto en una pantalla; las órdenes emparejan las marcas con el diseño por su posición, así que allí una placa muy girada o una marca que falta se rechaza (la biblioteca sabe emparejarlas, pero nada la llama todavía).
 * No se ha probado en una máquina ni con una colección de ficheros reales y no ha tenido revisión independiente.
 * Lee ficheros de imagen, y una cámara en vivo solo en la simulación (los motores de Windows, V4L2 y libcamera son esqueletos que no se han probado con una cámara real); solo encuentra marcas redondas, cuadradas y en forma de cruz y se ha probado con imágenes dibujadas por las pruebas, no con fotografías de placas reales. El giro de una pieza se mide con sus píxeles como el de un rectángulo, así que una pieza que no es un rectángulo recibe el giro de su eje largo.
 * El servidor no tiene complemento de visión, así que el programa usa los artefactos del almacén (`POST /api/v1/artifacts` para un resultado, `GET /api/v1/artifacts` y `GET /api/v1/artifacts/{id}` para la configuración de una máquina) con nombres y un formato propios (`vision-<kind>.json`, `vision-<machine>.cfg`); hoy solo se prueba contra un servidor en memoria y un socket en el bucle local, y la búsqueda del servidor por mDNS (`server_mdns`) es un interruptor sin resolutor enlazado.
 
 **Siguiente**
 
-* Leer la cámara en vivo de la máquina (EH3D-NODE-BUNGARD-AUX), probar fotografías de placas reales y añadir a la ventana el entrenamiento de marcas nuevas.
+* Leer la cámara en vivo de la máquina (EH3D-NODE-BUNGARD-AUX), probar fotografías de placas reales y poner en la ventana el entrenamiento de marcas nuevas, que la biblioteca ya tiene.
 * Ver la ventana en una pantalla y terminarla.
 * Probarlo con ficheros reales y con los demás programas de la suite.
 * Escribir los motores en vivo (imágenes de Media Foundation, V4L2 y libcamera y el decodificador de JPEG en movimiento), probar el tablero de calibración con una lente real y la alineación con una mesa real.

@@ -17,7 +17,7 @@
 
 ---
 
-**Honesty check - what actually runs today:** a Rust library and a command line program (`eh3d-vision`) with 687 tests that run on a computer: finds round fiducial marks in an image, turns pixels into millimetres and works out the turn and the shift that put a board where its design says. It has a window (built with `--features gui`, the program `eh3d-vision-gui`) that opens a picture, shows the marks with their coordinates, sets the scale, fits the distortion of the lens from a grid, aligns with the design and exports the options of ISOCAM, but the window has not been looked at on a screen yet; it has not been tried on a machine and it has not been checked against a collection of real files.
+**Honesty check - what actually runs today:** a Rust library and a command line program (`eh3d-vision`) with 725 tests that run on a computer: finds round fiducial marks in an image, turns pixels into millimetres and works out the turn and the shift that put a board where its design says. It has a window (built with `--features gui`, the program `eh3d-vision-gui`) that opens a picture, shows the marks with their coordinates, sets the scale, fits the distortion of the lens from a grid, aligns with the design and exports the options of ISOCAM, but the window has not been looked at on a screen yet; it has not been tried on a machine and it has not been checked against a collection of real files.
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | Version | `0.1.2` |
 | Maturity | Functional |
-| Tests | 687 |
+| Tests | 725 |
 | Stack | Rust |
 | On real hardware | Not tried: nothing here has run on a machine |
 
@@ -46,7 +46,7 @@ Each line is one part of this repository and the light says how far it is today.
 |---|---|---|
 | Core | 🟡 | finds round fiducial marks in an image, turns pixels into millimetres and works out the turn and the shift that put a board where its design says; tested on a computer with normal and damaged input, not with a collection of real files. |
 | Command line | 🟡 | `eh3d-vision` runs the same functions as the library and prints the result; every error comes back as a message and a non-zero exit code. |
-| Tests | 🟡 | 687 tests pass (`cargo test`), with normal cases, edge cases and damaged input, and a simulated camera over a board that adds noise, wrong exposure, a dead or missing frame, dust that looks like a mark or a cut picture file, and is asked again. |
+| Tests | 🟡 | 725 tests pass (`cargo test`), with normal cases, edge cases and damaged input, and a simulated camera over a board that adds noise, wrong exposure, a dead or missing frame, dust that looks like a mark or a cut picture file, and is asked again. |
 | Security | 🟡 | Plain safe Rust (`forbid(unsafe_code)`; a small unsafe edge only in the camera backends built with their own feature): nothing panics on the files it is given and a bad value is an error with its reason; no independent review. |
 | Window | 🟠 | Written (egui, `--features gui`, the program `eh3d-vision-gui`): open or drop a picture, see the marks with their coordinates, set the scale from a mark of known size, fit the distortion of the lens from a grid, align with a CSV design and export the options of ISOCAM; its logic is tested, but it has not been built or looked at on a screen yet. |
 | Live camera | 🟠 | the camera layer, the calibration board and the alignment of a board are written and tested on a simulated camera and stage; the backends of Windows, V4L2 and libcamera are skeletons and nothing has been run on a real camera, lens or board. |
@@ -123,6 +123,7 @@ How the parts of this repository fit together: who uses it, what it holds and wh
 * **Results in the convention of the server:** `eh3d-vision server send fiducials|focus|blobs IMAGE` keeps a result in the form that the `vision` plugin of EH3D-SERVER and the programs that look through a camera share: a file `vision-<kind>.json` of format `application/json` and schema `eh3d.vision.result/1`, with the size and the SHA-256 of the picture, the findings of the kind (`fiducials` `{x, y, radius_px, score}`, `focus` `{score, sharp}`, `blobs` `{x, y, area_px}`; `barcode` is checked but never made, since nothing here reads codes), the units (`px`) and the evidence (`picture` unless `--evidence camera|simulator` says otherwise: the program cannot know that a file came from a camera). `server check FILE.json` tells whether any document follows the convention and names the part that does not, and a document that does not follow it is refused before it is sent. The score of a focus check is 50 when the sharpness is `focus_reference`.
 * **The simulated station of the server:** `eh3d-vision server detect fiducials|barcode|focus|blobs IMAGE [--seed N] [--artifact]` asks the `vision` plugin of the server (`POST /api/v1/work/jobs`, started and read until it ends) for the result that it makes up from the size and the hash of the picture and the seed, the same one every time (`evidence: simulator`), in the view of the job or kept as an artifact. `station::simulate` is a port of the plugin that the server in memory answers with, so the whole chain of job, result and artifact is tested here without a network; it has not been run against the real server.
 * **The search for the server on the network, as a real switch:** `eh3d-vision server discover` lists the `host:port` of the servers that answer to `_eh3d._tcp` on the local network. It does nothing while `server_mdns` is off (the default), and the program has to be built with `--features mdns` (the release programs are) to have the resolver of the shared client. What it finds are candidates for the person to choose, never connected to by themselves, since any device of the network can answer.
+* **Marks trained from an example, a board turned a lot, and a safe list of servers (library):** `train` keeps the average of rectangles cut around one mark as its template and finds it again by correlation, turned a step at a time when asked, with its place and its angle (the `train_*` keys of `vision.cfg`); `turnpair` pairs the marks with the design whatever the turn of the board, with a mark missing or an extra one, and refuses what two ways explain equally well (the `pair_*` keys); `discovery` turns what answers on the network into a few well formed local candidates (the `find_server_*` keys). All of it is tried on drawn pictures with the truth that drew them; `server discover` and the window already list only the candidates of `discovery`, and no command or panel uses the other two yet.
 * **An edge to a fraction of a pixel, with its uncertainty:** `eh3d-vision edge IMAGE --from X,Y --to X,Y` reads the picture along a line laid across an edge (bilinear, `edge_step_px` apart), takes the two ends of the line as the two flat grounds, finds where the profile crosses the level half way between them and gives the position along the line and in the picture, the contrast, the width of the transition and the uncertainty (one standard deviation: the noise of the grounds, with the rounding of 8 bits added, over the slope where it crosses). The exit code is 1 when the uncertainty is above `edge_max_uncertainty_px`; a line without an edge is `edge_flat`. An edge sharper than a pixel can lean by up to 0.05 px.
 * **The histogram and the automatic threshold:** `eh3d-vision histogram IMAGE --bins N` gives the grey levels in 8 to 256 groups and the cuts of Otsu (the one the search for marks uses), isodata and the triangle method, how much of the variance the two groups of Otsu explain, the share of black and white pixels and whether the three cuts agree (within 8 levels); when they do not, the lighting or the `threshold` of `vision.cfg` should be looked at.
 * **A picture against a reference, through a mask of tolerance:** `eh3d-vision refcheck REFERENCE PICTURE --tolerance MASK.pgm` compares two pictures of the same size where the allowed difference can change from place to place: a pixel of the mask at 0 keeps the general `diff_threshold`, from 1 to 254 allows that many grey levels more, and 255 is not looked at. It gives the pixels outside the tolerance, how far they pass it, in how many regions (`diff_min_area`) and where; `--map FILE.pgm` writes them as a picture and the exit code is 1 above `diff_max_changed`.
@@ -201,7 +202,7 @@ To take a picture of the window without opening it by hand, run it with `--shot 
 
 ## 🧪 Testing
 
-The suite has 687 tests (`cargo test`, run on Windows and Linux in the CI). They check the normal cases, the edge cases and damaged input: empty files, garbage and cut files never panic. The CI also runs `cargo fmt --check`, `cargo clippy` with warnings as errors and `python -I tools/ci_validate.py`.
+The suite has 725 tests (`cargo test`, run on Windows and Linux in the CI). They check the normal cases, the edge cases and damaged input: empty files, garbage and cut files never panic. The CI also runs `cargo fmt --check`, `cargo clippy` with warnings as errors and `python -I tools/ci_validate.py`.
 
 ## 🏗️ Build & Release
 
@@ -236,6 +237,7 @@ EH3D-VISION-STUDIO/
 │   ├── config.rs                                the configuration file: every tuned value
 │   ├── correlate.rs                             round marks found by correlation with a disc of the wanted diameter
 │   ├── diff.rs                                  two pictures of the same place compared: what changed, where and how much
+│   ├── discovery.rs                             answers of the network as a short list of safe candidates, and a scripted resolver
 │   ├── cross.rs                                 cross-shaped fiducial marks
 │   ├── edge.rs                                  an edge to a fraction of a pixel along a line, with its uncertainty
 │   ├── fiducial.rs                              the round marks of a picture: threshold, spots and checks
@@ -265,6 +267,8 @@ EH3D-VISION-STUDIO/
 │   ├── sharpmap.rs                              a map of where the picture is sharp: a grid of cells, the weak ones and the tilt
 │   ├── square.rs                                square marks and cross marks turned by any angle
 │   ├── tools.rs                                 the tools of the side panel on the picture: shapes, parts, folder report, pitch scale
+│   ├── train.rs                                 a mark trained from examples, found again by correlation at the angle it is turned
+│   ├── turnpair.rs                              the marks paired with the design for a board turned by any angle, a mark missing or extra
 │   ├── shot.rs                                  the picture mode of the window (--shot): its arguments, read and checked without a screen
 │   ├── shots.rs                                 the places of the camera that cover a part bigger than its field, from the sizes alone
 │   ├── browse.rs                                the list of files of the window that opens a file
@@ -286,6 +290,9 @@ EH3D-VISION-STUDIO/
 │   ├── camera.rs                                the new commands run as a program: edge, histogram, refcheck, lens residuals, server
 │   ├── fuzz_camera.rs                           random input with a fixed seed for the new readings and the convention
 │   ├── fuzz_capture.rs                          random input with a fixed seed for frame readers, calibration files, alignment
+│   ├── training.rs                              a trained mark found at the place and angle that drew it, and its files and rectangles
+│   ├── pairing.rs                               marks of a board turned by any angle paired as the truth says, with random points
+│   ├── discovery.rs                             answers of the network, hostile or many, never make an unsafe candidate
 │   ├── shot_sample.rs                           tests that the samples open in the window of a picture
 │   ├── vision.rs                                tests of the library and the command line
 │   └── reqs.rs                                  tests of the register of requirements
@@ -321,14 +328,14 @@ EH3D-VISION-STUDIO/
 
 **Known limits today**
 
-* The window has not been looked at on a screen yet; the marks are paired with the design by their places, so a board that is turned a lot or a mark that is missing is refused instead of guessed.
+* The window has not been looked at on a screen yet; the commands pair the marks with the design by their places, so a board that is turned a lot or a mark that is missing is refused there (the library can pair them, but nothing calls it yet).
 * It has not been tried on a machine nor with a collection of real files, and it has had no independent review.
 * It reads picture files, and a live camera only in the simulation (the backends of Windows, V4L2 and libcamera are skeletons that have not been run on a real camera); it finds round, cross-shaped and square marks only, and it has been tried on pictures drawn by the tests, not on photographs of real boards. The turn of a part is measured from its pixels as for a rectangle, so a part that is not a rectangle gets the turn of its long axis.
 * The server has no plugin of vision, so the program uses the artifacts of the store (`POST /api/v1/artifacts` for a result, `GET /api/v1/artifacts` and `GET /api/v1/artifacts/{id}` for the configuration of a machine) with names and a format of its own (`vision-<kind>.json`, `vision-<machine>.cfg`); today it is tested against a server in memory and a socket on the loopback only, and the look for the server by mDNS (`server_mdns`) is a switch with no resolver linked in.
 
 **Next**
 
-* Read the live camera of the machine (EH3D-NODE-BUNGARD-AUX), try photographs of real boards and add the training of new marks to the window.
+* Read the live camera of the machine (EH3D-NODE-BUNGARD-AUX), try photographs of real boards and put the training of new marks, which the library has, in the window.
 * Look at the window on a screen and finish it.
 * Try it with real files and with the other programs of the suite.
 * Write the live backends (frames from Media Foundation, V4L2 and libcamera and the decoder of motion JPEG), try the calibration board with a real lens and the alignment with a real stage.

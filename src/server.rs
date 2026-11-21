@@ -359,6 +359,23 @@ pub fn find_servers(settings: &sc::Settings) -> Result<Vec<String>, ClientError>
     panel_client(settings).discover()
 }
 
+/// As [`find_servers`], but what answers is turned into the short list of safe candidates of `discovery` (well formed, of the local network unless the settings allow more, written once,
+/// the address in `server_address` first), and the network is asked again up to `find.tries` times when nothing useful answers. A refusal to ask (the key is off, no resolver) is returned
+/// at once. An empty list means that nothing usable answered.
+pub fn find_server_candidates(
+    settings: &sc::Settings,
+    find: &crate::discovery::FindSettings,
+) -> Result<Vec<String>, ClientError> {
+    for _ in 0..find.tries.clamp(1, 5) {
+        let found = find_servers(settings)?;
+        let safe = crate::discovery::candidates(&found, find, &settings.server_address);
+        if !safe.list.is_empty() {
+            return Ok(safe.list.into_iter().map(|c| c.address).collect());
+        }
+    }
+    Ok(Vec::new())
+}
+
 /// The name of the artifact that holds the configuration of a machine.
 pub fn config_name(machine: &str) -> String {
     format!("vision-{machine}.cfg")
@@ -482,7 +499,7 @@ pub fn base64_decode(text: &str) -> Option<Vec<u8>> {
 pub struct Applied {
     /// The keys that were set.
     pub applied: Vec<String>,
-    /// The keys that were left alone: the keys of the link (a server must not redirect this program or change its token) and the ones this program does not have.
+    /// The keys that were left alone: the keys of the link and of the search for servers (a server must not redirect this program, change its token or widen which addresses are offered) and the ones this program does not have.
     pub ignored: Vec<String>,
 }
 
@@ -494,7 +511,10 @@ pub fn apply_remote(
     let mut next = config.clone();
     let mut done = Applied::default();
     for (key, value) in pairs {
-        if key.starts_with("server_") || !KEYS.contains(&key.as_str()) {
+        if key.starts_with("server_")
+            || key.starts_with("find_server_")
+            || !KEYS.contains(&key.as_str())
+        {
             done.ignored.push(key.clone());
             continue;
         }
@@ -1799,11 +1819,35 @@ mod tests {
     }
 
     #[test]
+    fn a_server_cannot_change_which_addresses_are_offered_as_candidates() {
+        let pairs = vec![
+            ("find_server_private_only".to_string(), "no".to_string()),
+            ("find_server_max".to_string(), "64".to_string()),
+            ("pair_tolerance_mm".to_string(), "0.4".to_string()),
+        ];
+        let (next, done) = apply_remote(&Config::default(), &pairs).unwrap();
+        assert!(next.find_server_private_only);
+        assert_eq!(next.find_server_max, Config::default().find_server_max);
+        assert_eq!(
+            done.ignored,
+            ["find_server_private_only", "find_server_max"]
+        );
+        assert_eq!(done.applied, ["pair_tolerance_mm"]);
+        assert_eq!(next.pair_tolerance_mm, 0.4);
+    }
+
+    #[test]
     fn the_client_of_the_panel_needs_no_address_and_the_search_says_why_it_cannot_run() {
         // no address: the panel is where it is written
         let c = panel_client(&sc::Settings::default());
         assert_eq!(c.link(), Link::Unknown);
         let e = find_servers(&sc::Settings::default()).unwrap_err();
+        assert!(describe(&e).contains("server_mdns is off"), "{e}");
+        let e = find_server_candidates(
+            &sc::Settings::default(),
+            &crate::discovery::FindSettings::default(),
+        )
+        .unwrap_err();
         assert!(describe(&e).contains("server_mdns is off"), "{e}");
         // the key on: without the feature there is no resolver to ask (with it the loopback test below asks, and nothing here goes out to a real network)
         #[cfg(not(feature = "mdns"))]

@@ -197,6 +197,19 @@
           }
         },
         {
+          "name": "discovery.rs",
+          "desc": {
+            "en": "answers of the network as a short list of safe candidates, and a scripted resolver",
+            "es": "respuestas de la red como lista corta de candidatos seguros, y un resolutor guionizado",
+            "de": "Netzantworten als kurze Liste sicherer Kandidaten und ein skriptgesteuerter Resolver",
+            "fr": "réponses du réseau en une courte liste de candidats sûrs, et un résolveur scénarisé",
+            "it": "risposte della rete in un breve elenco di candidati sicuri, e un risolutore a copione",
+            "ja": "ネットワークの応答を安全な候補の短い一覧にする処理と、台本どおりに答えるリゾルバー",
+            "zh": "把网络应答变成安全候选的简短列表，以及按脚本应答的解析器",
+            "pt": "respostas da rede numa lista curta de candidatos seguros, e um resolvedor com guião"
+          }
+        },
+        {
           "name": "cross.rs",
           "desc": {
             "en": "cross-shaped fiducial marks",
@@ -574,6 +587,32 @@
           }
         },
         {
+          "name": "train.rs",
+          "desc": {
+            "en": "a mark trained from examples, found again by correlation at the angle it is turned",
+            "es": "una marca entrenada con ejemplos, hallada por correlación en el ángulo en que está girada",
+            "de": "eine aus Beispielen trainierte Marke, per Korrelation im gedrehten Winkel wiedergefunden",
+            "fr": "une marque entraînée sur des exemples, retrouvée par corrélation à son angle",
+            "it": "un segno addestrato da esempi, ritrovato per correlazione all'angolo in cui è ruotato",
+            "ja": "見本から学習したマークを、回転した角度も含めて相関で再発見する",
+            "zh": "由示例训练出的标记，通过相关性在其旋转角度上再次找到",
+            "pt": "uma marca treinada com exemplos, encontrada por correlação no ângulo em que está rodada"
+          }
+        },
+        {
+          "name": "turnpair.rs",
+          "desc": {
+            "en": "the marks paired with the design for a board turned by any angle, a mark missing or extra",
+            "es": "marcas emparejadas con el diseño con la placa girada a cualquier ángulo",
+            "de": "Marken dem Entwurf zugeordnet bei beliebig gedrehter Platine",
+            "fr": "marques appariées au dessin pour une carte tournée à tout angle",
+            "it": "segni abbinati al disegno per una scheda ruotata di qualsiasi angolo",
+            "ja": "基板がどんな角度に回転していても、マークの欠けや余分があっても設計と対応付ける",
+            "zh": "无论电路板旋转多少角度、缺少或多出标记，都把标记与设计配对",
+            "pt": "marcas emparelhadas com o desenho para uma placa rodada a qualquer ângulo"
+          }
+        },
+        {
           "name": "shot.rs",
           "desc": {
             "en": "the picture mode of the window (--shot): its arguments, read and checked without a screen",
@@ -838,6 +877,45 @@
             "ja": "フレーム読み取り・校正ファイル・位置合わせの固定シードのランダム入力",
             "zh": "针对画面读取、标定文件、对位的固定种子随机输入",
             "pt": "entrada aleatória com semente fixa para leitores de imagem, calibração, alinhamento"
+          }
+        },
+        {
+          "name": "training.rs",
+          "desc": {
+            "en": "a trained mark found at the place and angle that drew it, and its files and rectangles",
+            "es": "una marca entrenada hallada donde y como se dibujó, y sus ficheros",
+            "de": "eine trainierte Marke an Ort und Winkel ihrer Zeichnung gefunden, samt Dateien",
+            "fr": "une marque entraînée retrouvée au lieu et à l'angle qui l'ont dessinée, avec ses fichiers",
+            "it": "un segno addestrato ritrovato dove e come è stato disegnato, con i file",
+            "ja": "学習したマークが描いた位置と角度で見つかること、およびそのファイルと矩形",
+            "zh": "训练出的标记在绘制它的位置和角度被找到，以及其文件和矩形",
+            "pt": "uma marca treinada encontrada onde e como foi desenhada, e os seus ficheiros"
+          }
+        },
+        {
+          "name": "pairing.rs",
+          "desc": {
+            "en": "marks of a board turned by any angle paired as the truth says, with random points",
+            "es": "marcas de una placa girada a cualquier ángulo emparejadas según la verdad",
+            "de": "Marken einer beliebig gedrehten Platine wie die Wahrheit zugeordnet, mit Zufallspunkten",
+            "fr": "marques d'une carte tournée à tout angle appariées selon la vérité",
+            "it": "segni di una scheda ruotata di qualsiasi angolo abbinati secondo la verità",
+            "ja": "任意角度旋转的基板的标记按真值配对，并用随机点测试",
+            "zh": "任意角度旋转电路板的标记按真值配对，并使用随机点",
+            "pt": "marcas de uma placa rodada a qualquer ângulo emparelhadas pela verdade"
+          }
+        },
+        {
+          "name": "discovery.rs",
+          "desc": {
+            "en": "answers of the network, hostile or many, never make an unsafe candidate",
+            "es": "las respuestas de la red, hostiles o muchas, nunca dan un candidato inseguro",
+            "de": "Antworten des Netzes, feindlich oder viele, ergeben nie einen unsicheren Kandidaten",
+            "fr": "les réponses du réseau, hostiles ou nombreuses, ne donnent jamais un candidat risqué",
+            "it": "le risposte della rete, ostili o numerose, non danno mai un candidato non sicuro",
+            "ja": "敵対的または大量のネットワーク応答でも、安全でない候補は決して作られない",
+            "zh": "网络应答无论恶意还是数量多，都不会产生不安全的候选",
+            "pt": "as respostas da rede, hostis ou muitas, nunca dão um candidato inseguro"
           }
         },
         {

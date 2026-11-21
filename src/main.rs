@@ -23,6 +23,7 @@ use eh3d_vision_studio::cross::{find_crosses, CrossSettings};
 use eh3d_vision_studio::diff::{
     compare as diff_compare, mask as diff_mask, to_csv as diff_csv, to_json as diff_json,
 };
+use eh3d_vision_studio::discovery::candidates;
 use eh3d_vision_studio::edge::{
     measure as edge_measure, summary as edge_summary, to_csv as edge_csv, to_json as edge_json,
 };
@@ -1891,13 +1892,21 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
             }
             if sub == "discover" {
                 finish(&args, 0)?;
+                let preferred = settings.server_address.clone();
                 let found = discovery_client(settings)?
                     .discover()
                     .map_err(|e| describe(&e))?;
-                for address in &found {
-                    println!("{address}");
+                let safe = candidates(&found, &cfg.find_settings(), &preferred);
+                for c in &safe.list {
+                    println!("{}", c.address);
                 }
-                if found.is_empty() {
+                if !safe.refused.is_empty() {
+                    eprintln!(
+                        "{} answer(s) left out: not a well formed address of the local network, written twice or over the limit (find_server_* in vision.cfg)",
+                        safe.refused.len()
+                    );
+                }
+                if safe.list.is_empty() {
                     eprintln!("no server answered on the local network");
                 } else {
                     eprintln!("these are candidates, not proofs: any device of the network can answer. Choose the one you trust and write it as server_address");

@@ -2,7 +2,7 @@
 
 This register is the single source of the state of each capability: `STATUS.md` and the README files cite it and never state a state that it does not. A state is one of `planned`, `prototype`, `implemented` and `validated`. `validated` means that a person has run the capability on a real machine and the evidence of the manifest says `bench` or `field`; nothing here is validated, because no photograph of a real board and no real camera has been used.
 
-The register has 47 requirements: 32 implemented, 8 prototype, 7 planned and 0 validated. By progress: 32 done, 8 partial, 3 pending and 4 blocked. High coverage is not proof of correctness, so each row says how it is checked: the test that names it, and what it shows.
+The register has 50 requirements: 35 implemented, 11 prototype, 4 planned and 0 validated. By progress: 35 done, 11 partial, 0 pending and 4 blocked. High coverage is not proof of correctness, so each row says how it is checked: the test that names it, and what it shows.
 
 ## How to read the register
 
@@ -80,14 +80,22 @@ The check is `tests/reqs.rs`: it reads this table, finds each test and fails whe
 | VSTD-039 | The window opens a picture and finds its marks, with every field a key of the configuration. | prototype | partial | host-test | `src/window::opening_a_picture_finds_its_marks` | The logic is tested without a screen; no person has looked at the drawing. |
 | VSTD-040 | Every sentence of the window has a text in each of the eight languages. | implemented | done | host-test | `src/lang::every_sentence_has_a_text_in_each_of_the_eight_languages` | - |
 
-## Not written yet
+## Not finished yet
 
 | ID | Requirement | State | Progress | Evidence | Test | Limits |
 |---|---|---|---|---|---|---|
 | VSTD-041 | A live camera is read on a real camera through each backend. | planned | blocked | none | `planned:real_camera::a_real_camera_gives_frames_through_each_backend` | Needs a camera and a person. |
 | VSTD-042 | The searches are tried on photographs of real boards. | planned | blocked | none | `planned:photographs::the_searches_find_the_marks_of_a_real_photograph` | Needs photographs from a person. |
-| VSTD-043 | The window trains a new mark from an example. | planned | pending | none | `planned:training::a_new_mark_is_trained_from_an_example` | The window finds only the marks the library knows. |
-| VSTD-044 | Marks are paired with the design for a board turned a lot or with a mark missing. | planned | pending | none | `planned:pairing::a_board_turned_a_lot_is_paired_with_the_design` | Refused instead of guessed today. |
-| VSTD-045 | The search for the server on the network has a resolver. | planned | pending | none | `planned:mdns::the_server_is_found_by_mdns` | `server_mdns` is a switch with no resolver linked in. |
+| VSTD-043 | The window trains a new mark from an example. | prototype | partial | host-test | `src/train::a_new_mark_is_trained_from_an_example` | The training and the search with the mark are written and tried on drawn marks; no command and no panel of the window uses them yet. |
+| VSTD-044 | Marks are paired with the design for a board turned a lot or with a mark missing. | prototype | partial | host-test | `pairing::a_board_turned_a_lot_is_paired_with_the_design` | Tried on drawn boards against the truth that drew them; the commands and the alignment still pair by place, and a design that looks the same when turned is refused unless the turn allowed is narrowed. |
+| VSTD-045 | The search for the server on the network has a resolver. | prototype | partial | simulator | `src/discovery::the_server_is_found_by_mdns` | Tried with a scripted resolver that is silent, floods or lies; the resolver of the suite is linked only with the feature `mdns` and no real network was asked. |
 | VSTD-046 | The alignment is tried with a real stage and a real camera. | planned | blocked | none | `planned:real_stage::a_real_stage_puts_a_real_board_where_the_design_says` | Needs a stage, a camera and a board. |
 | VSTD-047 | The window is looked at on a screen and matches the picture the program takes of itself. | planned | blocked | none | `planned:window_screen::the_window_matches_the_reference_picture` | Needs a person at a screen. |
+
+## Training, turned pairing and the candidates of the search
+
+| ID | Requirement | State | Progress | Evidence | Test | Limits |
+|---|---|---|---|---|---|---|
+| VSTD-048 | A trained mark is found at any turn with the place and the angle that drew it, and a stripe that cannot say where it is is refused. | implemented | done | host-test | `training::a_turned_mark_is_found_with_the_place_and_the_angle_of_the_truth` | Drawn marks with noise, not photographs. |
+| VSTD-049 | The file of a trained mark is read within limits, and a cut, lying or oversize file is refused with its code. | implemented | done | host-test | `training::files_and_rectangles_of_any_shape_never_panic` | Seeded generation, not a continuous fuzzer. |
+| VSTD-050 | What answers on the network, however hostile or many, never makes an unsafe candidate, and the list is the same whoever answered first. | implemented | done | host-test | `discovery::hostile_answers_never_make_an_unsafe_candidate` | Seeded generation; the packets of the resolver of the suite are also tried when the feature `mdns` is on. |

@@ -14,7 +14,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 126] = [
+pub const KEYS: [&str; 140] = [
     "language",
     "polarity",
     "threshold",
@@ -92,6 +92,20 @@ pub const KEYS: [&str; 126] = [
     "server_mdns",
     "correlate_diameter",
     "correlate_min_score",
+    "train_min_side",
+    "train_max_side",
+    "train_min_contrast",
+    "train_agree_score",
+    "train_max_ambiguity",
+    "train_min_score",
+    "train_turn_step_deg",
+    "train_turn_max_deg",
+    "pair_tolerance_mm",
+    "pair_min_marks",
+    "pair_max_turn_deg",
+    "find_server_max",
+    "find_server_private_only",
+    "find_server_tries",
     "rectify_max_side",
     "pads_tolerance",
     "diff_threshold",
@@ -269,6 +283,24 @@ pub struct Config {
     /// `correlate`: the diameter in pixels of the disc that is looked for (the search by correlation needs it) and the least correlation that counts as a mark.
     pub correlate_diameter: f64,
     pub correlate_min_score: f64,
+    /// `train`: the sides of the examples that train a mark in pixels, the least contrast of an example, how well several examples must agree, the most that a mark may look like itself
+    /// moved a few pixels, the least score of a search with the trained mark, the step of the turn in degrees and how far the search turns it (0: not at all, 180: every angle).
+    pub train_min_side: usize,
+    pub train_max_side: usize,
+    pub train_min_contrast: f64,
+    pub train_agree_score: f64,
+    pub train_max_ambiguity: f64,
+    pub train_min_score: f64,
+    pub train_turn_step_deg: f64,
+    pub train_turn_max_deg: f64,
+    /// `pair`: how far a mark may lie from where a pairing puts it (millimetres), the least marks that must be paired and the most that the board may be turned (degrees) when the marks are paired with the design whatever the turn.
+    pub pair_tolerance_mm: f64,
+    pub pair_min_marks: usize,
+    pub pair_max_turn_deg: f64,
+    /// `find_server`: the most candidates of the search on the local network, whether only the addresses of the local network are kept, and how many times it asks when nothing useful answers.
+    pub find_server_max: usize,
+    pub find_server_private_only: bool,
+    pub find_server_tries: usize,
     /// `rectify`: the largest side in pixels of the picture that is made.
     pub rectify_max_side: usize,
     /// `pads`: how much the pitch of a row of pads may vary as a share of the median pitch.
@@ -417,6 +449,20 @@ impl Default for Config {
             server_mdns: false,
             correlate_diameter: 20.0,
             correlate_min_score: 0.8,
+            train_min_side: 8,
+            train_max_side: 96,
+            train_min_contrast: 20.0,
+            train_agree_score: 0.8,
+            train_max_ambiguity: 0.9,
+            train_min_score: 0.8,
+            train_turn_step_deg: 5.0,
+            train_turn_max_deg: 0.0,
+            pair_tolerance_mm: 0.5,
+            pair_min_marks: 3,
+            pair_max_turn_deg: 180.0,
+            find_server_max: 8,
+            find_server_private_only: true,
+            find_server_tries: 2,
             rectify_max_side: 4096,
             pads_tolerance: 0.05,
             diff_threshold: 25,
@@ -540,6 +586,40 @@ impl Config {
             diameter: self.correlate_diameter,
             min_score: self.correlate_min_score,
             max_matches: self.max_parts,
+        }
+    }
+
+    /// The settings of the training of a mark and of the search with it that the values make.
+    pub fn train_settings(&self) -> crate::train::TrainSettings {
+        crate::train::TrainSettings {
+            min_side: self.train_min_side,
+            max_side: self.train_max_side,
+            min_contrast: self.train_min_contrast,
+            agree_score: self.train_agree_score,
+            max_ambiguity: self.train_max_ambiguity,
+            min_score: self.train_min_score,
+            turn_step_deg: self.train_turn_step_deg,
+            turn_max_deg: self.train_turn_max_deg,
+            max_matches: self.max_parts,
+        }
+    }
+
+    /// The settings of the pairing of the marks with the design whatever the turn that the values make (the stretch is the one of the alignment).
+    pub fn pair_settings(&self) -> crate::turnpair::PairSettings {
+        crate::turnpair::PairSettings {
+            tolerance_mm: self.pair_tolerance_mm,
+            min_marks: self.pair_min_marks,
+            max_turn_deg: self.pair_max_turn_deg,
+            max_stretch: self.max_stretch,
+        }
+    }
+
+    /// The settings of the list of candidates of the search for the server on the network that the values make.
+    pub fn find_settings(&self) -> crate::discovery::FindSettings {
+        crate::discovery::FindSettings {
+            max_candidates: self.find_server_max,
+            private_only: self.find_server_private_only,
+            tries: self.find_server_tries,
         }
     }
 
@@ -814,6 +894,20 @@ impl Config {
             "server_mdns" => self.server_mdns = yes_no(value, key)?,
             "correlate_diameter" => self.correlate_diameter = number(value, key)?,
             "correlate_min_score" => self.correlate_min_score = number(value, key)?,
+            "train_min_side" => self.train_min_side = count(value, key)?,
+            "train_max_side" => self.train_max_side = count(value, key)?,
+            "train_min_contrast" => self.train_min_contrast = number(value, key)?,
+            "train_agree_score" => self.train_agree_score = number(value, key)?,
+            "train_max_ambiguity" => self.train_max_ambiguity = number(value, key)?,
+            "train_min_score" => self.train_min_score = number(value, key)?,
+            "train_turn_step_deg" => self.train_turn_step_deg = number(value, key)?,
+            "train_turn_max_deg" => self.train_turn_max_deg = number(value, key)?,
+            "pair_tolerance_mm" => self.pair_tolerance_mm = number(value, key)?,
+            "pair_min_marks" => self.pair_min_marks = count(value, key)?,
+            "pair_max_turn_deg" => self.pair_max_turn_deg = number(value, key)?,
+            "find_server_max" => self.find_server_max = count(value, key)?,
+            "find_server_private_only" => self.find_server_private_only = yes_no(value, key)?,
+            "find_server_tries" => self.find_server_tries = count(value, key)?,
             "rectify_max_side" => self.rectify_max_side = count(value, key)?,
             "pads_tolerance" => self.pads_tolerance = number(value, key)?,
             "diff_threshold" => {
@@ -1027,6 +1121,10 @@ impl Config {
         crate::server::link_settings(self)?;
         crate::correlate::check(&self.correlate_settings())
             .map_err(|e| format!("correlate_diameter and correlate_min_score: {e}"))?;
+        crate::train::check(&self.train_settings()).map_err(|e| format!("train_*: {e}"))?;
+        crate::turnpair::check(&self.pair_settings()).map_err(|e| format!("pair_*: {e}"))?;
+        crate::discovery::check(&self.find_settings())
+            .map_err(|e| format!("find_server_*: {e}"))?;
         if !(crate::perspective::MIN_SIDE..=crate::perspective::MAX_SIDE_LIMIT)
             .contains(&self.rectify_max_side)
         {
@@ -1354,6 +1452,26 @@ quality_max_mean = 100",
             "correlate_diameter = 200",
             "correlate_min_score = 0",
             "correlate_min_score = 1.1",
+            "train_min_side = 3",
+            "train_max_side = 7",
+            "train_max_side = 257",
+            "train_min_contrast = 256",
+            "train_agree_score = 0",
+            "train_max_ambiguity = 1",
+            "train_min_score = 0",
+            "train_turn_step_deg = 0.5",
+            "train_turn_step_deg = 46",
+            "train_turn_max_deg = 181",
+            "pair_tolerance_mm = 0",
+            "pair_tolerance_mm = 51",
+            "pair_min_marks = 1",
+            "pair_min_marks = 25",
+            "pair_max_turn_deg = 181",
+            "find_server_max = 0",
+            "find_server_max = 65",
+            "find_server_private_only = maybe",
+            "find_server_tries = 0",
+            "find_server_tries = 6",
             "rectify_max_side = 1",
             "rectify_max_side = 16385",
             "pads_tolerance = 0",
