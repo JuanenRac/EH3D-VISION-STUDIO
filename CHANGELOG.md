@@ -3,6 +3,7 @@
 All notable changes to this project are documented here.
 
 ## [Unreleased]
+- **Behaviour tests at the exact edge of the window, the sizes of the rings, the angles, the lens and the frames of a motion JPEG:** three new test files add 50 deterministic tests without changing the behaviour: what the window says when a picture is missing, what it keeps when a file is refused or too big, the fields of the edge, the mask and the check against a reference, the words of the status line in the eight languages (the codes of the languages and the places of a text), the classes of size of the rings (the widest gap, a gap as wide as asked, noise), the angle wrapped to a half-open range, the lens bent and corrected from a fixed seed, and the headers of a motion JPEG frame field by field (every code of error, the limits of the settings, tables and components that cannot be, noise from a fixed seed).
 
 ## [0.1.3] - Training of marks, pairing for any turn, a safe list of candidates for the search of the server, a reader of motion JPEG frames, a card of dots to print, a check of the light and a search for the holes of a tape
 
