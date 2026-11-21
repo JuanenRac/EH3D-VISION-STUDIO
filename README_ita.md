@@ -17,7 +17,7 @@
 
 ---
 
-**Verifica di onestà - cosa funziona oggi:** una libreria Rust e un programma a riga di comando (`eh3d-vision`) con 678 test eseguiti su un computer: trova segni fiduciali rotondi in un'immagine, converte i pixel in millimetri e calcola la rotazione e lo spostamento che portano una scheda dove dice il suo progetto. Ha una finestra (si compila con `--features gui`, il programma `eh3d-vision-gui`) che apre un'immagine, mostra i segni con le loro coordinate, imposta la scala, calcola la distorsione dell'obiettivo da una griglia, allinea al progetto ed esporta le opzioni di ISOCAM, ma la finestra non è ancora stata vista su uno schermo; non è stato provato su una macchina e non è stato verificato su una raccolta di file reali.
+**Verifica di onestà - cosa funziona oggi:** una libreria Rust e un programma a riga di comando (`eh3d-vision`) con 687 test eseguiti su un computer: trova segni fiduciali rotondi in un'immagine, converte i pixel in millimetri e calcola la rotazione e lo spostamento che portano una scheda dove dice il suo progetto. Ha una finestra (si compila con `--features gui`, il programma `eh3d-vision-gui`) che apre un'immagine, mostra i segni con le loro coordinate, imposta la scala, calcola la distorsione dell'obiettivo da una griglia, allinea al progetto ed esporta le opzioni di ISOCAM, ma la finestra non è ancora stata vista su uno schermo; non è stato provato su una macchina e non è stato verificato su una raccolta di file reali.
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | Versione | `0.1.2` |
 | Maturità | Funzionale |
-| Test | 678 |
+| Test | 687 |
 | Stack tecnologico | Rust |
 | Su hardware reale | Non provato: nulla di questo ha girato su una macchina |
 
@@ -46,7 +46,7 @@ Ogni riga è una parte di questo repository e il semaforo dice a che punto è og
 |---|---|---|
 | Nucleo | 🟡 | trova segni fiduciali rotondi in un'immagine, converte i pixel in millimetri e calcola la rotazione e lo spostamento che portano una scheda dove dice il suo progetto; provato su un computer con input normali e danneggiati, non con una raccolta di file reali. |
 | Riga di comando | 🟡 | `eh3d-vision` esegue le stesse funzioni della libreria e stampa il risultato; ogni errore torna come messaggio e codice di uscita diverso da zero. |
-| Test | 🟡 | 678 test passano (`cargo test`), con casi normali, casi limite e input danneggiati, e una telecamera simulata sopra una scheda che aggiunge rumore, esposizione sbagliata, un fotogramma morto o assente, polvere che somiglia a un segno o un file immagine tagliato, e viene interrogata di nuovo. |
+| Test | 🟡 | 687 test passano (`cargo test`), con casi normali, casi limite e input danneggiati, e una telecamera simulata sopra una scheda che aggiunge rumore, esposizione sbagliata, un fotogramma morto o assente, polvere che somiglia a un segno o un file immagine tagliato, e viene interrogata di nuovo. |
 | Sicurezza | 🟡 | Rust sicuro e semplice (`forbid(unsafe_code)`; un piccolo bordo unsafe solo nei motori di telecamera compilati con la propria funzionalità): nulla va in panico con i file ricevuti e un valore errato è un errore con il suo motivo; nessuna revisione indipendente. |
 | Finestra | 🟠 | Scritta (egui, `--features gui`, il programma `eh3d-vision-gui`): aprire o trascinare un'immagine, vedere i segni con le loro coordinate, impostare la scala con un segno di dimensione nota, calcolare la distorsione dell'obiettivo da una griglia, allineare a un disegno CSV ed esportare le opzioni di ISOCAM; la sua logica è testata, ma non è ancora stata compilata né vista su uno schermo. |
 | Telecamera dal vivo | 🟠 | lo strato telecamera, la scacchiera di calibrazione e l'allineamento di una scheda sono scritti e provati su una telecamera e un tavolo simulati; i motori per Windows, V4L2 e libcamera sono scheletri e nulla è stato eseguito su una telecamera, un obiettivo o una scheda reali. |
@@ -201,7 +201,7 @@ Per fare un'immagine della finestra senza aprirla a mano, eseguila con `--shot F
 
 ## 🧪 Test
 
-La suite ha 678 test (`cargo test`, eseguiti su Windows e Linux nella CI). Verificano i casi normali, i casi limite e gli input danneggiati: file vuoti, spazzatura e file tagliati non causano mai un panico. La CI esegue anche `cargo fmt --check`, `cargo clippy` con gli avvisi come errori e `python -I tools/ci_validate.py`.
+La suite ha 687 test (`cargo test`, eseguiti su Windows e Linux nella CI). Verificano i casi normali, i casi limite e gli input danneggiati: file vuoti, spazzatura e file tagliati non causano mai un panico. La CI esegue anche `cargo fmt --check`, `cargo clippy` con gli avvisi come errori e `python -I tools/ci_validate.py`.
 
 ## 🏗️ Compilazione e rilascio
 
@@ -287,7 +287,8 @@ EH3D-VISION-STUDIO/
 │   ├── fuzz_camera.rs                           input casuale con seme fisso per le nuove letture e la convenzione
 │   ├── fuzz_capture.rs                          input casuale con seme fisso per lettori di fotogrammi, calibrazione, allineamento
 │   ├── shot_sample.rs                           test che gli esempi si aprano nella finestra di un'immagine
-│   └── vision.rs                                test della libreria e della riga di comando
+│   ├── vision.rs                                test della libreria e della riga di comando
+│   └── reqs.rs                                  test del registro dei requisiti
 ├── examples/
 │   ├── design.csv                               un esempio per provare il programma
 │   ├── design_pair.csv                          un disegno per i due segni di marks.pgm
@@ -297,6 +298,10 @@ EH3D-VISION-STUDIO/
 │   └── vision.cfg                               il file di configurazione con ogni valore e il suo significato
 ├── docs/
 │   ├── architecture.json                        dati dell'immagine di Architettura
+│   ├── NOT_YET.md                               buone idee fuori da questa versione, con il perché e il quando
+│   ├── REQUIREMENTS.md                          il registro dei requisiti: stato, evidenza e test di ciascuno
+│   ├── SCOPE.md                                 a cosa serve, cosa non farà e cosa non decide mai
+│   ├── STATUS.md                                cosa esiste, cosa manca e cosa è ancora aperto
 │   └── structure.json                           dati dell'immagine di Struttura
 ├── tools/                                       controllo della CI e del README e strumenti per le immagini
 ├── images/                                      banner e le immagini di Architettura e Struttura del repository
@@ -305,6 +310,7 @@ EH3D-VISION-STUDIO/
 ├── Cargo.toml Cargo.lock                        il workspace e le sue dipendenze bloccate
 ├── rust-toolchain.toml                          la toolchain Rust fissata
 ├── CHANGELOG.md                                 cosa è cambiato in ogni versione
+├── AGENTS.md                                    le regole per chi modifica il repository
 ├── SECURITY.md SUPPORT.md                       come segnalare una vulnerabilità e dove chiedere
 └── CONTRIBUTING.md CODE_OF_CONDUCT.md LICENSE   come contribuire, codice di condotta e licenza
 ```
@@ -343,6 +349,11 @@ Il README e i testi esistono in inglese, spagnolo, francese, italiano, tedesco, 
 ## 📚 Documentazione
 
 * [Changelog](CHANGELOG.md)
+* [Ambito](docs/SCOPE.md): a cosa serve il programma, cosa non farà e cosa non decide mai.
+* [Requisiti](docs/REQUIREMENTS.md): il registro delle capacità, lo stato di ciascuna e il test che la mostra.
+* [Stato](docs/STATUS.md): cosa esiste, cosa manca e cosa è ancora aperto.
+* [Non ancora](docs/NOT_YET.md): buone idee lasciate fuori da questa versione.
+* [Regole per modificare il repository](AGENTS.md): le regole per chi modifica il repository.
 * [Dati di architettura e struttura](docs/architecture.json): i dati da cui si disegnano le due immagini.
 
 ## 🤝 Contribuire e comunità
