@@ -216,6 +216,20 @@ pub fn stored_jpeg(luma: &Gray) -> Vec<u8> {
     out
 }
 
+/// The brightness of a motion JPEG frame whose pixels are coded, read by the reader that checks everything (`mjpeg`): a frame that is cut is `frame_truncated`, one with a size over the
+/// limits is `frame_bad_size`, and every other refusal (not a JPEG, a table that cannot be, a kind that is not read, data that does not follow its tables) is `frame_not_decoded`.
+fn coded_to_luma(bytes: &[u8]) -> Result<Gray, CapError> {
+    use crate::mjpeg::{code_of, decode, JpegSettings, BAD_SIZE, FILE_TOO_BIG, TRUNCATED};
+    decode(bytes, &JpegSettings::default()).map_err(|e| {
+        let code = match code_of(&e) {
+            c if c == TRUNCATED => Code::FrameTruncated,
+            c if c == BAD_SIZE || c == FILE_TOO_BIG => Code::FrameBadSize,
+            _ => Code::FrameNotDecoded,
+        };
+        CapError::new(code, e)
+    })
+}
+
 /// The brightness of a motion JPEG frame in the stored form. A frame whose pixels are coded needs a decoder, and is `frame_not_decoded`.
 pub fn mjpeg_to_luma(bytes: &[u8]) -> Result<Gray, CapError> {
     let info = jpeg_info(bytes)?;
@@ -248,10 +262,7 @@ pub fn mjpeg_to_luma(bytes: &[u8]) -> Result<Gray, CapError> {
         at += 2 + len;
     }
     if data.is_empty() {
-        return Err(CapError::new(
-            Code::FrameNotDecoded,
-            "the pixels of a coded JPEG picture need the decoder, which this program does not have yet",
-        ));
+        return coded_to_luma(bytes);
     }
     if data.len() < want {
         return Err(CapError::new(

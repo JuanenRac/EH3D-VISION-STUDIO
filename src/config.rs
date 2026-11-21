@@ -14,7 +14,7 @@ pub const FILE_NAME: &str = "vision.cfg";
 pub const FILE_VARIABLE: &str = "EH3D_VISION_CONFIG";
 
 /// Every key of the file, in the order the file lists them.
-pub const KEYS: [&str; 140] = [
+pub const KEYS: [&str; 168] = [
     "language",
     "polarity",
     "threshold",
@@ -106,6 +106,34 @@ pub const KEYS: [&str; 140] = [
     "find_server_max",
     "find_server_private_only",
     "find_server_tries",
+    "mjpeg_max_bytes",
+    "mjpeg_max_pixels",
+    "card_columns",
+    "card_rows",
+    "card_pitch_mm",
+    "card_dot_mm",
+    "card_margin_mm",
+    "card_paper_w_mm",
+    "card_paper_h_mm",
+    "light_cells",
+    "light_saturation_level",
+    "light_max_saturated",
+    "light_min_mean",
+    "light_max_mean",
+    "light_max_uneven",
+    "light_max_tilt",
+    "light_max_pixels",
+    "tape_hole_mm",
+    "tape_pitch_mm",
+    "tape_tolerance_mm",
+    "tape_line_tolerance_mm",
+    "tape_size_tolerance",
+    "tape_min_holes",
+    "tape_max_holes",
+    "tape_pocket_pitch_mm",
+    "tape_pocket_along_mm",
+    "tape_pocket_across_mm",
+    "tape_max_pixels",
     "rectify_max_side",
     "pads_tolerance",
     "diff_threshold",
@@ -301,6 +329,38 @@ pub struct Config {
     pub find_server_max: usize,
     pub find_server_private_only: bool,
     pub find_server_tries: usize,
+    /// `mjpeg`: the most bytes and pixels of a frame of motion JPEG that is read.
+    /// `card`: the card of calibration to print, in millimetres: the dots along each side, the pitch, the dot, the margin and the page.
+    /// `light`: the check of the light of a picture: the zones along a side, the grey level of a burnt-out pixel, the most burnt-out share, the range of the mean, the most unevenness and tilt, the most pixels.
+    /// `tape`: the search for the holes of a tape: the hole and the pitch, the tolerances, the holes it needs and accepts, and the pockets (pitch, along and across from a hole).
+    pub mjpeg_max_bytes: usize,
+    pub mjpeg_max_pixels: usize,
+    pub card_columns: usize,
+    pub card_rows: usize,
+    pub card_pitch_mm: f64,
+    pub card_dot_mm: f64,
+    pub card_margin_mm: f64,
+    pub card_paper_w_mm: f64,
+    pub card_paper_h_mm: f64,
+    pub light_cells: usize,
+    pub light_saturation_level: usize,
+    pub light_max_saturated: f64,
+    pub light_min_mean: f64,
+    pub light_max_mean: f64,
+    pub light_max_uneven: f64,
+    pub light_max_tilt: f64,
+    pub light_max_pixels: usize,
+    pub tape_hole_mm: f64,
+    pub tape_pitch_mm: f64,
+    pub tape_tolerance_mm: f64,
+    pub tape_line_tolerance_mm: f64,
+    pub tape_size_tolerance: f64,
+    pub tape_min_holes: usize,
+    pub tape_max_holes: usize,
+    pub tape_pocket_pitch_mm: f64,
+    pub tape_pocket_along_mm: f64,
+    pub tape_pocket_across_mm: f64,
+    pub tape_max_pixels: usize,
     /// `rectify`: the largest side in pixels of the picture that is made.
     pub rectify_max_side: usize,
     /// `pads`: how much the pitch of a row of pads may vary as a share of the median pitch.
@@ -463,6 +523,34 @@ impl Default for Config {
             find_server_max: 8,
             find_server_private_only: true,
             find_server_tries: 2,
+            mjpeg_max_bytes: 16_777_216,
+            mjpeg_max_pixels: 25_000_000,
+            card_columns: 9,
+            card_rows: 7,
+            card_pitch_mm: 10.0,
+            card_dot_mm: 4.0,
+            card_margin_mm: 10.0,
+            card_paper_w_mm: 210.0,
+            card_paper_h_mm: 297.0,
+            light_cells: 4,
+            light_saturation_level: 250,
+            light_max_saturated: 0.02,
+            light_min_mean: 40.0,
+            light_max_mean: 215.0,
+            light_max_uneven: 0.35,
+            light_max_tilt: 0.25,
+            light_max_pixels: 25_000_000,
+            tape_hole_mm: 1.5,
+            tape_pitch_mm: 4.0,
+            tape_tolerance_mm: 0.1,
+            tape_line_tolerance_mm: 0.15,
+            tape_size_tolerance: 0.25,
+            tape_min_holes: 4,
+            tape_max_holes: 400,
+            tape_pocket_pitch_mm: 4.0,
+            tape_pocket_along_mm: 2.0,
+            tape_pocket_across_mm: 3.5,
+            tape_max_pixels: 25_000_000,
             rectify_max_side: 4096,
             pads_tolerance: 0.05,
             diff_threshold: 25,
@@ -620,6 +708,59 @@ impl Config {
             max_candidates: self.find_server_max,
             private_only: self.find_server_private_only,
             tries: self.find_server_tries,
+        }
+    }
+
+    /// The limits of the reader of motion JPEG frames that the values make.
+    pub fn mjpeg_settings(&self) -> crate::mjpeg::JpegSettings {
+        crate::mjpeg::JpegSettings {
+            max_bytes: self.mjpeg_max_bytes,
+            max_pixels: self.mjpeg_max_pixels,
+        }
+    }
+
+    /// The settings of the card of calibration to print that the values make.
+    pub fn card_settings(&self) -> crate::dotcard::CardSettings {
+        crate::dotcard::CardSettings {
+            columns: self.card_columns,
+            rows: self.card_rows,
+            pitch_mm: self.card_pitch_mm,
+            dot_mm: self.card_dot_mm,
+            margin_mm: self.card_margin_mm,
+            paper_w_mm: self.card_paper_w_mm,
+            paper_h_mm: self.card_paper_h_mm,
+        }
+    }
+
+    /// The settings of the check of the light of a picture that the values make.
+    pub fn light_settings(&self) -> crate::light::LightSettings {
+        crate::light::LightSettings {
+            cells: self.light_cells,
+            saturation_level: self.light_saturation_level.clamp(1, 255) as u8,
+            max_saturated: self.light_max_saturated,
+            min_mean: self.light_min_mean,
+            max_mean: self.light_max_mean,
+            max_uneven: self.light_max_uneven,
+            max_tilt: self.light_max_tilt,
+            max_pixels: self.light_max_pixels,
+        }
+    }
+
+    /// The settings of the search for the holes of a tape that the values make (the holes are as dark or as light as the marks are: `polarity`).
+    pub fn tape_settings(&self) -> crate::tape::TapeSettings {
+        crate::tape::TapeSettings {
+            hole_mm: self.tape_hole_mm,
+            pitch_mm: self.tape_pitch_mm,
+            tolerance_mm: self.tape_tolerance_mm,
+            line_tolerance_mm: self.tape_line_tolerance_mm,
+            size_tolerance: self.tape_size_tolerance,
+            min_holes: self.tape_min_holes,
+            max_holes: self.tape_max_holes,
+            pocket_pitch_mm: self.tape_pocket_pitch_mm,
+            pocket_along_mm: self.tape_pocket_along_mm,
+            pocket_across_mm: self.tape_pocket_across_mm,
+            polarity: self.polarity,
+            max_pixels: self.tape_max_pixels,
         }
     }
 
@@ -908,6 +1049,34 @@ impl Config {
             "find_server_max" => self.find_server_max = count(value, key)?,
             "find_server_private_only" => self.find_server_private_only = yes_no(value, key)?,
             "find_server_tries" => self.find_server_tries = count(value, key)?,
+            "mjpeg_max_bytes" => self.mjpeg_max_bytes = count(value, key)?,
+            "mjpeg_max_pixels" => self.mjpeg_max_pixels = count(value, key)?,
+            "card_columns" => self.card_columns = count(value, key)?,
+            "card_rows" => self.card_rows = count(value, key)?,
+            "card_pitch_mm" => self.card_pitch_mm = number(value, key)?,
+            "card_dot_mm" => self.card_dot_mm = number(value, key)?,
+            "card_margin_mm" => self.card_margin_mm = number(value, key)?,
+            "card_paper_w_mm" => self.card_paper_w_mm = number(value, key)?,
+            "card_paper_h_mm" => self.card_paper_h_mm = number(value, key)?,
+            "light_cells" => self.light_cells = count(value, key)?,
+            "light_saturation_level" => self.light_saturation_level = count(value, key)?,
+            "light_max_saturated" => self.light_max_saturated = number(value, key)?,
+            "light_min_mean" => self.light_min_mean = number(value, key)?,
+            "light_max_mean" => self.light_max_mean = number(value, key)?,
+            "light_max_uneven" => self.light_max_uneven = number(value, key)?,
+            "light_max_tilt" => self.light_max_tilt = number(value, key)?,
+            "light_max_pixels" => self.light_max_pixels = count(value, key)?,
+            "tape_hole_mm" => self.tape_hole_mm = number(value, key)?,
+            "tape_pitch_mm" => self.tape_pitch_mm = number(value, key)?,
+            "tape_tolerance_mm" => self.tape_tolerance_mm = number(value, key)?,
+            "tape_line_tolerance_mm" => self.tape_line_tolerance_mm = number(value, key)?,
+            "tape_size_tolerance" => self.tape_size_tolerance = number(value, key)?,
+            "tape_min_holes" => self.tape_min_holes = count(value, key)?,
+            "tape_max_holes" => self.tape_max_holes = count(value, key)?,
+            "tape_pocket_pitch_mm" => self.tape_pocket_pitch_mm = number(value, key)?,
+            "tape_pocket_along_mm" => self.tape_pocket_along_mm = number(value, key)?,
+            "tape_pocket_across_mm" => self.tape_pocket_across_mm = number(value, key)?,
+            "tape_max_pixels" => self.tape_max_pixels = count(value, key)?,
             "rectify_max_side" => self.rectify_max_side = count(value, key)?,
             "pads_tolerance" => self.pads_tolerance = number(value, key)?,
             "diff_threshold" => {
@@ -1125,6 +1294,13 @@ impl Config {
         crate::turnpair::check(&self.pair_settings()).map_err(|e| format!("pair_*: {e}"))?;
         crate::discovery::check(&self.find_settings())
             .map_err(|e| format!("find_server_*: {e}"))?;
+        crate::mjpeg::check(&self.mjpeg_settings()).map_err(|e| format!("mjpeg_*: {e}"))?;
+        crate::dotcard::check(&self.card_settings()).map_err(|e| format!("card_*: {e}"))?;
+        if self.light_saturation_level == 0 || self.light_saturation_level > 255 {
+            return Err("light_saturation_level must be from 1 to 255".into());
+        }
+        crate::light::check(&self.light_settings()).map_err(|e| format!("light_*: {e}"))?;
+        crate::tape::check(&self.tape_settings()).map_err(|e| format!("tape_*: {e}"))?;
         if !(crate::perspective::MIN_SIDE..=crate::perspective::MAX_SIDE_LIMIT)
             .contains(&self.rectify_max_side)
         {
@@ -1472,6 +1648,20 @@ quality_max_mean = 100",
             "find_server_private_only = maybe",
             "find_server_tries = 0",
             "find_server_tries = 6",
+            "mjpeg_max_bytes = 10",
+            "mjpeg_max_pixels = 30000000",
+            "card_columns = 2",
+            "card_dot_mm = 9",
+            "card_paper_w_mm = 10",
+            "light_cells = 1",
+            "light_saturation_level = 0",
+            "light_saturation_level = 256",
+            "light_max_saturated = 2",
+            "light_max_tilt = 3",
+            "tape_hole_mm = 9",
+            "tape_min_holes = 1",
+            "tape_size_tolerance = 2",
+            "tape_max_pixels = 1",
             "rectify_max_side = 1",
             "rectify_max_side = 16385",
             "pads_tolerance = 0",
