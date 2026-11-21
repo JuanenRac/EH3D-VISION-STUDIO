@@ -556,7 +556,7 @@ fn base64_uses_plus_and_slash_for_the_last_two_digits() {
 #[test]
 fn bytes_of_any_length_go_through_base64_and_back() {
     let mut rng = Lcg(11);
-    for n in 0..80 {
+    for n in 0usize..80 {
         let bytes: Vec<u8> = (0..n).map(|_| rng.byte()).collect();
         let text = base64_encode(&bytes);
         assert_eq!(text.len(), n.div_ceil(3) * 4);
