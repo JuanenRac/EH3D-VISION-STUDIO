@@ -492,13 +492,13 @@ fn frames_of_noise_after_the_start_marker_are_refused_with_a_known_code_from_a_f
         let n = (r.next() % 90) as usize;
         let mut bytes = SOI.to_vec();
         for _ in 0..n {
-            bytes.push(if r.next() % 5 == 0 {
-                0xFF
-            } else {
+            bytes.push(if r.next() % 5 > 0 {
                 (r.next() & 0xFF) as u8
+            } else {
+                0xFF
             });
         }
-        if r.next() % 2 == 0 {
+        if r.next() & 1 == 0 {
             bytes.extend_from_slice(&EOI);
         }
         let c = code(&bytes);
