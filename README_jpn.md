@@ -17,7 +17,7 @@
 
 ---
 
-**正直さの確認 - 現在実際に動くもの：** Rust ライブラリとコマンドライン プログラム（`eh3d-vision`）で、コンピューター上で実行される 725 件のテストがあります：画像から丸い基準マークを見つけ、画素をミリメートルに変換し、基板を設計どおりの位置に合わせる回転と移動量を計算します。ウィンドウ（`--features gui` でビルドする `eh3d-vision-gui` プログラム）があり、画像を開き、マークを座標つきで表示し、スケールを設定し、グリッドからレンズの歪みを求め、設計と位置合わせして ISOCAM 用のオプションを書き出しますが、ウィンドウはまだ画面で確認していません。機械では試しておらず、実際のファイルの集まりでも確認していません。
+**正直さの確認 - 現在実際に動くもの：** Rust ライブラリとコマンドライン プログラム（`eh3d-vision`）で、コンピューター上で実行される 774 件のテストがあります：画像から丸い基準マークを見つけ、画素をミリメートルに変換し、基板を設計どおりの位置に合わせる回転と移動量を計算します。ウィンドウ（`--features gui` でビルドする `eh3d-vision-gui` プログラム）があり、画像を開き、マークを座標つきで表示し、スケールを設定し、グリッドからレンズの歪みを求め、設計と位置合わせして ISOCAM 用のオプションを書き出しますが、ウィンドウはまだ画面で確認していません。機械では試しておらず、実際のファイルの集まりでも確認していません。
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | バージョン | `0.1.2` |
 | 成熟度 | 機能する |
-| テスト | 725 |
+| テスト | 774 |
 | 技術スタック | Rust |
 | 実機での動作 | 未試験：ここにあるものは機械で動かしたことがありません |
 
@@ -46,7 +46,7 @@
 |---|---|---|
 | コア | 🟡 | 画像から丸い基準マークを見つけ、画素をミリメートルに変換し、基板を設計どおりの位置に合わせる回転と移動量を計算します。コンピューター上で通常入力と破損入力でテスト済み。実際のファイルの集まりでは未確認。 |
 | コマンドライン | 🟡 | `eh3d-vision` はライブラリと同じ関数を実行して結果を表示します。エラーはメッセージと 0 以外の終了コードで返ります。 |
-| テスト | 🟡 | 725 件のテストが通ります（`cargo test`）。通常ケース、境界ケース、破損入力に加え、ノイズ、誤った露出、無効または欠落したフレーム、マークに見えるほこり、途切れた画像ファイルを加え、再取得される基板上の模擬カメラを含みます。 |
+| テスト | 🟡 | 774 件のテストが通ります（`cargo test`）。通常ケース、境界ケース、破損入力に加え、ノイズ、誤った露出、無効または欠落したフレーム、マークに見えるほこり、途切れた画像ファイルを加え、再取得される基板上の模擬カメラを含みます。 |
 | セキュリティ | 🟡 | 安全な Rust のみ（`forbid(unsafe_code)`；unsafe はカメラのバックエンドを専用機能でビルドしたときの小さな部分だけ）。受け取ったファイルでパニックせず、不正な値は理由付きのエラーになります。独立したレビューはありません。 |
 | ウィンドウ | 🟠 | 作成済み（egui、`--features gui`、プログラム `eh3d-vision-gui`）：画像を開く／ドロップする、マークを座標つきで見る、大きさが既知のマークでスケールを設定する、グリッドからレンズの歪みを求める、CSV の設計と位置合わせする、ISOCAM 用オプションを書き出す。ロジックはテスト済みですが、まだビルドも画面での確認もしていません。 |
 | ライブカメラ | 🟠 | カメラ層、校正ボード、基板の位置合わせは書かれ、模擬カメラと模擬ステージで試験済みです。Windows、V4L2、libcamera のバックエンドは骨組みで、実際のカメラ、レンズ、基板では何も動かしていません。 |
@@ -123,7 +123,8 @@ EH3D-VISION-STUDIO は EH3D Fabrication Suite のプログラムの一つです�
 * **サーバーの規約での結果:** `eh3d-vision server send fiducials|focus|blobs 画像` は、EH3D-SERVER の `vision` プラグインとカメラ越しに見るプログラムが共有する形で結果を保管します。形式 `application/json`、スキーマ `eh3d.vision.result/1` のファイル `vision-<種類>.json` で、画像のサイズと SHA-256、その種類の検出結果（`fiducials` `{x, y, radius_px, score}`、`focus` `{score, sharp}`、`blobs` `{x, y, area_px}`。`barcode` は検査はしますが作りません。ここにはコードを読むものがないためです）、単位（`px`）、証拠（`--evidence camera|simulator` がなければ `picture`。ファイルがカメラ由来かどうかはプログラムには分かりません）を持ちます。`server check ファイル.json` は文書が規約に沿っているかを答え、沿っていない部分を示します。沿っていない文書は送る前に拒否されます。ピント確認の点数は、鮮鋭度が `focus_reference` のとき 50 です。
 * **サーバーの模擬ステーション:** `eh3d-vision server detect fiducials|barcode|focus|blobs 画像 [--seed N] [--artifact]` は、サーバーの `vision` プラグイン（`POST /api/v1/work/jobs`、開始して終了まで読み取り）に、画像のサイズとハッシュとシードから作り出す結果を求めます。毎回同じで（`evidence: simulator`）、ジョブのビューに入るか、アーティファクトとして保管されます。`station::simulate` はメモリ上のサーバーが応答に使うプラグインの移植で、ジョブ・結果・アーティファクトの流れ全体をネットワークなしでここでテストします。実際のサーバーに対しては実行していません。
 * **ネットワーク上のサーバー検索（本物のスイッチ）:** `eh3d-vision server discover` は、ローカルネットワークで `_eh3d._tcp` に応答するサーバーの `ホスト:ポート` を一覧にします。`server_mdns` がオフ（既定）の間は何もしません。共有クライアントのリゾルバーを使うには `--features mdns` でビルドする必要があります（リリース版はそうなっています）。見つかるのは人が選ぶ候補で、ネットワーク上のどの機器でも応答できるため、自動では決して接続しません。
-* **見本から学習するマーク、大きく回転した基板、安全なサーバー一覧（ライブラリ）:** `train` はマークの周りを切り出した長方形の平均をテンプレートとして保持し、相関で再び見つけます。必要なら一定の刻みで回転させ、位置と角度を返します（`vision.cfg` の `train_*` キー）。`turnpair` は基板の回転に関係なく、欠けたマークや余分なマークがあってもマークを設計と対応付け、二通りが同じくらい説明できる場合は拒否します（`pair_*` キー）。`discovery` はネットワークで応答したものを、形式の正しい少数のローカル候補にします（`find_server_*` キー）。すべて描いた画像とそれを描いた真値で試しています。`server discover` とウィンドウはすでに `discovery` の候補だけを一覧にし、残りの二つはまだどのコマンドやパネルも使っていません。
+* **1つの見本から学習するマーク、大きく回転した基板、安全なサーバー一覧：** `eh3d-vision train 画像 --rect X,Y,W,H --output ファイル` はマークの周りを切り出した長方形の平均をマークのファイルとして保存し（`--replace` がない限り既存のファイルには書き込みません）、`eh3d-vision locate --mark ファイル 画像` は相関で再び見つけます。必要なら一定の刻みで回転させ、位置・角度・スコアを返します（`vision.cfg` の `train_*` キー）。`eh3d-vision pair 設計.csv 測定.csv --any-turn` は基板の回転に関係なく、欠けたマークや余分なマークがあってもマークを設計と対応付け、二通りが同じくらい説明できる場合は拒否します（`pair_*` キー）。`discovery` はネットワークで応答したものを、形式の正しい少数のローカル候補にし（`find_server_*` キー）、`server discover` とウィンドウはその候補だけを一覧にします。コマンドは `vision.cfg` か `--lang` の言語で答え、`--json` で JSON を出し、終了コード 0（完了）、1（実行できなかった）、2（実行したが検証に合格しなかった：見本が一致しない、隣と区別できないマーク、マークが見つからない、対応付けできないマーク）で終わります。すべて描いた画像とそれを描いた真値で試しています。見て、動かし、もう一度見るループは今も位置で対応付けており、ウィンドウはまだマークを学習しません。
+* **モーションJPEGフレームの読み取り、印刷する点のカード、画像の照明、テープの穴：** `eh3d-vision jpeg フレーム` はベースラインJPEGのフレームを `mjpeg_max_bytes` と `mjpeg_max_pixels` の範囲で明るさまで読み取ります。途切れたフレーム、あり得ない場所のマーカー、あり得ないテーブル、何十億画素ものサイズは、変わらないコード（`jpeg_truncated`、`jpeg_bad_marker`、`jpeg_bad_table`、`jpeg_bad_size`、`jpeg_unsupported`、`jpeg_bad_data`）で拒否され、パニックにはなりません。`eh3d-vision calib-card` は 100 % で印刷する丸い点のカードをミリメートル単位で描き、毎回同じで、ページに収まらなければ拒否します（`card_*` キー）。`eh3d-vision light-check 画像` は画像の照明が良好か（平均、白飛びの割合、ゾーン、傾き。`light_*` キー）と、良くない理由を示し、良くなければ終了コード 2 です。`eh3d-vision tape-locate 画像` は部品テープの穴、テープのピッチとの比較、ポケットを見つけます（`tape_*` キー）。すべて固定シードで描いた画像とフレームで試しており、カメラは使わず、カードは印刷せず、テープは撮影していません。
 * **サブピクセルのエッジと不確かさ:** `eh3d-vision edge 画像 --from X,Y --to X,Y` は、エッジをまたぐ線に沿って画像を読み（双一次、`edge_step_px` 間隔）、線の両端を 2 つの平坦部とみなして、プロファイルが両者の中間レベルを横切る位置を求め、線に沿った位置と画像内の位置、コントラスト、遷移の幅、不確かさ（1 標準偏差：平坦部のノイズに 8 ビットの丸めを加えたものを、交差点の傾きで割ったもの）を出します。不確かさが `edge_max_uncertainty_px` を超えると終了コードは 1 で、エッジのない線は `edge_flat` です。1 ピクセルより鋭いエッジは最大 0.05 px 傾くことがあります。
 * **ヒストグラムと自動しきい値:** `eh3d-vision histogram 画像 --bins N` は、グレーレベルを 8〜256 のグループにして、大津（マーク検索が使うもの）、isodata、三角形法の切れ目、大津の 2 グループが説明する分散の割合、黒と白のピクセルの割合、3 つの切れ目が一致するか（8 レベル以内）を出します。一致しない場合は、照明か `vision.cfg` の `threshold` を見直してください。
 * **許容マスクによる基準画像との照合:** `eh3d-vision refcheck 基準 画像 --tolerance マスク.pgm` は、同じサイズの 2 枚の画像を、許容差を場所ごとに変えて比較します。マスクの画素が 0 なら一般の `diff_threshold` のまま、1〜254 ならその分のグレーレベルだけ許容を増やし、255 は見ません。許容範囲外の画素、超えた量、領域の数（`diff_min_area`）と場所を出し、`--map ファイル.pgm` はそれを画像として書き出します。`diff_max_changed` を超えると終了コードは 1 です。
@@ -178,13 +179,22 @@ eh3d-vision histogram IMAGE [--bins N] [--flatten PX] [--format csv|json] [--out
 eh3d-vision refcheck REFERENCE PICTURE [--tolerance MASK.pgm] [--threshold V] [--min-area PX] [--max-changed F] [--map FILE.pgm] [--format csv|json] [--output FILE] [--replace]   a picture compared with a reference of the same size through a mask of tolerance (a mask pixel at 0 keeps the general threshold, 1 to 254 allows that many levels more, 255 is not looked at): the pixels outside the tolerance, how much they pass it, in how many regions and where; --map writes them as a picture; exit 1 when the share is above the limit
 eh3d-vision charuco card [--lang CODE] [--output FILE.svg] [--replace]   the board of calibration (squares and markers, calib_squares_x, calib_squares_y, calib_square_mm and calib_marker_seed of vision.cfg) as a drawing in millimetres to print at 100 %, with the guide in the language
 eh3d-vision charuco calibrate IMAGE [--check-mm D] [--allow-unchecked] [--output FILE.cal] [--replace]   the calibration of the camera from a picture of that board: the markers are read, the corners found, the map from pixels to millimetres fitted three ways and refused when the residual, the gap between the methods or the distance D measured with a ruler between the two outer corners of a row (calib_check_mm) do not hold; without D the calibration is refused unless --allow-unchecked or calib_allow_unchecked
+eh3d-vision train IMAGE --rect X,Y,W,H [--rect X,Y,W,H ...] --output FILE [--replace|--overwrite|--create] [--flatten PX] [--json]   a mark that is none of the known shapes, trained from one or more rectangles cut around it (all of the same size, from train_min_side to train_max_side): their average is kept in a file of a mark (the first line is EH3DMARK 1); a file that exists is never written over unless --replace (--overwrite says the same, --create asks for a new file, the default); exit 2 when the examples do not look like each other, have no contrast, or the mark looks like itself a few pixels away (it could not be told from its neighbours)
+eh3d-vision locate --mark FILE IMAGE [--turn DEG] [--min-score S] [--flatten PX] [--json]   the places of the picture that look like a trained mark, with the angle and the score of each (--turn lets the search turn the mark up to DEG each way, 180 is every angle; train_turn_max_deg of vision.cfg when it is not given); exit 2 when the mark is not found, is ambiguous or is found more times than max_parts
+eh3d-vision pair DESIGN.csv MEASURED.csv [--any-turn] [--max-turn DEG] [--tolerance MM] [--min-marks N] [--json]   which mark found goes with which mark of the design: by place by default (the same number of marks, the board nearly where it should be), or with --any-turn whatever the turn of the board, up to --max-turn (pair_max_turn_deg of vision.cfg), with a mark missing or an extra one told apart, and the turn, the shift and what is left over; exit 2 when the pairing is ambiguous (a design that looks the same when turned: narrow --max-turn), none is found or fewer marks than --min-marks are paired
+eh3d-vision light-check IMAGE [--cells N] [--max-saturated F] [--max-uneven F] [--max-tilt F] [--format text|json|csv] [--output FILE] [--replace]   whether the light of a picture is good to measure from: its mean, the share burnt out, how much the zones differ and the tilt from one side to the other, and why not when it is not (light_* of vision.cfg); exit 2 when the light is not good
+eh3d-vision tape-locate IMAGE [--mm-per-px V] [--light] [--pitch-mm MM] [--hole-mm MM] [--format text|json] [--output FILE] [--replace]   the holes along the edge of a tape of parts, the pitch measured against the pitch of the tape, how far the holes lie from their line, the pockets and the one nearest to the centre of the picture, where a part would be picked (tape_* of vision.cfg); exit 2 when there are too few holes, one is missing or off the line, or the pitch or the size is not right
+eh3d-vision calib-card [--columns N] [--rows N] [--pitch-mm MM] [--lang CODE] [--output FILE.svg] [--replace]   the card of calibration of round dots (card_* of vision.cfg) as a drawing in millimetres to print at 100 %, with the larger dot at the top left and a bar to measure; a card that does not fit its page is refused, never drawn smaller
+eh3d-vision jpeg FRAME [--output FILE.pgm] [--replace] [--json]   the brightness of the picture of a baseline JPEG frame, read within the limits mjpeg_max_bytes and mjpeg_max_pixels; a frame that is cut or wrong is refused with a code that does not change (jpeg_truncated, jpeg_bad_marker, jpeg_bad_table, jpeg_bad_size, jpeg_unsupported, jpeg_bad_data)
 eh3d-vision server health|config|discover|check|detect|send KIND ... [--address HOST:PORT] [--machine ID]   the EH3D server of the machine (server_address, server_token, server_machine and server_mdns of vision.cfg): health asks whether it answers, config reads the values of the configuration file that the server keeps for the machine (written as lines for vision.cfg with --output, never over a file without --replace), discover lists the servers that answer on the local network (only with server_mdns = on and a program built with the feature mdns; they are candidates for the person to choose, never connected to by themselves), check FILE tells whether a result follows the convention of the server (schema, kind, picture, findings, units, evidence), detect fiducials|barcode|focus|blobs IMAGE [--seed N] [--artifact] asks the simulated station of the server for a result about the picture (evidence simulator), send quality|offset|pads|diff|orientation|footprint|sharpmap|board takes the arguments of the command of that name and keeps its result as JSON on the server, and send fiducials|focus|blobs IMAGE [--evidence camera|picture|simulator] [--max-findings N] keeps the result in the convention of the server with its schema
 eh3d-vision-gui [IMAGE] [DESIGN.csv]   the window (a build with --features gui); on Windows it opens with no console
 ```
 
+コマンド `train`、`locate`、`pair`、`light-check`、`tape-locate` は、完了すれば終了コード 0、実行できなければ 1（誤ったオプション、読み書きできないファイル、超過した上限）、実行したが検証に合格しなければ 2 で終わります。
+
 ## ⚙️ 設定
 
-調整される値はコードではなく、単純な `キー = 値` のファイルに書きます。プログラムを起動したフォルダー、またはプログラムの隣の `vision.cfg` です（変数 `EH3D_VISION_CONFIG` で別のファイルを指定できます）。ウィンドウの言語、マークが暗いか明るいか、しきい値、直径の範囲、マークの充填率と細長さ、スケールを決めるマークの大きさ、グリッドの列数と行数、位置合わせでサイズの変更を許すか、位置合わせが満たすべき限度、読み込む最大ファイルを設定します。`examples/vision.cfg` はすべてのキーを意味と起動時の値つきで一覧にしています。ファイルがなければその値が使われ、間違いのあるファイルは行番号つきで拒否されます。コマンドラインでは同じことをオプションで指定します（インターフェースを参照）。また、その他の調整値も保持します。信頼度（`refine_subpixel`、`full_contrast`）、照明のウィンドウ（`flatten_window`）、スケールと部品の大きさ（`mm_per_px`、`part_min_area`、`part_max_area`、`max_parts`）、十字の範囲（`cross_min_size`、`cross_max_size`、`cross_max_elongation`）、ターゲットの許容差（`pitch_tolerance`）、フォルダ内の画像の最大数（`batch_max_files`）です。 正方形の最小の充填率と、任意の角度の十字の最小スコアは `square_min_fill` と `cross_min_score` です。 正方形の辺の範囲と、その枠が幅よりどれだけ長くてよいかは、十字のものとは別に `square_min_size`、`square_max_size`、`square_max_elongation` です。 レンズは `lens_k1` と `lens_k2`（`lens` が求める値）で、補正後にグリッドが格子から離れてよい最大値は `lens_max_rms` です。 `inspect` が読むパッケージの表は `package_table`、部品がパッケージから外れてよい最大値と回転の最大値は `inspect_tolerance` と `inspect_max_angle` です。 HTML レポートが画像に警告を出すスコアのしきい値は `report_low_score` です。 スケールを決めるターゲットのマーク間隔は `pitch_mm`、書き出すファイルが既存のファイルに上書きしてよいかは `replace_output`（既定は no）です。 `shots` の計画で隣り合う画像の重なりと部品の周りの余白は `shots_overlap` と `shots_margin` です。 ウィンドウがレンズの格子を描くかどうかは `show_lens_grid` です。 `inspect` とウィンドウが部品を照合するパッケージは `inspect_package`、`shots` とウィンドウが撮影を計画する部品のサイズは `shots_part_width` と `shots_part_height` です（0 と 0 ならパッケージの本体）。 リングマークには、外径の範囲（`ring_min_diameter`、`ring_max_diameter`）、内径と外径の比の範囲（`ring_min_ratio`、`ring_max_ratio`）、帯の最小充填率（`ring_min_fill`）、細長さ（`ring_max_elongation`）、2 種類の大きさを分ける直径（`ring_split`、0 で自動）、大きさの間隔（`ring_size_gap`）があります。 ピックした部品の画像でのノズル軸は `nozzle_x_mm` と `nozzle_y_mm`、保持してよい最大距離と最大回転は `pick_max_offset_mm` と `pick_max_turn_deg` です（0 は確認しない）。 正しく保持された部品の回転は `nominal_angle_deg`、カメラが部品を鏡像で見るかどうかは `pick_mirror`、画像のチェックは `quality_check` と下限 `quality_min_contrast`、`quality_min_mean`、`quality_max_mean`、`quality_min_sharpness`（0：確認しない）です。 サーバーは `server_address`、`server_token`、`server_machine`、`server_timeout_s`、`server_retries` です（アドレスが空ならサーバーなし）。相関による検索は `correlate_diameter` と `correlate_min_score`、補正した画像の最大の辺は `rectify_max_side`、パッド列の許容差は `pads_tolerance`、2 枚の画像の比較は `diff_threshold`、`diff_min_area`、`diff_max_changed` です。サーバーをローカルネットワークで探すかどうかは `server_mdns` です（既定はオフ）。マーク付き部品の読み取りは `orientation_body_contrast`、`orientation_mark_contrast`、`orientation_min_mark_px`、`orientation_tolerance_deg`、パッドの許容差は `footprint_tolerance_mm`、鮮明さの地図は `sharpmap_cells`、`sharpmap_min_share`、`sharpmap_min_contrast`、盤からのスケールは `board_square_mm`（中心間の距離は `pitch_mm`）、`board_max_aspect`、`board_max_spread` です。トークンを含む `vision.cfg` は非公開にしてください。 ピント確認の結果で 50 点にあたる鮮鋭度は `focus_reference`、エッジの線に沿った間隔と位置の不確かさの上限は `edge_step_px` と `edge_max_uncertainty_px` です。ライブカメラ、校正ボード、基板の位置合わせには専用のキー（`capture_*`、`calib_*`、`camera_offset_*`、`align_*`）があります。どれにも範囲があり、範囲外の値は拒否され、キーが関わるエラーはそのキーを名指しします。
+調整される値はコードではなく、単純な `キー = 値` のファイルに書きます。プログラムを起動したフォルダー、またはプログラムの隣の `vision.cfg` です（変数 `EH3D_VISION_CONFIG` で別のファイルを指定できます）。ウィンドウの言語、マークが暗いか明るいか、しきい値、直径の範囲、マークの充填率と細長さ、スケールを決めるマークの大きさ、グリッドの列数と行数、位置合わせでサイズの変更を許すか、位置合わせが満たすべき限度、読み込む最大ファイルを設定します。`examples/vision.cfg` はすべてのキーを意味と起動時の値つきで一覧にしています。ファイルがなければその値が使われ、間違いのあるファイルは行番号つきで拒否されます。コマンドラインでは同じことをオプションで指定します（インターフェースを参照）。また、その他の調整値も保持します。信頼度（`refine_subpixel`、`full_contrast`）、照明のウィンドウ（`flatten_window`）、スケールと部品の大きさ（`mm_per_px`、`part_min_area`、`part_max_area`、`max_parts`）、十字の範囲（`cross_min_size`、`cross_max_size`、`cross_max_elongation`）、ターゲットの許容差（`pitch_tolerance`）、フォルダ内の画像の最大数（`batch_max_files`）です。 正方形の最小の充填率と、任意の角度の十字の最小スコアは `square_min_fill` と `cross_min_score` です。 正方形の辺の範囲と、その枠が幅よりどれだけ長くてよいかは、十字のものとは別に `square_min_size`、`square_max_size`、`square_max_elongation` です。 レンズは `lens_k1` と `lens_k2`（`lens` が求める値）で、補正後にグリッドが格子から離れてよい最大値は `lens_max_rms` です。 `inspect` が読むパッケージの表は `package_table`、部品がパッケージから外れてよい最大値と回転の最大値は `inspect_tolerance` と `inspect_max_angle` です。 HTML レポートが画像に警告を出すスコアのしきい値は `report_low_score` です。 スケールを決めるターゲットのマーク間隔は `pitch_mm`、書き出すファイルが既存のファイルに上書きしてよいかは `replace_output`（既定は no）です。 `shots` の計画で隣り合う画像の重なりと部品の周りの余白は `shots_overlap` と `shots_margin` です。 ウィンドウがレンズの格子を描くかどうかは `show_lens_grid` です。 `inspect` とウィンドウが部品を照合するパッケージは `inspect_package`、`shots` とウィンドウが撮影を計画する部品のサイズは `shots_part_width` と `shots_part_height` です（0 と 0 ならパッケージの本体）。 リングマークには、外径の範囲（`ring_min_diameter`、`ring_max_diameter`）、内径と外径の比の範囲（`ring_min_ratio`、`ring_max_ratio`）、帯の最小充填率（`ring_min_fill`）、細長さ（`ring_max_elongation`）、2 種類の大きさを分ける直径（`ring_split`、0 で自動）、大きさの間隔（`ring_size_gap`）があります。 ピックした部品の画像でのノズル軸は `nozzle_x_mm` と `nozzle_y_mm`、保持してよい最大距離と最大回転は `pick_max_offset_mm` と `pick_max_turn_deg` です（0 は確認しない）。 正しく保持された部品の回転は `nominal_angle_deg`、カメラが部品を鏡像で見るかどうかは `pick_mirror`、画像のチェックは `quality_check` と下限 `quality_min_contrast`、`quality_min_mean`、`quality_max_mean`、`quality_min_sharpness`（0：確認しない）です。 サーバーは `server_address`、`server_token`、`server_machine`、`server_timeout_s`、`server_retries` です（アドレスが空ならサーバーなし）。相関による検索は `correlate_diameter` と `correlate_min_score`、補正した画像の最大の辺は `rectify_max_side`、パッド列の許容差は `pads_tolerance`、2 枚の画像の比較は `diff_threshold`、`diff_min_area`、`diff_max_changed` です。サーバーをローカルネットワークで探すかどうかは `server_mdns` です（既定はオフ）。マーク付き部品の読み取りは `orientation_body_contrast`、`orientation_mark_contrast`、`orientation_min_mark_px`、`orientation_tolerance_deg`、パッドの許容差は `footprint_tolerance_mm`、鮮明さの地図は `sharpmap_cells`、`sharpmap_min_share`、`sharpmap_min_contrast`、盤からのスケールは `board_square_mm`（中心間の距離は `pitch_mm`）、`board_max_aspect`、`board_max_spread` です。トークンを含む `vision.cfg` は非公開にしてください。 ピント確認の結果で 50 点にあたる鮮鋭度は `focus_reference`、エッジの線に沿った間隔と位置の不確かさの上限は `edge_step_px` と `edge_max_uncertainty_px` です。ライブカメラ、校正ボード、基板の位置合わせには専用のキー（`capture_*`、`calib_*`、`camera_offset_*`、`align_*`）があります。どれにも範囲があり、範囲外の値は拒否され、キーが関わるエラーはそのキーを名指しします。 モーションJPEGフレームの読み取り、点のカード、照明のチェック、テープの穴の検索には、それぞれ専用のキー（`mjpeg_*`、`card_*`、`light_*`、`tape_*`）があります。どれにも範囲があり、範囲外の値はキー名を示して拒否されます。
 
 ## 🚀 クイックスタート
 
@@ -202,7 +212,7 @@ cargo run --release --features gui --bin eh3d-vision-gui -- --shot screen.png --
 
 ## 🧪 テスト
 
-テストは 725 件あります（`cargo test`、CI では Windows と Linux で実行）。通常ケース、境界ケース、破損入力を確認し、空のファイル、ゴミデータ、途中で切れたファイルでもパニックしません。CI は `cargo fmt --check`、警告をエラーにした `cargo clippy`、`python -I tools/ci_validate.py` も実行します。
+テストは 774 件あります（`cargo test`、CI では Windows と Linux で実行）。通常ケース、境界ケース、破損入力を確認し、空のファイル、ゴミデータ、途中で切れたファイルでもパニックしません。CI は `cargo fmt --check`、警告をエラーにした `cargo clippy`、`python -I tools/ci_validate.py` も実行します。
 
 ## 🏗️ ビルドとリリース
 
@@ -269,6 +279,11 @@ EH3D-VISION-STUDIO/
 │   ├── tools.rs                                 サイドパネルの画像ツール：図形・部品・フォルダレポート・間隔によるスケール
 │   ├── train.rs                                 見本から学習したマークを、回転した角度も含めて相関で再発見する
 │   ├── turnpair.rs                              基板がどんな角度に回転していても、マークの欠けや余分があっても設計と対応付ける
+│   ├── dotcard.rs                               100 % で印刷する丸い点のカード（ミリメートル単位の図面）
+│   ├── light.rs                                 画像の照明が良好か：平均、白飛び、ゾーン、傾き
+│   ├── mjpeg.rs                                 バイトを決して信用しないモーションJPEGフレームの読み取り
+│   ├── tape.rs                                  部品テープの穴とポケット、およびテープのピッチとの比較
+│   ├── verbs.rs                                 コマンド train、locate、pair、light-check、tape-locate、calib-card、jpeg
 │   ├── shot.rs                                  ウィンドウの画像モード（--shot）：画面なしで読み取り・検証される引数
 │   ├── shots.rs                                 視野より大きな部品を覆うカメラ位置を、寸法だけから求める
 │   ├── browse.rs                                ファイルを開くウィンドウのファイル一覧
@@ -292,6 +307,9 @@ EH3D-VISION-STUDIO/
 │   ├── fuzz_capture.rs                          フレーム読み取り・校正ファイル・位置合わせの固定シードのランダム入力
 │   ├── training.rs                              学習したマークが描いた位置と角度で見つかること、およびそのファイルと矩形
 │   ├── pairing.rs                               任意角度旋转的基板的标记按真值配对，并用随机点测试
+│   ├── mjpeg.rs                                 符号化フレームの読み戻し、あらゆる位置での切断、バイト変更、巨大サイズ、ノイズ
+│   ├── newcli.rs                                新しいコマンド：テキスト、JSON、上書きしないファイル、終了コード、ヘルプの例
+│   ├── lightfuzz.rs                             あらゆる画像と設定に対する照明・テープ・カード（固定シード）
 │   ├── discovery.rs                             敵対的または大量のネットワーク応答でも、安全でない候補は決して作られない
 │   ├── shot_sample.rs                           サンプルが画像用ウィンドウで開くことのテスト
 │   ├── vision.rs                                ライブラリとコマンドラインのテスト
@@ -328,17 +346,17 @@ EH3D-VISION-STUDIO/
 
 **現時点で分かっている制限**
 
-* ウィンドウはまだ画面で確認していません。コマンドはマークを位置で設計と対応付けるため、そこでは大きく回転した基板や欠けたマークは拒否されます（ライブラリは対応付けできますが、まだ呼び出されません）。
+* ウィンドウはまだ画面で確認していません。`align` と、見て・動かし・もう一度見るループはマークを位置で設計と対応付けるため、そこでは大きく回転した基板や欠けたマークは拒否されます（`pair --any-turn` は対応付けできます）。
 * 機械でも実際のファイルの集まりでも試しておらず、独立したレビューも受けていません。
 * 読むのは画像ファイルで、ライブカメラは模擬でのみ動き（Windows、V4L2、libcamera のバックエンドは実機で試していない骨組み）、見つけるのは丸いマーク、四角いマーク、十字形のマークだけで、テストが描いた画像で試しただけで、実際の基板の写真では試していません。部品の回転はその画素から長方形として測るため、長方形でない部品には長軸の回転が与えられます。
 * サーバーにはビジョン用のプラグインがないため、プログラムはストアのアーティファクト（結果は `POST /api/v1/artifacts`、機械の設定は `GET /api/v1/artifacts` と `GET /api/v1/artifacts/{id}`）を、独自の名前と形式（`vision-<kind>.json`、`vision-<machine>.cfg`）で使います。現時点ではメモリ上のサーバーとループバックのソケットに対してのみテストしており、mDNS によるサーバー検索（`server_mdns`）はリゾルバーを組み込んでいないスイッチです。
 
 **次のステップ**
 
-* 機械のライブカメラ（EH3D-NODE-BUNGARD-AUX）を読み取り、実際の基板の写真で試し、ライブラリにある新しいマークの学習をウィンドウに入れる。
+* 機械のライブカメラ（EH3D-NODE-BUNGARD-AUX）を読み取り、実際の基板の写真で試し、コマンドにある新しいマークの学習をウィンドウに入れる。
 * ウィンドウを画面で確認して仕上げる。
 * 実際のファイルとスイートの他のプログラムで試す。
-* ライブのバックエンド（Media Foundation、V4L2、libcamera からのフレームとモーションJPEGのデコーダ）を書き、校正ボードを実際のレンズで、位置合わせを実際のステージで試す。
+* ライブのバックエンド（Media Foundation、V4L2、libcamera からのフレーム）を書き、校正ボードを実際のレンズで、点のカードを紙で、位置合わせを実際のステージで試す。
 
 ## 🌍 言語
 

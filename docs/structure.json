@@ -613,6 +613,71 @@
           }
         },
         {
+          "name": "dotcard.rs",
+          "desc": {
+            "en": "the card of round dots to print at 100 %, as a drawing in millimetres",
+            "es": "la tarjeta de puntos redondos para imprimir al 100 %, como dibujo en milímetros",
+            "de": "die Karte mit runden Punkten zum Drucken bei 100 %, als Zeichnung in Millimetern",
+            "fr": "la carte de points ronds à imprimer à 100 %, en dessin en millimètres",
+            "it": "la scheda di punti tondi da stampare al 100 %, come disegno in millimetri",
+            "ja": "100 % で印刷する丸い点のカード（ミリメートル単位の図面）",
+            "zh": "按 100 % 打印的圆点卡片，以毫米为单位绘制",
+            "pt": "o cartão de pontos redondos para imprimir a 100 %, como desenho em milímetros"
+          }
+        },
+        {
+          "name": "light.rs",
+          "desc": {
+            "en": "whether the light of a picture is good: mean, burnt out, zones and tilt",
+            "es": "si la luz de una imagen es buena: media, quemado, zonas e inclinación",
+            "de": "ob das Licht eines Bildes gut ist: Mittel, überbelichtet, Zonen und Neigung",
+            "fr": "si la lumière d'une image est bonne : moyenne, brûlé, zones et inclinaison",
+            "it": "se la luce di un'immagine è buona: media, bruciato, zone e inclinazione",
+            "ja": "画像の照明が良好か：平均、白飛び、ゾーン、傾き",
+            "zh": "图像光照是否良好：平均值、过曝、分区和倾斜",
+            "pt": "se a luz de uma imagem é boa: média, queimado, zonas e inclinação"
+          }
+        },
+        {
+          "name": "mjpeg.rs",
+          "desc": {
+            "en": "a reader of motion JPEG frames that never trusts its bytes",
+            "es": "un lector de fotogramas JPEG en movimiento que no se fía de sus bytes",
+            "de": "ein Leser für Motion-JPEG-Frames, der seinen Bytes nie traut",
+            "fr": "un lecteur de trames JPEG animé qui ne se fie jamais à ses octets",
+            "it": "un lettore di fotogrammi JPEG in movimento che non si fida dei suoi byte",
+            "ja": "バイトを決して信用しないモーションJPEGフレームの読み取り",
+            "zh": "从不轻信字节的运动 JPEG 帧读取器",
+            "pt": "um leitor de tramas JPEG em movimento que nunca confia nos seus bytes"
+          }
+        },
+        {
+          "name": "tape.rs",
+          "desc": {
+            "en": "the holes and pockets of a tape of parts, and the pitch against the tape's",
+            "es": "los agujeros y bolsillos de una cinta de piezas y su paso frente al de la cinta",
+            "de": "die Löcher und Fächer eines Bauteilgurts und die Teilung gegen die des Gurts",
+            "fr": "les trous et alvéoles d'une bande de pièces et le pas par rapport à celui de la bande",
+            "it": "i fori e le tasche di un nastro di componenti e il passo rispetto a quello del nastro",
+            "ja": "部品テープの穴とポケット、およびテープのピッチとの比較",
+            "zh": "元件料带的孔与料穴，以及与料带间距的比较",
+            "pt": "os furos e alvéolos de uma fita de peças e o passo face ao da fita"
+          }
+        },
+        {
+          "name": "verbs.rs",
+          "desc": {
+            "en": "the commands train, locate, pair, light-check, tape-locate, calib-card and jpeg",
+            "es": "las órdenes train, locate, pair, light-check, tape-locate, calib-card y jpeg",
+            "de": "die Befehle train, locate, pair, light-check, tape-locate, calib-card und jpeg",
+            "fr": "les commandes train, locate, pair, light-check, tape-locate, calib-card et jpeg",
+            "it": "i comandi train, locate, pair, light-check, tape-locate, calib-card e jpeg",
+            "ja": "コマンド train、locate、pair、light-check、tape-locate、calib-card、jpeg",
+            "zh": "命令 train、locate、pair、light-check、tape-locate、calib-card 和 jpeg",
+            "pt": "os comandos train, locate, pair, light-check, tape-locate, calib-card e jpeg"
+          }
+        },
+        {
           "name": "shot.rs",
           "desc": {
             "en": "the picture mode of the window (--shot): its arguments, read and checked without a screen",
@@ -903,6 +968,45 @@
             "ja": "任意角度旋转的基板的标记按真值配对，并用随机点测试",
             "zh": "任意角度旋转电路板的标记按真值配对，并使用随机点",
             "pt": "marcas de uma placa rodada a qualquer ângulo emparelhadas pela verdade"
+          }
+        },
+        {
+          "name": "mjpeg.rs",
+          "desc": {
+            "en": "coded frames read back, cut at every place, changed bytes, huge sizes, noise",
+            "es": "fotogramas codificados leídos, cortados en todo sitio, bytes cambiados, ruido",
+            "de": "kodierte Frames zurückgelesen, überall abgeschnitten, geänderte Bytes, Rauschen",
+            "fr": "trames codées relues, coupées partout, octets changés, tailles énormes, bruit",
+            "it": "fotogrammi codificati riletti, tagliati ovunque, byte cambiati, rumore",
+            "ja": "符号化フレームの読み戻し、あらゆる位置での切断、バイト変更、巨大サイズ、ノイズ",
+            "zh": "编码帧回读、任意位置截断、字节改动、超大尺寸、噪声",
+            "pt": "tramas codificadas relidas, cortadas em todo o lado, bytes mudados, ruído"
+          }
+        },
+        {
+          "name": "newcli.rs",
+          "desc": {
+            "en": "the new commands run: text, JSON, files kept, exit codes, the help examples",
+            "es": "las órdenes nuevas: texto, JSON, ficheros respetados, códigos de salida, ejemplos",
+            "de": "die neuen Befehle: Text, JSON, Dateien bleiben, Exit-Codes, Beispiele der Hilfe",
+            "fr": "les nouvelles commandes : texte, JSON, fichiers respectés, codes de sortie, exemples",
+            "it": "i nuovi comandi: testo, JSON, file rispettati, codici di uscita, esempi della guida",
+            "ja": "新しいコマンド：テキスト、JSON、上書きしないファイル、終了コード、ヘルプの例",
+            "zh": "新命令：文本、JSON、不覆盖文件、退出码、帮助示例",
+            "pt": "os novos comandos: texto, JSON, ficheiros respeitados, códigos de saída, exemplos da ajuda"
+          }
+        },
+        {
+          "name": "lightfuzz.rs",
+          "desc": {
+            "en": "light, tape and card against any picture and any setting, with a fixed seed",
+            "es": "luz, cinta y tarjeta con cualquier imagen y ajuste, con semilla fija",
+            "de": "Licht, Gurt und Karte mit beliebigem Bild und Einstellung, fester Seed",
+            "fr": "lumière, bande et carte avec n'importe quelle image et réglage, graine fixe",
+            "it": "luce, nastro e scheda con qualsiasi immagine e impostazione, seme fisso",
+            "ja": "あらゆる画像と設定に対する照明・テープ・カード（固定シード）",
+            "zh": "任意图像和设置下的光照、料带与卡片（固定种子）",
+            "pt": "luz, fita e cartão com qualquer imagem e definição, com semente fixa"
           }
         },
         {

@@ -17,7 +17,7 @@
 
 ---
 
-**诚实检查 - 当前真正能运行的内容：** 一个 Rust 库和一个命令行程序（`eh3d-vision`），有 725 个在电脑上运行的测试：在图像中找到圆形基准点，把像素转换为毫米，并计算使电路板回到设计位置所需的旋转和平移。有一个窗口（用 `--features gui` 构建，程序为 `eh3d-vision-gui`），可打开图像、显示带坐标的标记、设定比例、用网格拟合镜头畸变、与设计对齐并导出 ISOCAM 选项，但窗口尚未在屏幕上看过；没有在机器上试过，也没有用大量真实文件验证过。
+**诚实检查 - 当前真正能运行的内容：** 一个 Rust 库和一个命令行程序（`eh3d-vision`），有 774 个在电脑上运行的测试：在图像中找到圆形基准点，把像素转换为毫米，并计算使电路板回到设计位置所需的旋转和平移。有一个窗口（用 `--features gui` 构建，程序为 `eh3d-vision-gui`），可打开图像、显示带坐标的标记、设定比例、用网格拟合镜头畸变、与设计对齐并导出 ISOCAM 选项，但窗口尚未在屏幕上看过；没有在机器上试过，也没有用大量真实文件验证过。
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | 版本 | `0.1.2` |
 | 成熟度 | 可用 |
-| 测试 | 725 |
+| 测试 | 774 |
 | 技术栈 | Rust |
 | 真实硬件 | 未试过：这里的任何内容都没有在机器上运行过 |
 
@@ -46,7 +46,7 @@
 |---|---|---|
 | 核心 | 🟡 | 在图像中找到圆形基准点，把像素转换为毫米，并计算使电路板回到设计位置所需的旋转和平移；已在电脑上用正常和损坏的输入测试，未用大量真实文件验证。 |
 | 命令行 | 🟡 | `eh3d-vision` 运行与库相同的函数并打印结果；每个错误都以消息和非零退出码返回。 |
-| 测试 | 🟡 | 725 个测试通过（`cargo test`），包含正常情况、边界情况和损坏的输入，以及位于电路板上方的模拟相机：它会加入噪声、曝光错误、失效或缺失的画面、看起来像标记的灰尘或被截断的图像文件，并会被再次请求。 |
+| 测试 | 🟡 | 774 个测试通过（`cargo test`），包含正常情况、边界情况和损坏的输入，以及位于电路板上方的模拟相机：它会加入噪声、曝光错误、失效或缺失的画面、看起来像标记的灰尘或被截断的图像文件，并会被再次请求。 |
 | 安全 | 🟡 | 纯安全 Rust（`forbid(unsafe_code)`；只有用各自特性构建的相机后端有一小段 unsafe）：处理收到的文件时不会 panic，错误的值会返回带原因的错误；没有独立审查。 |
 | 窗口 | 🟠 | 已编写（egui，`--features gui`，程序 `eh3d-vision-gui`）：打开或拖入图像，查看带坐标的标记，用已知大小的标记设定比例，用网格拟合镜头畸变，与 CSV 设计对齐并导出 ISOCAM 选项；其逻辑已测试，但尚未构建，也未在屏幕上看过。 |
 | 实时相机 | 🟠 | 相机层、标定板和电路板对位已编写，并在模拟相机和模拟工作台上测试；Windows、V4L2 和 libcamera 的后端只是骨架，没有在真实的相机、镜头或电路板上运行过。 |
@@ -123,7 +123,8 @@ EH3D-VISION-STUDIO 是 EH3D Fabrication Suite 的一个程序。它以库和命�
 * **服务器约定格式的结果：** `eh3d-vision server send fiducials|focus|blobs 图像` 把结果保存为 EH3D-SERVER 的 `vision` 插件与通过摄像头观察的程序共用的形式：格式为 `application/json`、模式为 `eh3d.vision.result/1` 的文件 `vision-<种类>.json`，包含图像的尺寸和 SHA-256、该种类的发现（`fiducials` `{x, y, radius_px, score}`、`focus` `{score, sharp}`、`blobs` `{x, y, area_px}`；`barcode` 只检查不生成，因为这里没有读码功能）、单位（`px`）和证据（默认为 `picture`，除非 `--evidence camera|simulator` 另有指定：程序无法知道文件是否来自摄像头）。`server check 文件.json` 说明某个文档是否符合约定并指出不符的部分；不符合约定的文档在发送前就会被拒绝。对焦检查的得分在清晰度等于 `focus_reference` 时为 50。
 * **服务器的模拟工位：** `eh3d-vision server detect fiducials|barcode|focus|blobs 图像 [--seed N] [--artifact]` 向服务器的 `vision` 插件（`POST /api/v1/work/jobs`，启动并读取直到结束）索取它根据图像的尺寸、哈希和种子编造的结果，每次都相同（`evidence: simulator`），放在作业的视图中或保存为制品。`station::simulate` 是内存中的服务器所用插件的移植，所以作业、结果和制品的整条链路在这里无需网络即可测试；尚未对真实服务器运行过。
 * **在网络中查找服务器，作为真正的开关：** `eh3d-vision server discover` 列出本地网络中响应 `_eh3d._tcp` 的服务器的 `主机:端口`。`server_mdns` 关闭（默认）时它什么也不做，程序必须用 `--features mdns` 构建（发布版就是）才有共享客户端的解析器。找到的只是供人选择的候选项，绝不自动连接，因为网络中的任何设备都可以应答。
-* **由示例训练的标记、旋转很大的电路板和安全的服务器列表（库）：** `train` 把围绕标记截取的矩形的平均值保留为模板，并通过相关性再次找到它，需要时按步长旋转，给出位置和角度（`vision.cfg` 的 `train_*` 键）；`turnpair` 无论电路板如何旋转，即使缺少或多出标记，也能把标记与设计配对，并拒绝两种方式同样能解释的情况（`pair_*` 键）；`discovery` 把网络中响应的内容变成少数格式正确的本地候选项（`find_server_*` 键）。全部用绘制的图像和绘制它们的真值试验；`server discover` 和窗口已经只列出 `discovery` 的候选项，另外两项尚无命令或面板使用。
+* **由一个示例训练的标记、旋转很大的电路板和安全的服务器列表：** `eh3d-vision train 图像 --rect X,Y,W,H --output 文件` 把围绕一个标记裁剪的矩形的平均值保存为标记文件（除非用 `--replace`，否则绝不写入已存在的文件），`eh3d-vision locate --mark 文件 图像` 通过相关性再次找到它，需要时逐步旋转，给出位置、角度和得分（`vision.cfg` 的 `train_*` 键）；`eh3d-vision pair 设计.csv 测得.csv --any-turn` 无论电路板旋转多少，也无论缺少或多出标记，都把标记与设计配对，并拒绝两种方式解释得同样好的情况（`pair_*` 键）；`discovery` 把网络上的应答变成少量格式正确的本地候选（`find_server_*` 键），`server discover` 和窗口只列出这些候选。命令用 `vision.cfg` 或 `--lang` 的语言回答，用 `--json` 给出 JSON，并以退出码 0（完成）、1（无法执行）或 2（已执行，但检查未通过：示例不一致、与邻居无法区分的标记、找不到标记、无法配对的标记）结束。所有这些都用绘制的图像和绘制它们的真值来试验；“看、移动、再看”的循环仍按位置配对，窗口还不能训练标记。
+* **运动 JPEG 帧读取器、可打印的圆点卡片、图像的光照和料带的孔：** `eh3d-vision jpeg 帧` 在 `mjpeg_max_bytes` 和 `mjpeg_max_pixels` 的限制内把基线 JPEG 帧读到亮度；被截断的帧、出现在不可能位置的标记、不可能的表或数十亿像素的尺寸，都会以不变的代码拒绝（`jpeg_truncated`、`jpeg_bad_marker`、`jpeg_bad_table`、`jpeg_bad_size`、`jpeg_unsupported`、`jpeg_bad_data`），绝不会崩溃；`eh3d-vision calib-card` 以毫米为单位画出按 100 % 打印的圆点卡片，每次都相同，放不进页面则被拒绝（`card_*` 键）；`eh3d-vision light-check 图像` 说明图像的光照是否良好（平均值、过曝比例、分区、倾斜；`light_*` 键）以及不好的原因，不好时退出码为 2；`eh3d-vision tape-locate 图像` 找出元件料带的孔、与料带间距的比较和料穴（`tape_*` 键）。所有这些都用固定种子绘制的图像和帧来试验：没有使用相机，没有打印卡片，也没有拍摄料带。
 * **亚像素边缘及其不确定度：** `eh3d-vision edge 图像 --from X,Y --to X,Y` 沿着横跨边缘的一条线读取图像（双线性，间隔 `edge_step_px`），把线的两端当作两侧的平坦区域，找出轮廓穿过两者中间电平的位置，给出沿线的位置和图像中的位置、对比度、过渡宽度和不确定度（一个标准差：平坦区域的噪声加上 8 位舍入，再除以穿越处的斜率）。不确定度高于 `edge_max_uncertainty_px` 时退出码为 1；没有边缘的线是 `edge_flat`。比一个像素更锐利的边缘可能偏移最多 0.05 px。
 * **直方图与自动阈值：** `eh3d-vision histogram 图像 --bins N` 把灰度级分成 8 到 256 组，并给出 Otsu（标记搜索所用）、isodata 和三角形法的分割点、Otsu 两组解释的方差比例、黑色与白色像素的比例，以及三个分割点是否一致（相差在 8 级以内）；不一致时，应检查照明或 `vision.cfg` 中的 `threshold`。
 * **通过容差掩码与参考图像比较：** `eh3d-vision refcheck 参考 图像 --tolerance 掩码.pgm` 比较两张同样大小的图像，允许的差异可以因位置而异：掩码像素为 0 时沿用通用的 `diff_threshold`，1 到 254 表示多允许那么多灰度级，255 表示不检查。它给出超出容差的像素、超出多少、分成多少个区域（`diff_min_area`）以及位置；`--map 文件.pgm` 把它们写成图像，超过 `diff_max_changed` 时退出码为 1。
@@ -178,13 +179,22 @@ eh3d-vision histogram IMAGE [--bins N] [--flatten PX] [--format csv|json] [--out
 eh3d-vision refcheck REFERENCE PICTURE [--tolerance MASK.pgm] [--threshold V] [--min-area PX] [--max-changed F] [--map FILE.pgm] [--format csv|json] [--output FILE] [--replace]   a picture compared with a reference of the same size through a mask of tolerance (a mask pixel at 0 keeps the general threshold, 1 to 254 allows that many levels more, 255 is not looked at): the pixels outside the tolerance, how much they pass it, in how many regions and where; --map writes them as a picture; exit 1 when the share is above the limit
 eh3d-vision charuco card [--lang CODE] [--output FILE.svg] [--replace]   the board of calibration (squares and markers, calib_squares_x, calib_squares_y, calib_square_mm and calib_marker_seed of vision.cfg) as a drawing in millimetres to print at 100 %, with the guide in the language
 eh3d-vision charuco calibrate IMAGE [--check-mm D] [--allow-unchecked] [--output FILE.cal] [--replace]   the calibration of the camera from a picture of that board: the markers are read, the corners found, the map from pixels to millimetres fitted three ways and refused when the residual, the gap between the methods or the distance D measured with a ruler between the two outer corners of a row (calib_check_mm) do not hold; without D the calibration is refused unless --allow-unchecked or calib_allow_unchecked
+eh3d-vision train IMAGE --rect X,Y,W,H [--rect X,Y,W,H ...] --output FILE [--replace|--overwrite|--create] [--flatten PX] [--json]   a mark that is none of the known shapes, trained from one or more rectangles cut around it (all of the same size, from train_min_side to train_max_side): their average is kept in a file of a mark (the first line is EH3DMARK 1); a file that exists is never written over unless --replace (--overwrite says the same, --create asks for a new file, the default); exit 2 when the examples do not look like each other, have no contrast, or the mark looks like itself a few pixels away (it could not be told from its neighbours)
+eh3d-vision locate --mark FILE IMAGE [--turn DEG] [--min-score S] [--flatten PX] [--json]   the places of the picture that look like a trained mark, with the angle and the score of each (--turn lets the search turn the mark up to DEG each way, 180 is every angle; train_turn_max_deg of vision.cfg when it is not given); exit 2 when the mark is not found, is ambiguous or is found more times than max_parts
+eh3d-vision pair DESIGN.csv MEASURED.csv [--any-turn] [--max-turn DEG] [--tolerance MM] [--min-marks N] [--json]   which mark found goes with which mark of the design: by place by default (the same number of marks, the board nearly where it should be), or with --any-turn whatever the turn of the board, up to --max-turn (pair_max_turn_deg of vision.cfg), with a mark missing or an extra one told apart, and the turn, the shift and what is left over; exit 2 when the pairing is ambiguous (a design that looks the same when turned: narrow --max-turn), none is found or fewer marks than --min-marks are paired
+eh3d-vision light-check IMAGE [--cells N] [--max-saturated F] [--max-uneven F] [--max-tilt F] [--format text|json|csv] [--output FILE] [--replace]   whether the light of a picture is good to measure from: its mean, the share burnt out, how much the zones differ and the tilt from one side to the other, and why not when it is not (light_* of vision.cfg); exit 2 when the light is not good
+eh3d-vision tape-locate IMAGE [--mm-per-px V] [--light] [--pitch-mm MM] [--hole-mm MM] [--format text|json] [--output FILE] [--replace]   the holes along the edge of a tape of parts, the pitch measured against the pitch of the tape, how far the holes lie from their line, the pockets and the one nearest to the centre of the picture, where a part would be picked (tape_* of vision.cfg); exit 2 when there are too few holes, one is missing or off the line, or the pitch or the size is not right
+eh3d-vision calib-card [--columns N] [--rows N] [--pitch-mm MM] [--lang CODE] [--output FILE.svg] [--replace]   the card of calibration of round dots (card_* of vision.cfg) as a drawing in millimetres to print at 100 %, with the larger dot at the top left and a bar to measure; a card that does not fit its page is refused, never drawn smaller
+eh3d-vision jpeg FRAME [--output FILE.pgm] [--replace] [--json]   the brightness of the picture of a baseline JPEG frame, read within the limits mjpeg_max_bytes and mjpeg_max_pixels; a frame that is cut or wrong is refused with a code that does not change (jpeg_truncated, jpeg_bad_marker, jpeg_bad_table, jpeg_bad_size, jpeg_unsupported, jpeg_bad_data)
 eh3d-vision server health|config|discover|check|detect|send KIND ... [--address HOST:PORT] [--machine ID]   the EH3D server of the machine (server_address, server_token, server_machine and server_mdns of vision.cfg): health asks whether it answers, config reads the values of the configuration file that the server keeps for the machine (written as lines for vision.cfg with --output, never over a file without --replace), discover lists the servers that answer on the local network (only with server_mdns = on and a program built with the feature mdns; they are candidates for the person to choose, never connected to by themselves), check FILE tells whether a result follows the convention of the server (schema, kind, picture, findings, units, evidence), detect fiducials|barcode|focus|blobs IMAGE [--seed N] [--artifact] asks the simulated station of the server for a result about the picture (evidence simulator), send quality|offset|pads|diff|orientation|footprint|sharpmap|board takes the arguments of the command of that name and keeps its result as JSON on the server, and send fiducials|focus|blobs IMAGE [--evidence camera|picture|simulator] [--max-findings N] keeps the result in the convention of the server with its schema
 eh3d-vision-gui [IMAGE] [DESIGN.csv]   the window (a build with --features gui); on Windows it opens with no console
 ```
 
+命令 `train`、`locate`、`pair`、`light-check` 和 `tape-locate` 完成时退出码为 0，无法执行时为 1（选项错误、无法读写的文件、超出限制），已执行但检查未通过时为 2。
+
 ## ⚙️ 配置
 
-调校的数值保存在简单的 `键 = 值` 文件中，而不是代码里：程序启动所在文件夹或其旁边的 `vision.cfg`（变量 `EH3D_VISION_CONFIG` 可指定另一个文件）。它设定窗口语言、标记是深色还是浅色、阈值、直径范围、标记的填充率和伸长率、用来设定比例的标记大小、网格的列数和行数、对齐是否可以改变尺寸、对齐必须满足的限度以及读取的最大文件。`examples/vision.cfg` 列出每个键及其含义和程序启动时的值；文件不存在就使用这些值，有错误的文件会连同行号被拒绝。命令行中同样的内容以选项给出（见接口）。它还保存其他调好的值：置信度（`refine_subpixel`、`full_contrast`）、光照窗口（`flatten_window`）、比例与零件大小（`mm_per_px`、`part_min_area`、`part_max_area`、`max_parts`）、十字的范围（`cross_min_size`、`cross_max_size`、`cross_max_elongation`）、靶标的容差（`pitch_tolerance`）以及文件夹中图片的最大数量（`batch_max_files`）。 方形的最小填充率和任意角度十字的最低得分是 `square_min_fill` 和 `cross_min_score`。 方形边长的范围以及其外框可比宽度长多少是 `square_min_size`、`square_max_size` 和 `square_max_elongation`，与十字的分开。 镜头由 `lens_k1` 和 `lens_k2`（由 `lens` 求出）表示，校正后网格离其晶格的最大允许距离是 `lens_max_rms`。 `inspect` 读取的封装表是 `package_table`，零件与其封装的最大允许偏差和最大旋转角是 `inspect_tolerance` 和 `inspect_max_angle`。 HTML 报告对某张图像发出警告的得分下限是 `report_low_score`。 设定比例的标靶标记之间的距离是 `pitch_mm`，`replace_output` 决定写出的文件是否可以覆盖已存在的文件（默认不可以）。 `shots` 规划中相邻图像的重叠量和零件周围的边距是 `shots_overlap` 和 `shots_margin`。 窗口是否绘制镜头点阵由 `show_lens_grid` 决定。 `inspect` 和窗口用来比对零件的封装是 `inspect_package`，`shots` 和窗口为其规划拍摄的零件尺寸是 `shots_part_width` 和 `shots_part_height`（0 和 0：使用封装本体）。 圆环标记有外径范围（`ring_min_diameter`、`ring_max_diameter`）、内外径之比的范围（`ring_min_ratio`、`ring_max_ratio`）、环带的最小填充率（`ring_min_fill`）、伸长度（`ring_max_elongation`）、区分两种尺寸的直径（`ring_split`，0 表示自动查找）以及尺寸之间的间隔（`ring_size_gap`）。 被拾取零件图像中的吸嘴轴线是 `nozzle_x_mm` 和 `nozzle_y_mm`，允许持放的最大距离和最大旋转是 `pick_max_offset_mm` 和 `pick_max_turn_deg`（0：不检查）。 零件被正确吸取时的旋转角是 `nominal_angle_deg`，相机看到的零件是否为镜像是 `pick_mirror`，图像检查是 `quality_check` 及下限 `quality_min_contrast`、`quality_min_mean`、`quality_max_mean` 和 `quality_min_sharpness`（0：不检查）。 服务器由 `server_address`、`server_token`、`server_machine`、`server_timeout_s` 和 `server_retries` 设定（地址为空表示没有服务器）；相关法搜索是 `correlate_diameter` 和 `correlate_min_score`；校正后图像的最大边长是 `rectify_max_side`；一排焊盘的容差是 `pads_tolerance`；两张图像的比较是 `diff_threshold`、`diff_min_area` 和 `diff_max_changed`。是否在本地网络中查找服务器由 `server_mdns` 决定（默认关闭）。带标记零件的读取由 `orientation_body_contrast`、`orientation_mark_contrast`、`orientation_min_mark_px` 和 `orientation_tolerance_deg` 设定；焊盘的容差是 `footprint_tolerance_mm`；清晰度分布图是 `sharpmap_cells`、`sharpmap_min_share` 和 `sharpmap_min_contrast`；由棋盘得到比例是 `board_square_mm`（中心间距为 `pitch_mm`）、`board_max_aspect` 和 `board_max_spread`。含有令牌的 `vision.cfg` 应保持私密。 对焦结果中相当于 50 分的清晰度是 `focus_reference`，沿边缘线的采样间隔和其位置不确定度的上限是 `edge_step_px` 和 `edge_max_uncertainty_px`。实时相机、标定板和电路板对位有各自的键（`capture_*`、`calib_*`、`camera_offset_*` 和 `align_*`）：每个都有范围，超出范围的值会被拒绝，由某个键决定的错误会指出该键。
+调校的数值保存在简单的 `键 = 值` 文件中，而不是代码里：程序启动所在文件夹或其旁边的 `vision.cfg`（变量 `EH3D_VISION_CONFIG` 可指定另一个文件）。它设定窗口语言、标记是深色还是浅色、阈值、直径范围、标记的填充率和伸长率、用来设定比例的标记大小、网格的列数和行数、对齐是否可以改变尺寸、对齐必须满足的限度以及读取的最大文件。`examples/vision.cfg` 列出每个键及其含义和程序启动时的值；文件不存在就使用这些值，有错误的文件会连同行号被拒绝。命令行中同样的内容以选项给出（见接口）。它还保存其他调好的值：置信度（`refine_subpixel`、`full_contrast`）、光照窗口（`flatten_window`）、比例与零件大小（`mm_per_px`、`part_min_area`、`part_max_area`、`max_parts`）、十字的范围（`cross_min_size`、`cross_max_size`、`cross_max_elongation`）、靶标的容差（`pitch_tolerance`）以及文件夹中图片的最大数量（`batch_max_files`）。 方形的最小填充率和任意角度十字的最低得分是 `square_min_fill` 和 `cross_min_score`。 方形边长的范围以及其外框可比宽度长多少是 `square_min_size`、`square_max_size` 和 `square_max_elongation`，与十字的分开。 镜头由 `lens_k1` 和 `lens_k2`（由 `lens` 求出）表示，校正后网格离其晶格的最大允许距离是 `lens_max_rms`。 `inspect` 读取的封装表是 `package_table`，零件与其封装的最大允许偏差和最大旋转角是 `inspect_tolerance` 和 `inspect_max_angle`。 HTML 报告对某张图像发出警告的得分下限是 `report_low_score`。 设定比例的标靶标记之间的距离是 `pitch_mm`，`replace_output` 决定写出的文件是否可以覆盖已存在的文件（默认不可以）。 `shots` 规划中相邻图像的重叠量和零件周围的边距是 `shots_overlap` 和 `shots_margin`。 窗口是否绘制镜头点阵由 `show_lens_grid` 决定。 `inspect` 和窗口用来比对零件的封装是 `inspect_package`，`shots` 和窗口为其规划拍摄的零件尺寸是 `shots_part_width` 和 `shots_part_height`（0 和 0：使用封装本体）。 圆环标记有外径范围（`ring_min_diameter`、`ring_max_diameter`）、内外径之比的范围（`ring_min_ratio`、`ring_max_ratio`）、环带的最小填充率（`ring_min_fill`）、伸长度（`ring_max_elongation`）、区分两种尺寸的直径（`ring_split`，0 表示自动查找）以及尺寸之间的间隔（`ring_size_gap`）。 被拾取零件图像中的吸嘴轴线是 `nozzle_x_mm` 和 `nozzle_y_mm`，允许持放的最大距离和最大旋转是 `pick_max_offset_mm` 和 `pick_max_turn_deg`（0：不检查）。 零件被正确吸取时的旋转角是 `nominal_angle_deg`，相机看到的零件是否为镜像是 `pick_mirror`，图像检查是 `quality_check` 及下限 `quality_min_contrast`、`quality_min_mean`、`quality_max_mean` 和 `quality_min_sharpness`（0：不检查）。 服务器由 `server_address`、`server_token`、`server_machine`、`server_timeout_s` 和 `server_retries` 设定（地址为空表示没有服务器）；相关法搜索是 `correlate_diameter` 和 `correlate_min_score`；校正后图像的最大边长是 `rectify_max_side`；一排焊盘的容差是 `pads_tolerance`；两张图像的比较是 `diff_threshold`、`diff_min_area` 和 `diff_max_changed`。是否在本地网络中查找服务器由 `server_mdns` 决定（默认关闭）。带标记零件的读取由 `orientation_body_contrast`、`orientation_mark_contrast`、`orientation_min_mark_px` 和 `orientation_tolerance_deg` 设定；焊盘的容差是 `footprint_tolerance_mm`；清晰度分布图是 `sharpmap_cells`、`sharpmap_min_share` 和 `sharpmap_min_contrast`；由棋盘得到比例是 `board_square_mm`（中心间距为 `pitch_mm`）、`board_max_aspect` 和 `board_max_spread`。含有令牌的 `vision.cfg` 应保持私密。 对焦结果中相当于 50 分的清晰度是 `focus_reference`，沿边缘线的采样间隔和其位置不确定度的上限是 `edge_step_px` 和 `edge_max_uncertainty_px`。实时相机、标定板和电路板对位有各自的键（`capture_*`、`calib_*`、`camera_offset_*` 和 `align_*`）：每个都有范围，超出范围的值会被拒绝，由某个键决定的错误会指出该键。 运动 JPEG 帧读取器、圆点卡片、光照检查和料带孔的查找各有自己的键（`mjpeg_*`、`card_*`、`light_*` 和 `tape_*`）：每个键都有范围，超出范围的值会被拒绝并指出键名。
 
 ## 🚀 快速开始
 
@@ -202,7 +212,7 @@ cargo run --release --features gui --bin eh3d-vision-gui -- --shot screen.png --
 
 ## 🧪 测试
 
-测试套件有 725 个测试（`cargo test`，CI 在 Windows 和 Linux 上运行）。它们检查正常情况、边界情况和损坏的输入：空文件、乱码和被截断的文件绝不会 panic。CI 还运行 `cargo fmt --check`、把警告当作错误的 `cargo clippy` 以及 `python -I tools/ci_validate.py`。
+测试套件有 774 个测试（`cargo test`，CI 在 Windows 和 Linux 上运行）。它们检查正常情况、边界情况和损坏的输入：空文件、乱码和被截断的文件绝不会 panic。CI 还运行 `cargo fmt --check`、把警告当作错误的 `cargo clippy` 以及 `python -I tools/ci_validate.py`。
 
 ## 🏗️ 构建与发布
 
@@ -269,6 +279,11 @@ EH3D-VISION-STUDIO/
 │   ├── tools.rs                                 侧边栏中针对图像的工具：形状、零件、文件夹报告、由间距求比例
 │   ├── train.rs                                 由示例训练出的标记，通过相关性在其旋转角度上再次找到
 │   ├── turnpair.rs                              无论电路板旋转多少角度、缺少或多出标记，都把标记与设计配对
+│   ├── dotcard.rs                               按 100 % 打印的圆点卡片，以毫米为单位绘制
+│   ├── light.rs                                 图像光照是否良好：平均值、过曝、分区和倾斜
+│   ├── mjpeg.rs                                 从不轻信字节的运动 JPEG 帧读取器
+│   ├── tape.rs                                  元件料带的孔与料穴，以及与料带间距的比较
+│   ├── verbs.rs                                 命令 train、locate、pair、light-check、tape-locate、calib-card 和 jpeg
 │   ├── shot.rs                                  窗口的截图模式（--shot）：无需屏幕即可读取和检查其参数
 │   ├── shots.rs                                 仅由尺寸求出覆盖超出视场的零件所需的相机位置
 │   ├── browse.rs                                打开文件窗口的文件列表
@@ -292,6 +307,9 @@ EH3D-VISION-STUDIO/
 │   ├── fuzz_capture.rs                          针对画面读取、标定文件、对位的固定种子随机输入
 │   ├── training.rs                              训练出的标记在绘制它的位置和角度被找到，以及其文件和矩形
 │   ├── pairing.rs                               任意角度旋转电路板的标记按真值配对，并使用随机点
+│   ├── mjpeg.rs                                 编码帧回读、任意位置截断、字节改动、超大尺寸、噪声
+│   ├── newcli.rs                                新命令：文本、JSON、不覆盖文件、退出码、帮助示例
+│   ├── lightfuzz.rs                             任意图像和设置下的光照、料带与卡片（固定种子）
 │   ├── discovery.rs                             网络应答无论恶意还是数量多，都不会产生不安全的候选
 │   ├── shot_sample.rs                           示例能在截图窗口中打开的测试
 │   ├── vision.rs                                库和命令行的测试
@@ -328,17 +346,17 @@ EH3D-VISION-STUDIO/
 
 **目前已知的限制**
 
-* 窗口尚未在屏幕上看过；命令按位置把标记与设计配对，因此在那里旋转很大的电路板或缺失的标记会被拒绝（库可以配对，但目前没有调用它）。
+* 窗口尚未在屏幕上看过；`align` 和“看、移动、再看”的循环按位置把标记与设计配对，因此在那里旋转很大的电路板或缺失的标记会被拒绝（`pair --any-turn` 可以配对）。
 * 没有在机器上试过，也没有用大量真实文件验证过，也没有独立审查。
 * 它读取图像文件，实时相机只在模拟中工作（Windows、V4L2 和 libcamera 的后端只是骨架，没有在真实相机上运行过），只能找圆形、方形和十字形标记，只在测试绘制的图像上试过，没有用真实电路板的照片试过。零件的角度按矩形由其像素测得，因此不是矩形的零件得到的是其长轴的角度。
 * 服务器没有视觉插件，所以程序使用存储的制品（结果用 `POST /api/v1/artifacts`，机器的配置用 `GET /api/v1/artifacts` 和 `GET /api/v1/artifacts/{id}`），名称和格式是自己的（`vision-<kind>.json`、`vision-<machine>.cfg`）；目前只针对内存中的服务器和回环地址上的套接字进行测试，通过 mDNS 查找服务器（`server_mdns`）只是一个没有链接解析器的开关。
 
 **下一步**
 
-* 读取机器的实时摄像头（EH3D-NODE-BUNGARD-AUX），用真实电路板的照片试验，并把库中已有的新标记训练放进窗口。
+* 读取机器的实时摄像头（EH3D-NODE-BUNGARD-AUX），用真实电路板的照片试验，并把命令中已有的新标记训练放进窗口。
 * 在屏幕上查看窗口并完善它。
 * 用真实文件和套件的其他程序进行试用。
-* 编写实时后端（来自 Media Foundation、V4L2 和 libcamera 的画面以及运动 JPEG 解码器），用真实镜头试验标定板、用真实工作台试验对位。
+* 编写实时后端（来自 Media Foundation、V4L2 和 libcamera 的画面），用真实镜头试验标定板、在纸上试验圆点卡片、用真实工作台试验对位。
 
 ## 🌍 语言
 
