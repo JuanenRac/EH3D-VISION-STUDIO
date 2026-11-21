@@ -107,10 +107,10 @@ pub fn fit(
 
 /// The transform is accepted only when the points fit it well (`max_rms_mm`) and, with a size, when the board is not stretched more than `max_stretch` (0.01 is one percent).
 pub fn accept(t: &Transform, max_rms_mm: f64, max_stretch: f64) -> Result<(), String> {
-    if t.rms_mm > max_rms_mm {
+    if !t.rms_mm.is_finite() || t.rms_mm > max_rms_mm {
         return Err(format!("the fiducials fit the design to {:.3} mm, more than the {max_rms_mm} mm allowed: one of them is probably not the one that it should be", t.rms_mm));
     }
-    if (t.scale - 1.0).abs() > max_stretch {
+    if !t.scale.is_finite() || (t.scale - 1.0).abs() > max_stretch {
         return Err(format!(
             "the board is {:.2} % bigger or smaller than its design, more than the {:.2} % allowed",
             (t.scale - 1.0) * 100.0,

@@ -163,6 +163,11 @@ impl Judged {
     }
 }
 
+/// Whether a difference is past the limit; a difference that is not a number is past every limit (it is no proof that the part is good).
+fn beyond(difference: f64, limit: f64) -> bool {
+    !difference.is_finite() || difference.abs() > limit
+}
+
 /// Compares each part with the package. `tolerance_mm` is used unless the package has its own; `max_angle_deg` of 0 leaves the turn unchecked, and above 0 a part whose long side is
 /// turned by more than that from the x axis fails (a turn of 90 degrees counts as 90, so a part lying across fails when the limit is below it).
 pub fn judge(
@@ -183,13 +188,13 @@ pub fn judge(
         .map(|p| {
             let (dl, ds) = (p.length_mm - package.long_mm, p.width_mm - package.short_mm);
             let mut reasons = Vec::new();
-            if dl.abs() > tolerance {
+            if beyond(dl, tolerance) {
                 reasons.push(REASON_LENGTH);
             }
-            if ds.abs() > tolerance {
+            if beyond(ds, tolerance) {
                 reasons.push(REASON_WIDTH);
             }
-            if max_angle_deg > 0.0 && p.angle_deg.abs() > max_angle_deg {
+            if max_angle_deg > 0.0 && beyond(p.angle_deg, max_angle_deg) {
                 reasons.push(REASON_ANGLE);
             }
             Judged {

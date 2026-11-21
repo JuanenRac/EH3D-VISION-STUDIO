@@ -87,10 +87,32 @@ impl Lang {
 
 /// Puts the values in the places `{0}`, `{1}`... of a text.
 pub fn fill<S: AsRef<str>>(template: &str, values: &[S]) -> String {
-    let mut out = template.to_string();
-    for (k, v) in values.iter().enumerate() {
-        out = out.replace(&format!("{{{k}}}"), v.as_ref());
+    // one pass over the template: a value that holds `{1}` is not filled again
+    let mut out = String::with_capacity(template.len());
+    let mut rest = template;
+    while let Some(start) = rest.find('{') {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + 1..];
+        let place = after.find('}').and_then(|end| {
+            let digits = &after[..end];
+            if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+                return None;
+            }
+            let k = digits.parse::<usize>().ok()?;
+            values.get(k).map(|v| (end, v))
+        });
+        match place {
+            Some((end, v)) => {
+                out.push_str(v.as_ref());
+                rest = &after[end + 1..];
+            }
+            None => {
+                out.push('{');
+                rest = after;
+            }
+        }
     }
+    out.push_str(rest);
     out
 }
 

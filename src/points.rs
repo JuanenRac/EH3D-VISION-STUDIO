@@ -11,15 +11,17 @@ fn number(text: &str, what: &str) -> Result<f64, String> {
 
 /// The points of a text; `name` is the file it came from, for the messages.
 pub fn parse(text: &str, name: &str) -> Result<Vec<(f64, f64)>, String> {
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     text.lines()
         .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
         .enumerate()
+        .filter(|(_, l)| !l.is_empty() && !l.starts_with('#'))
         .map(|(i, l)| {
             let (x, y) = l
                 .split_once(',')
                 .ok_or_else(|| format!("{name} line {}: it must be x,y", i + 1))?;
-            Ok((number(x, "x")?, number(y, "y")?))
+            let at = |e: String| format!("{name} line {}: {e}", i + 1);
+            Ok((number(x, "x").map_err(at)?, number(y, "y").map_err(at)?))
         })
         .collect()
 }
