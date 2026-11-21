@@ -1387,6 +1387,8 @@ impl Config {
 
     /// The values of a text: lines of `key = value`, blank lines and lines that start with `#` left out. A key that is written twice, an unknown key or a bad value is an error with the line.
     pub fn parse(text: &str) -> Result<Config, String> {
+        // a byte order mark is not part of the first key
+        let text = text.strip_prefix('\u{feff}').unwrap_or(text);
         let mut config = Config::default();
         let mut seen: Vec<&str> = Vec::new();
         for (i, raw) in text.lines().enumerate() {

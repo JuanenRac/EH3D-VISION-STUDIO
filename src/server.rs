@@ -412,6 +412,8 @@ fn newest_artifact(list: &str, name: &str) -> Result<String, ClientError> {
 /// The values of a configuration kept on the server: a JSON object, or the lines `key = value` of `vision.cfg` (blank lines and lines that start with `#` or `;` are
 /// ignored, a ` #` after a value starts a comment, a key written twice is an error).
 pub fn parse_config_text(text: &str) -> Result<Vec<(String, String)>, String> {
+    // a byte order mark is not part of the first key
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     if text.trim_start().starts_with('{') {
         return parse_object(text);
     }
@@ -651,7 +653,9 @@ fn read_string(text: &str, i: &mut usize) -> Result<String, String> {
                             code = if (0xDC00..0xE000).contains(&second) {
                                 0x10000 + ((first - 0xD800) << 10) + (second - 0xDC00)
                             } else {
-                                0xFFFD
+                                // the high half has no low half after it: it is a mark, and the escape that came next is still its own letter
+                                out.push('\u{fffd}');
+                                second
                             };
                         }
                         out.push(char::from_u32(code).unwrap_or('\u{fffd}'));
@@ -667,6 +671,10 @@ fn read_string(text: &str, i: &mut usize) -> Result<String, String> {
 
 fn hex4(text: &str, i: &mut usize) -> Result<u32, String> {
     let digits = text.get(*i..*i + 4).ok_or("a \\u escape is cut")?;
+    // `from_str_radix` also takes a leading `+`, which is not a hex digit
+    if !digits.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("a \\u escape is not four hex digits".into());
+    }
     let v = u32::from_str_radix(digits, 16).map_err(|_| "a \\u escape is not four hex digits")?;
     *i += 4;
     Ok(v)

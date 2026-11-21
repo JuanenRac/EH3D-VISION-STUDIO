@@ -164,7 +164,7 @@ pub fn check_detailed(
 /// A field of a CSV file: quoted when it holds a comma, a quote or a line end, and with a quote in front when it starts with a character (`=`, `+`, `-`, `@`) that makes a spreadsheet
 /// run it as a formula.
 pub fn csv_field(text: &str) -> String {
-    let guarded = if text.starts_with(['=', '+', '-', '@']) {
+    let guarded = if text.starts_with(['=', '+', '-', '@', '\t', '\r']) {
         format!("'{text}")
     } else {
         text.to_string()

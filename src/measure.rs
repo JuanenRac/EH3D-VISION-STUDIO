@@ -259,20 +259,24 @@ pub fn to_json(parts: &[Part], image_w: usize, image_h: usize, scale: Scale) -> 
 
 /// The parts of a CSV file written by `to_csv`. The first line must be `CSV_HEADER`; a line with another number of fields or a field that is not a number is an error that names the line.
 pub fn parse_csv(text: &str) -> Result<Vec<Part>, String> {
-    let mut lines = text.lines().map(str::trim).filter(|l| !l.is_empty());
-    if lines.next() != Some(CSV_HEADER) {
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+    let mut lines = text
+        .lines()
+        .enumerate()
+        .map(|(i, l)| (i + 1, l.trim()))
+        .filter(|(_, l)| !l.is_empty());
+    if lines.next().map(|(_, l)| l) != Some(CSV_HEADER) {
         return Err(format!("the first line must be {CSV_HEADER}"));
     }
     lines
-        .enumerate()
-        .map(|(i, line)| {
+        .map(|(n, line)| {
             let fields: Vec<f64> = line
                 .split(',')
                 .map(|f| f.trim().parse::<f64>().ok().filter(|v| v.is_finite()))
                 .collect::<Option<Vec<f64>>>()
-                .ok_or_else(|| format!("line {}: a field is not a number", i + 2))?;
+                .ok_or_else(|| format!("line {n}: a field is not a number"))?;
             if fields.len() != 7 {
-                return Err(format!("line {}: {} fields, not 7", i + 2, fields.len()));
+                return Err(format!("line {n}: {} fields, not 7", fields.len()));
             }
             Ok(Part {
                 x_mm: fields[1],
