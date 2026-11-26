@@ -3,6 +3,9 @@
 All notable changes to this project are documented here.
 
 ## [Unreleased]
+
+## [0.1.4] - Stricter reading of server settings and measurements, spreadsheet-safe export, and many more tests
+
 - Fix the report of a folder (security): a name that starts with a tab or a carriage return is guarded against being run as a formula by a spreadsheet, like one that starts with =, +, - or @.
 - Fix the configuration file, the parts file and the points file: a byte order mark at the start (as some editors write it) made the first line fail; the errors of a points file named the line counting only the lines that were not comments or blank, and the values that were not numbers did not name the file or the line at all, and the same happened to a parts file with blank lines.
 - Fix the reading of a JSON configuration from the server (security): a \u escape with a sign (+041) was read as a letter, and a high half of a surrogate pair followed by an escape that is not its pair swallowed that escape; a byte order mark at the start of a configuration kept on the server made its first key unknown, so the value was silently ignored.
