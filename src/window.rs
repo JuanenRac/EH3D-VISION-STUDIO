@@ -782,13 +782,14 @@ impl Window {
     pub(crate) fn read_limited(&self, path: &Path) -> Result<Vec<u8>, Status> {
         let name = file_name(path);
         let limit = self.cfg.max_file_mib;
-        let size = std::fs::metadata(path)
-            .map_err(|e| Status::Failed(format!("{name}: {e}")))?
-            .len();
-        if size > limit.saturating_mul(1_048_576) {
-            return Err(Status::TooLarge { name, mib: limit });
-        }
-        std::fs::read(path).map_err(|e| Status::Failed(format!("{name}: {e}")))
+        // the limit is on what is read: a device or a pipe tells no size, and a file can grow while it is being read
+        crate::limit::read_limited(path, limit).map_err(|e| {
+            if e.starts_with(crate::limit::TOO_LARGE) {
+                Status::TooLarge { name, mib: limit }
+            } else {
+                Status::Failed(format!("{name}: {e}"))
+            }
+        })
     }
 
     /// Opens a PNG or PGM picture and looks for the marks in it. The scale, the distortion and the alignment of the earlier picture are forgotten.
@@ -1178,13 +1179,13 @@ impl Window {
         }
         let mut text = lines.join("\n");
         text.push('\n');
-        match std::fs::write(path, text) {
+        match crate::limit::write_text(path, &text, true) {
             Ok(()) => {
                 self.status = Status::Exported(file_name(path));
                 true
             }
             Err(e) => {
-                self.status = Status::Failed(format!("{}: {e}", file_name(path)));
+                self.status = Status::Failed(e);
                 false
             }
         }

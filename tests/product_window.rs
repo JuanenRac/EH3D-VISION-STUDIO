@@ -340,3 +340,19 @@ fn the_places_of_a_text_are_filled_in_order_and_the_missing_ones_stay() {
     assert_eq!(fill("{1}", &["a", "b"]), "b");
     assert_eq!(fill("", &["a"]), "");
 }
+
+/// A device tells no size: the window stops reading at the limit as the command line does.
+#[cfg(unix)]
+#[test]
+fn a_picture_that_tells_no_size_is_read_only_up_to_the_limit() {
+    let mut w = window();
+    w.cfg.max_file_mib = 1;
+    assert!(!w.open_image(Path::new("/dev/zero")));
+    assert_eq!(
+        w.status,
+        Status::TooLarge {
+            name: "zero".to_string(),
+            mib: 1
+        }
+    );
+}

@@ -1773,3 +1773,70 @@ fn every_picture_of_a_plan_is_inside_the_part_with_its_margin() {
         }
     }
 }
+
+#[test]
+fn a_file_that_is_replaced_is_never_cut_short_and_no_temporary_file_is_left() {
+    let d = dir("limit-replace-whole");
+    let f = d.join("camera.calib");
+    write_text(&f, "old calibration\n", false).unwrap();
+    // another name of the old file keeps the old text: the file was replaced, not written over in place
+    let other = d.join("kept.calib");
+    std::fs::hard_link(&f, &other).unwrap();
+    write_text(&f, "new\n", true).unwrap();
+    assert_eq!(std::fs::read_to_string(&f).unwrap(), "new\n");
+    assert_eq!(
+        std::fs::read_to_string(&other).unwrap(),
+        "old calibration\n"
+    );
+    assert_eq!(std::fs::read_dir(&d).unwrap().count(), 2);
+    // `replace` also writes a file that is not there yet
+    write_text(&d.join("fresh.csv"), "a\n", true).unwrap();
+    assert_eq!(std::fs::read_to_string(d.join("fresh.csv")).unwrap(), "a\n");
+    assert_eq!(std::fs::read_dir(&d).unwrap().count(), 3);
+}
+
+#[test]
+fn a_read_only_file_is_not_replaced() {
+    let d = dir("limit-read-only");
+    let f = d.join("kept.txt");
+    write_text(&f, "kept", false).unwrap();
+    let before = std::fs::metadata(&f).unwrap().permissions();
+    let mut locked = before.clone();
+    locked.set_readonly(true);
+    std::fs::set_permissions(&f, locked).unwrap();
+    let why = write_text(&f, "gone", true).unwrap_err();
+    std::fs::set_permissions(&f, before).unwrap();
+    assert!(why.starts_with(UNWRITABLE), "{why}");
+    assert_eq!(std::fs::read_to_string(&f).unwrap(), "kept");
+}
+
+#[test]
+fn writers_at_the_same_time_leave_one_whole_file() {
+    let d = dir("limit-together");
+    let f = d.join("report.csv");
+    let texts: Vec<String> = (0..8)
+        .map(|k| format!("row {k}\n").repeat(2_000 + k * 100))
+        .collect();
+    let written: usize = std::thread::scope(|scope| {
+        let handles: Vec<_> = texts
+            .iter()
+            .map(|t| {
+                let f = &f;
+                scope.spawn(move || usize::from(write_text(f, t, true).is_ok()))
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).sum()
+    });
+    // on Windows a rename over a file that another rename holds at that moment can be refused: the file is whole all the same
+    assert!(written >= 1);
+    assert!(texts.contains(&std::fs::read_to_string(&f).unwrap()));
+    assert_eq!(std::fs::read_dir(&d).unwrap().count(), 1);
+}
+
+/// A device tells no size: the limit is on what is read.
+#[cfg(unix)]
+#[test]
+fn a_configuration_file_that_tells_no_size_is_read_only_up_to_its_limit() {
+    let why = Config::read(Path::new("/dev/zero")).unwrap_err();
+    assert!(why.contains("64 KiB"), "{why}");
+}

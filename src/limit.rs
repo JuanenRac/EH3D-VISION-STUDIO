@@ -46,32 +46,78 @@ pub fn write_text(path: &Path, text: &str, replace: bool) -> Result<(), String> 
     write_bytes(path, text.as_bytes(), replace)
 }
 
-/// Writes `bytes` to a new file, with the same rules as `write_text` (a picture is written with this).
+/// Writes `bytes` to a new file, with the same rules as `write_text` (a picture is written with this). A file that is replaced is written whole beside
+/// itself and renamed, so that a cut or a full disk leaves the old one as it was; a new file that cannot be written whole is taken away again.
 pub fn write_bytes(path: &Path, bytes: &[u8], replace: bool) -> Result<(), String> {
     use std::io::Write;
     let shown = path.display();
-    let mut options = std::fs::OpenOptions::new();
-    options.write(true);
+    let unwritable = |e: std::io::Error| format!("{UNWRITABLE}: {shown}: {e}");
     if replace {
-        if std::fs::symlink_metadata(path)
-            .map(|m| m.file_type().is_symlink())
-            .unwrap_or(false)
-        {
-            return Err(format!("{UNWRITABLE}: {shown}: it is a link, not a file"));
+        match std::fs::symlink_metadata(path) {
+            Ok(m) if m.file_type().is_symlink() => {
+                return Err(format!("{UNWRITABLE}: {shown}: it is a link, not a file"));
+            }
+            // a device or a pipe cannot be replaced: it is written to as it is (a folder is refused by the system)
+            Ok(m) if !m.is_file() => return std::fs::write(path, bytes).map_err(unwritable),
+            Ok(m) if m.permissions().readonly() => {
+                return Err(format!("{UNWRITABLE}: {shown}: the file is read only"));
+            }
+            Ok(m) => return replace_file(path, bytes, Some(m.permissions())).map_err(unwritable),
+            Err(_) => return replace_file(path, bytes, None).map_err(unwritable),
         }
-        options.create(true).truncate(true);
-    } else {
-        options.create_new(true);
     }
-    let mut file = options.open(path).map_err(|e| {
-        if e.kind() == std::io::ErrorKind::AlreadyExists {
-            format!(
-                "{OUTPUT_EXISTS}: {shown}: the file is already there (--replace writes over it)"
-            )
-        } else {
-            format!("{UNWRITABLE}: {shown}: {e}")
-        }
-    })?;
-    file.write_all(bytes)
-        .map_err(|e| format!("{UNWRITABLE}: {shown}: {e}"))
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::AlreadyExists {
+                format!(
+                    "{OUTPUT_EXISTS}: {shown}: the file is already there (--replace writes over it)"
+                )
+            } else {
+                unwritable(e)
+            }
+        })?;
+    let written = file.write_all(bytes);
+    drop(file);
+    written.map_err(|e| {
+        let _ = std::fs::remove_file(path);
+        unwritable(e)
+    })
+}
+
+/// Writes `bytes` to a temporary file of its own beside `path` (a name for each process and call, only ever made new) and renames it over `path`.
+fn replace_file(
+    path: &Path,
+    bytes: &[u8],
+    permissions: Option<std::fs::Permissions>,
+) -> std::io::Result<()> {
+    use std::io::Write;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(format!(
+        ".{}.{}.tmp",
+        std::process::id(),
+        COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+    let tmp = std::path::PathBuf::from(tmp);
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&tmp)?;
+    let written = file
+        .write_all(bytes)
+        .and_then(|()| match permissions {
+            Some(p) => file.set_permissions(p),
+            None => Ok(()),
+        })
+        .and_then(|()| file.sync_all());
+    drop(file);
+    written
+        .and_then(|()| std::fs::rename(&tmp, path))
+        .inspect_err(|_| {
+            let _ = std::fs::remove_file(&tmp);
+        })
 }
