@@ -4,6 +4,9 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **A file that is replaced is written whole or not at all (fix):** with `--replace` (or `replace_output`) the old calibration, template, report or picture was emptied before the new one was written, so a cut or a full disk lost both. It is now written beside and renamed; a read only file is refused, and a new file that cannot be written whole is not left behind.
+- **The options for ISOCAM from the window (fix):** they were written straight over the target, following a link; they go through the same whole write and a link is refused.
+- **The size limit of a file is on what is read (fix):** the window and the configuration file trusted the size the system tells, which a device or a pipe does not have, and read it without end.
 ## [0.1.4] - Stricter reading of server settings and measurements, spreadsheet-safe export, and many more tests
 
 - Fix the report of a folder (security): a name that starts with a tab or a carriage return is guarded against being run as a formula by a spreadsheet, like one that starts with =, +, - or @.

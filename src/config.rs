@@ -1414,14 +1414,20 @@ impl Config {
 
     /// The values of the file at `path`.
     pub fn read(path: &Path) -> Result<Config, String> {
-        let meta = std::fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
-        if meta.len() > 65_536 {
+        use std::io::Read;
+        let mut bytes = Vec::new();
+        // one byte past the limit is enough to know it is too large; a device or a pipe tells no size
+        std::fs::File::open(path)
+            .and_then(|f| f.take(65_537).read_to_end(&mut bytes))
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        if bytes.len() > 65_536 {
             return Err(format!(
                 "{}: a configuration file is not larger than 64 KiB",
                 path.display()
             ));
         }
-        let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let text = String::from_utf8(bytes)
+            .map_err(|_| format!("{}: the file is not text", path.display()))?;
         Config::parse(&text).map_err(|e| format!("{}: {e}", path.display()))
     }
 

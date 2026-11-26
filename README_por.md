@@ -17,7 +17,7 @@
 
 ---
 
-**Verificação de honestidade - o que funciona hoje:** uma biblioteca Rust e um programa de linha de comandos (`eh3d-vision`) com 967 testes que correm num computador: encontra marcas fiduciais redondas numa imagem, converte píxeis em milímetros e calcula a rotação e o deslocamento que põem uma placa onde diz o seu desenho. Tem uma janela (compila-se com `--features gui`, o programa `eh3d-vision-gui`) que abre uma imagem, mostra as marcas com as suas coordenadas, define a escala, ajusta a distorção da objetiva com uma grelha, alinha com o desenho e exporta as opções do ISOCAM, mas a janela ainda não foi vista num ecrã; não foi experimentado numa máquina e não foi verificado com uma coleção de ficheiros reais.
+**Verificação de honestidade - o que funciona hoje:** uma biblioteca Rust e um programa de linha de comandos (`eh3d-vision`) com 970 testes que correm num computador: encontra marcas fiduciais redondas numa imagem, converte píxeis em milímetros e calcula a rotação e o deslocamento que põem uma placa onde diz o seu desenho. Tem uma janela (compila-se com `--features gui`, o programa `eh3d-vision-gui`) que abre uma imagem, mostra as marcas com as suas coordenadas, define a escala, ajusta a distorção da objetiva com uma grelha, alinha com o desenho e exporta as opções do ISOCAM, mas a janela ainda não foi vista num ecrã; não foi experimentado numa máquina e não foi verificado com uma coleção de ficheiros reais.
 
 ---
 
@@ -30,7 +30,7 @@
 |---|---|
 | Versão | `0.1.4` |
 | Maturidade | Funcional |
-| Testes | 967 |
+| Testes | 970 |
 | Tecnologias | Rust |
 | Em hardware real | Não experimentado: nada disto correu numa máquina |
 
@@ -46,7 +46,7 @@ Cada linha é uma parte deste repositório e a luz diz até onde chega hoje. É 
 |---|---|---|
 | Núcleo | 🟡 | encontra marcas fiduciais redondas numa imagem, converte píxeis em milímetros e calcula a rotação e o deslocamento que põem uma placa onde diz o seu desenho; testado num computador com entradas normais e danificadas, não com uma coleção de ficheiros reais. |
 | Linha de comandos | 🟡 | `eh3d-vision` executa as mesmas funções da biblioteca e imprime o resultado; cada erro volta como mensagem e código de saída diferente de zero. |
-| Testes | 🟡 | 967 testes passam (`cargo test`), com casos normais, casos-limite e entradas danificadas, e uma câmara simulada sobre uma placa que acrescenta ruído, má exposição, um fotograma morto ou em falta, pó que parece uma marca ou um ficheiro de imagem cortado, e é pedida de novo. |
+| Testes | 🟡 | 970 testes passam (`cargo test`), com casos normais, casos-limite e entradas danificadas, e uma câmara simulada sobre uma placa que acrescenta ruído, má exposição, um fotograma morto ou em falta, pó que parece uma marca ou um ficheiro de imagem cortado, e é pedida de novo. |
 | Segurança | 🟡 | Rust seguro e simples (`forbid(unsafe_code)`; uma pequena fronteira unsafe só nos motores de câmara compilados com a sua funcionalidade): nada entra em pânico com os ficheiros recebidos e um valor mau é um erro com o seu motivo; sem revisão independente. |
 | Janela | 🟠 | Escrita (egui, `--features gui`, o programa `eh3d-vision-gui`): abrir ou largar uma imagem, ver as marcas com as suas coordenadas, definir a escala com uma marca de tamanho conhecido, ajustar a distorção da objetiva com uma grelha, alinhar com um desenho CSV e exportar as opções do ISOCAM; a sua lógica está testada, mas ainda não foi compilada nem vista num ecrã. |
 | Câmara em direto | 🟠 | a camada da câmara, o tabuleiro de calibração e o alinhamento de uma placa estão escritos e testados com uma câmara e uma mesa simuladas; os motores do Windows, do V4L2 e da libcamera são esqueletos e nada correu numa câmara, lente ou placa reais. |
@@ -212,7 +212,7 @@ Para tirar uma captura da janela sem a abrir à mão, execute-o com `--shot FICH
 
 ## 🧪 Testes
 
-O conjunto tem 967 testes (`cargo test`, executados em Windows e Linux no CI). Verificam os casos normais, os casos-limite e as entradas danificadas: ficheiros vazios, lixo e ficheiros cortados nunca provocam pânico. O CI executa ainda `cargo fmt --check`, `cargo clippy` com avisos como erros e `python -I tools/ci_validate.py`.
+O conjunto tem 970 testes (`cargo test`, executados em Windows e Linux no CI). Verificam os casos normais, os casos-limite e as entradas danificadas: ficheiros vazios, lixo e ficheiros cortados nunca provocam pânico. O CI executa ainda `cargo fmt --check`, `cargo clippy` com avisos como erros e `python -I tools/ci_validate.py`.
 
 ## 🏗️ Compilação e publicação
 
