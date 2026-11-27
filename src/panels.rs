@@ -181,6 +181,11 @@ impl Window {
     /// turned over left to right when `pick_mirror` is on), each is judged against the package `inspect_package` of the table, and for each one the offset from the axis of the nozzle, the
     /// turn from `nominal_angle_deg` and the correction that puts it right are kept. The table is read again each time.
     pub fn offset_parts(&mut self) -> bool {
+        if self.refused_for_the_configuration() {
+            self.held.clear();
+            self.held_package = None;
+            return false;
+        }
         if self.image.is_none() {
             self.status = Status::NeedImage;
             return false;

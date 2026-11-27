@@ -250,8 +250,22 @@ pub struct NozzleEstimate {
 }
 
 /// The axis of the nozzle from the offsets of several parts picked with it: the mean place of the parts (it does not depend on the axis that was in use when they were measured) with how
-/// spread they are. Fewer than 2 parts are the error `few_pickups`, because one part says nothing about the axis.
+/// spread they are. Fewer than 2 parts are the error `few_pickups`, because one part says nothing about the axis. A part whose length or width is not that of the package is the error
+/// `part_size`: it is not the part that was picked (a speck of dirt, a neighbour), and the axis it would move is the one the machine is then corrected with.
 pub fn estimate_nozzle(offsets: &[Offset]) -> Result<NozzleEstimate, String> {
+    if let Some((i, o)) = offsets
+        .iter()
+        .enumerate()
+        .find(|(_, o)| !o.size.reasons.is_empty())
+    {
+        return Err(format!(
+            "part_size: the part of picture {} measures {} x {} mm, which is not the size of the package ({}): the axis of the nozzle is not worked out from it",
+            i + 1,
+            fixed(o.part.length_mm, 3),
+            fixed(o.part.width_mm, 3),
+            o.size.reasons.join(", ")
+        ));
+    }
     let n = offsets.len();
     if n < 2 {
         return Err(format!(
@@ -615,6 +629,25 @@ mod tests {
             .unwrap_err()
             .starts_with("few_pickups"));
         assert!(estimate_nozzle(&[]).unwrap_err().starts_with("few_pickups"));
+    }
+
+    #[test]
+    fn a_spot_that_is_not_the_part_does_not_move_the_axis_of_the_nozzle() {
+        let p = package(2.0, 1.25);
+        let s = OffsetSettings::default();
+        let good = pick_offset(&[part(0.3, 0.1, 0.0, 2.0, 1.25)], &p, &s).unwrap();
+        // a speck of dirt alone in the picture is measured as a part, far from the others
+        let speck = pick_offset(&[part(4.0, -3.0, 0.0, 0.3, 0.3)], &p, &s).unwrap();
+        let e = estimate_nozzle(&[good.clone(), speck]).unwrap_err();
+        assert!(e.starts_with("part_size: the part of picture 2 "), "{e}");
+        // a part held far from the axis in use is what the estimate is for
+        let strict = OffsetSettings {
+            max_offset_mm: 0.01,
+            ..OffsetSettings::default()
+        };
+        let far = pick_offset(&[part(0.5, 0.1, 0.0, 2.0, 1.25)], &p, &strict).unwrap();
+        assert!(!far.passes());
+        assert!(estimate_nozzle(&[good, far]).is_ok());
     }
 
     #[test]

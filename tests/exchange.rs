@@ -81,12 +81,16 @@ fn find_refine_prints_the_centre_to_a_fraction_of_a_pixel_and_a_confidence() {
     assert!(text.contains(", confidence "), "{text}");
     let (x, y) = first_point(&text);
     assert!((x - 40.3).abs() < 0.11 && (y - 30.7).abs() < 0.11, "{text}");
-    // the configuration file can ask for it, and a value that makes no sense is refused with a warning
+    // the configuration file can ask for it, and a value that makes no sense stops the program
     fs::write(dir.join("vision.cfg"), "refine_subpixel = yes\n").unwrap();
     assert!(out(&run(&dir, &["find", "soft.pgm"])).contains("confidence"));
     fs::write(dir.join("vision.cfg"), "full_contrast = 2\n").unwrap();
     let bad = run(&dir, &["find", "soft.pgm"]);
     assert!(err(&bad).contains("full_contrast"), "{}", err(&bad));
+    // nothing is done with the default values in place of the ones of the file
+    assert_eq!(bad.status.code(), Some(1));
+    assert!(out(&bad).is_empty(), "{}", out(&bad));
+    assert!(run(&dir, &["help"]).status.success());
     let _ = fs::remove_dir_all(&dir);
 }
 

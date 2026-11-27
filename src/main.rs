@@ -130,13 +130,9 @@ Examples (the tests run these lines on small pictures of their own):
   eh3d-vision calib-card --output card.svg
   eh3d-vision jpeg frame.jpg --output frame.pgm";
 
-/// The configuration file (the default values when the file is wrong, with a warning).
+/// The configuration file (the default values when there is none; a file that is wrong has already stopped the program in `main`).
 fn config() -> Config {
-    let (config, problem) = Config::load();
-    if let Some(p) = problem {
-        eprintln!("warning: {p}; the default values are used");
-    }
-    config
+    Config::load().0
 }
 
 /// The largest file that is read, in MiB: `max_file_mib` of the configuration file.
@@ -2092,6 +2088,17 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
 
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
+    // the default values are not the ones of the person: an offset worked out without the axis of the nozzle or the mirror of the camera would move a machine the wrong way
+    let wants_help = matches!(
+        args.first().map(String::as_str),
+        None | Some("help" | "--help" | "-h")
+    );
+    if !wants_help {
+        if let (_, Some(problem)) = Config::load() {
+            eprintln!("error: {problem}; nothing was done: correct the configuration file or take it away");
+            return ExitCode::from(1);
+        }
+    }
     if let Some(cmd) = args
         .first()
         .filter(|c| verbs::COMMANDS.contains(&c.as_str()))
