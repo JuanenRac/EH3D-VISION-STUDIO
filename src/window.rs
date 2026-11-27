@@ -533,6 +533,8 @@ fn same_file(a: &Path, b: &Path) -> bool {
 pub struct Window {
     pub lang: Lang,
     pub cfg: Config,
+    /// Why the configuration file could not be used, when it could not: the values of the window are then not the ones of the person, and nothing that moves a machine is made from them.
+    pub config_problem: Option<String>,
     pub fields: Vec<FieldState>,
     pub image: Option<Loaded>,
     /// Raised each time a picture is opened, so that the window knows to make its texture again.
@@ -684,6 +686,7 @@ impl Window {
         Window {
             lang,
             cfg,
+            config_problem: config_problem.clone(),
             fields,
             image: None,
             image_serial: 0,
@@ -1066,6 +1069,17 @@ impl Window {
         }
     }
 
+    /// Whether the configuration file could not be used; the status then says so again (opening a file replaced it).
+    pub(crate) fn refused_for_the_configuration(&mut self) -> bool {
+        match &self.config_problem {
+            Some(problem) => {
+                self.status = Status::ConfigProblem(problem.clone());
+                true
+            }
+            None => false,
+        }
+    }
+
     /// The line about the scale.
     pub fn scale_line(&self) -> String {
         match self.scale {
@@ -1163,6 +1177,9 @@ impl Window {
 
     /// Writes the options of ISOCAM to a file. The picture and the design that were opened are never overwritten.
     pub fn export_isocam(&mut self, path: &Path) -> bool {
+        if self.refused_for_the_configuration() {
+            return false;
+        }
         let Some(lines) = self.isocam_lines() else {
             self.status = Status::NeedAccepted;
             return false;
@@ -1352,6 +1369,31 @@ mod tests {
         let w = Window::new(Lang::En, Config::default(), Some("line 3".into()));
         assert!(w.status.is_problem());
         assert!(w.status.text(Lang::En).contains("line 3"));
+    }
+
+    #[test]
+    fn nothing_that_moves_a_machine_is_made_from_a_configuration_that_could_not_be_used() {
+        let s = Scratch::new("config_refused");
+        let path = s.path("four.pgm");
+        fs::write(&path, pgm(&board(300, 200, &FOUR))).unwrap();
+        let mut w = Window::new(Lang::En, Config::default(), Some("line 3".into()));
+        assert!(w.open_image(&path));
+        // the picture replaced the sentence of the start; asking for a correction says it again
+        let out = s.path("isocam.txt");
+        assert!(!w.export_isocam(&out));
+        assert!(
+            matches!(w.status, Status::ConfigProblem(_)),
+            "{:?}",
+            w.status
+        );
+        assert!(!out.exists());
+        assert!(!w.offset_parts());
+        assert!(
+            matches!(w.status, Status::ConfigProblem(_)),
+            "{:?}",
+            w.status
+        );
+        assert!(w.held.is_empty());
     }
 
     #[test]

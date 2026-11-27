@@ -6,7 +6,7 @@ EH3D-VISION-STUDIO is a working program on a computer: a library (`eh3d_vision_s
 
 ## Capabilities
 
-The official state of each capability is in `REQUIREMENTS.md`. The register has 60 requirements: 45 implemented, 11 prototype, 4 planned and 0 validated. By progress: 45 done, 11 partial, 0 pending and 4 blocked. This page never states a state that `REQUIREMENTS.md` does not.
+The official state of each capability is in `REQUIREMENTS.md`. The register has 62 requirements: 47 implemented, 11 prototype, 4 planned and 0 validated. By progress: 47 done, 11 partial, 0 pending and 4 blocked. This page never states a state that `REQUIREMENTS.md` does not.
 
 ## Open questions
 

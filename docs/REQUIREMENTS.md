@@ -2,7 +2,7 @@
 
 This register is the single source of the state of each capability: `STATUS.md` and the README files cite it and never state a state that it does not. A state is one of `planned`, `prototype`, `implemented` and `validated`. `validated` means that a person has run the capability on a real machine and the evidence of the manifest says `bench` or `field`; nothing here is validated, because no photograph of a real board and no real camera has been used.
 
-The register has 60 requirements: 45 implemented, 11 prototype, 4 planned and 0 validated. By progress: 45 done, 11 partial, 0 pending and 4 blocked. High coverage is not proof of correctness, so each row says how it is checked: the test that names it, and what it shows.
+The register has 62 requirements: 47 implemented, 11 prototype, 4 planned and 0 validated. By progress: 47 done, 11 partial, 0 pending and 4 blocked. High coverage is not proof of correctness, so each row says how it is checked: the test that names it, and what it shows.
 
 ## How to read the register
 
@@ -114,3 +114,5 @@ The check is `tests/reqs.rs`: it reads this table, finds each test and fails whe
 | VSTD-058 | The light of a picture is judged by its mean, the share burnt out, the zones and the tilt, with the reason and the exit code 2 when it is not good. | implemented | done | host-test | `newcli::light_check_says_whether_the_light_is_good_and_why_not` | Drawn pictures; the advice is general and knows no lamp. |
 | VSTD-059 | The holes of a tape, the pitch against the pitch of the tape and the pockets are found, and a tape that cannot be trusted is told why. | implemented | done | host-test | `newcli::tape_locate_finds_the_holes_the_pitch_and_the_place_to_pick` | Drawn tapes, not photographs; no feeder is moved. |
 | VSTD-060 | Every example written in the help runs. | implemented | done | host-test | `newcli::every_example_of_the_help_runs` | - |
+| VSTD-061 | A configuration file that is wrong stops every command, and the window makes no correction nor options for ISOCAM from the default values. | implemented | done | host-test | `exchange::find_refine_prints_the_centre_to_a_fraction_of_a_pixel_and_a_confidence` | The window part is tested without a screen. |
+| VSTD-062 | The axis of the nozzle is not worked out from a part that is not of the size of the package. | implemented | done | host-test | `src/offset::a_spot_that_is_not_the_part_does_not_move_the_axis_of_the_nozzle` | A speck of the size of the package cannot be told apart. |

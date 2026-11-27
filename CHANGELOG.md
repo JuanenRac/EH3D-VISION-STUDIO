@@ -4,6 +4,9 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **A configuration file that is wrong stops the program (fix):** the command line warned and went on with the default values, so `offset` and `nozzle` worked out corrections without the axis of the nozzle or the mirror of the camera of the person, with exit code 0. Nothing is done now (exit code 1) until the file is corrected or taken away.
+- **The window makes nothing that moves a machine from such a file (fix):** the sentence of the start was replaced by the first picture opened; asking for the corrections of the picked parts or for the options of ISOCAM now says it again and gives nothing.
+- **`nozzle` refuses a spot that is not the part (fix):** a part of another length or width than the package (a speck of dirt alone in a picture) was averaged into the axis of the nozzle that is then written for `vision.cfg`.
 - **A file that is replaced is written whole or not at all (fix):** with `--replace` (or `replace_output`) the old calibration, template, report or picture was emptied before the new one was written, so a cut or a full disk lost both. It is now written beside and renamed; a read only file is refused, and a new file that cannot be written whole is not left behind.
 - **The options for ISOCAM from the window (fix):** they were written straight over the target, following a link; they go through the same whole write and a link is refused.
 - **The size limit of a file is on what is read (fix):** the window and the configuration file trusted the size the system tells, which a device or a pipe does not have, and read it without end.
