@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **Third-party notices in every package (`docs/THIRD_PARTY_NOTICES`):** the packages of the releases now carry the copyright notices and licence texts of the Rust crates and of the data the program is built with, and the CI fails when a new dependency or licence is not in the file.
+
 ## [0.1.5] - A wrong configuration file stops the program and files are written whole or not at all
 
 - **A configuration file that is wrong stops the program (fix):** the command line warned and went on with the default values, so `offset` and `nozzle` worked out corrections without the axis of the nozzle or the mirror of the camera of the person, with exit code 0. Nothing is done now (exit code 1) until the file is corrected or taken away.

@@ -152,7 +152,7 @@ jobs:
           name="eh3d-vision-studio-${version}-${MATRIX_LABEL}"
           mkdir "$name"
           cp "target/${MATRIX_TARGET}/release/eh3d-vision${MATRIX_EXT}" "target/${MATRIX_TARGET}/release/eh3d-vision-gui${MATRIX_EXT}" "$name/"
-          cp LICENSE README.md CHANGELOG.md "$name/"
+          cp LICENSE README.md CHANGELOG.md docs/THIRD_PARTY_NOTICES "$name/"
           # the icon of the program and the sample files, as examples
           cp images/brand/app.ico images/brand/icon-256.png "$name/"
           cp -r examples "$name/examples"
